@@ -13,6 +13,9 @@ dist-ssr
 coverage
 *.local
 
+# Local project documentation and planning artifacts
+docs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

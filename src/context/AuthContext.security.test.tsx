@@ -3,7 +3,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../types'
-import { AuthProvider, useAuth } from './AuthContext'
+import { useAuth } from './AuthContext'
+import { AuthProvider } from './AuthProvider'
 
 const authState = vi.hoisted(() => ({
   profileResult: { data: null, error: null } as {

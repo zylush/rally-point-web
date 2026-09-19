@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Bell,
@@ -314,16 +314,17 @@ export function MemberTransactions() {
 
 export function MemberNotifications() {
   const { user } = useAuth()
+  const userId = user?.id
   const [rows, setRows] = useState<Notification[]>([])
 
-  async function load() {
-    if (!user) return
-    setRows(await api.notifications(user.id))
-  }
+  const load = useCallback(async () => {
+    if (!userId) return
+    setRows(await api.notifications(userId))
+  }, [userId])
 
   useEffect(() => {
     void load()
-  }, [user])
+  }, [load])
 
   return (
     <AppShell role="member">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock3, Search, UserPlus } from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
@@ -326,18 +326,18 @@ export function StaffCourts() {
     return (session.players?.length ? session.players : fallbackPlayers).map((player) => player.full_name)
   }
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const [c, s, m] = await Promise.all([api.listCourts(), api.playingSessions(), api.listMembers()])
     setCourts(c)
     setSessions(s)
     setMembers(m)
-    if (!courtId && c[0]) setCourtId(c.find((x) => x.status === 'available')?.id ?? c[0].id)
-    if (!memberId && m[0]) setMemberId(m[0].id)
-  }
+    if (c[0]) setCourtId((current) => current || c.find((x) => x.status === 'available')?.id || c[0].id)
+    if (m[0]) setMemberId((current) => current || m[0].id)
+  }, [])
 
   useEffect(() => {
     void reload()
-  }, [])
+  }, [reload])
 
   async function rent(e: FormEvent) {
     e.preventDefault()

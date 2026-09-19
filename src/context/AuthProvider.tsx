@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -10,25 +8,7 @@ import {
 import { isDemoMode, supabase } from '../lib/supabase'
 import { demoStore } from '../lib/demoStore'
 import type { Profile } from '../types'
-
-interface AuthState {
-  user: Profile | null
-  loading: boolean
-  demo: boolean
-  signIn: (email: string, password: string) => Promise<Profile>
-  /** Public join — always creates a member (never admin/staff). */
-  signUpMember: (input: {
-    email: string
-    password: string
-    full_name: string
-    phone?: string
-  }) => Promise<Profile>
-  resetPassword: (email: string) => Promise<void>
-  signOut: () => Promise<void>
-  refresh: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthState | null>(null)
+import { AuthContext } from './AuthContext'
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
   if (!supabase) return null
@@ -210,10 +190,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Users } from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
@@ -8,24 +8,25 @@ import { fmtDateTime, peso, ymdLocal } from '../types'
 
 export function MemberOpenPlay() {
   const { user } = useAuth()
+  const userId = user?.id
   const [list, setList] = useState<OpenPlaySession[]>([])
   const [member, setMember] = useState<Member | null>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  async function reload() {
-    if (!user) return
+  const reload = useCallback(async () => {
+    if (!userId) return
     setLoading(true)
-    const [ops, m] = await Promise.all([api.listOpenPlays(), api.memberForUser(user.id)])
+    const [ops, m] = await Promise.all([api.listOpenPlays(), api.memberForUser(userId)])
     setList(ops)
     setMember(m)
     setLoading(false)
-  }
+  }, [userId])
 
   useEffect(() => {
     void reload()
-  }, [user])
+  }, [reload])
 
   async function join(id: string) {
     if (!user || !member) {
@@ -138,18 +139,18 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
   const [skill, setSkill] = useState<SkillLevel>('all')
   const [msg, setMsg] = useState<string | null>(null)
 
-  async function reload() {
+  const reload = useCallback(async () => {
     setLoading(true)
     const [ops, c] = await Promise.all([api.listOpenPlays(true), api.listCourts()])
     setList(ops)
     setCourts(c)
-    if (!courtId && c[0]) setCourtId(c[0].id)
+    if (c[0]) setCourtId((current) => current || c[0].id)
     setLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
     void reload()
-  }, [])
+  }, [reload])
 
   async function create(e: FormEvent) {
     e.preventDefault()

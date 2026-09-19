@@ -198,7 +198,7 @@ describe("LoginPage authentication form safety", () => {
     await user.click(screen.getByRole("button", { name: "Forgot password?" }));
     await user.click(screen.getByRole("button", { name: "Back to log in" }));
 
-    expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
+    expect(loginSubmitButton()).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
   });
 

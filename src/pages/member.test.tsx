@@ -1,10 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Member, Profile } from '../types'
 import { api } from '../lib/api'
-import { MemberHome, MemberPay } from './member'
+import { MemberHome, MemberNotifications, MemberPay } from './member'
 
 const memberUser = {
   id: 'u-member',
@@ -14,6 +14,7 @@ const memberUser = {
   role: 'member',
   created_at: '2026-01-01T00:00:00.000Z',
 } satisfies Profile
+let currentMemberUser: Profile = memberUser
 
 const membership = {
   id: 'member-1',
@@ -33,7 +34,7 @@ const membership = {
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    user: memberUser,
+    user: currentMemberUser,
     loading: false,
     demo: true,
     signIn: vi.fn(),
@@ -51,6 +52,43 @@ vi.mock('../lib/api', () => ({
     payMembership: vi.fn(),
   },
 }))
+
+describe('MemberNotifications loading', () => {
+  beforeEach(() => {
+    currentMemberUser = memberUser
+    vi.mocked(api.notifications).mockReset()
+    vi.mocked(api.notifications).mockResolvedValue([])
+  })
+
+  afterEach(() => {
+    currentMemberUser = memberUser
+  })
+
+  it('does not refetch for a new profile object with the same user ID, but refetches for a different ID', async () => {
+    const view = render(
+      <MemoryRouter>
+        <MemberNotifications />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(api.notifications).toHaveBeenCalledTimes(1))
+
+    currentMemberUser = { ...memberUser }
+    await act(async () => view.rerender(
+      <MemoryRouter>
+        <MemberNotifications />
+      </MemoryRouter>,
+    ))
+    expect(api.notifications).toHaveBeenCalledTimes(1)
+
+    currentMemberUser = { ...memberUser, id: 'another-member' }
+    await act(async () => view.rerender(
+      <MemoryRouter>
+        <MemberNotifications />
+      </MemoryRouter>,
+    ))
+    expect(api.notifications).toHaveBeenCalledWith('another-member')
+  })
+})
 
 describe('MemberPay loading semantics', () => {
   beforeEach(() => {

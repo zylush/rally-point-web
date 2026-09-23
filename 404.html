@@ -1,0 +1,13 @@
+# SPA fallback for GitHub Pages client-side routes
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // redirect /admin etc. back through index with path preserved
+      sessionStorage.setItem('ghpages-redirect', location.pathname + location.search + location.hash)
+      location.replace('/rally-point-web/')
+    </script>
+  </head>
+  <body></body>
+</html>

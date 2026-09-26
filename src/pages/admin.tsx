@@ -5,6 +5,7 @@ import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/
 import { BackButton } from '../components/BackButton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { isDemoMode } from '../lib/supabase'
 import type {
   Court,
   CourtSession,
@@ -14,6 +15,7 @@ import type {
   MemberStatus,
   Profile,
   Transaction,
+  Venue,
 } from '../types'
 import { fmtDate, fmtTime, peso } from '../types'
 
@@ -42,7 +44,7 @@ export function AdminHome() {
           <>
             <section className="grid grid-cols-2 gap-3">
               <div className="stat-card col-span-2">
-                <p className="text-teal-100 text-xs font-bold uppercase">Revenue today</p>
+                <p className="text-teal-100 text-xs font-bold uppercase">{isDemoMode ? 'Revenue today' : 'Recorded charges today'}</p>
                 <p className="text-3xl font-extrabold mt-1">{peso(stats.revenue_today)}</p>
               </div>
               <div className="card p-4">
@@ -74,6 +76,9 @@ export function AdminHome() {
                           <Link to="/admin/users" className="btn-secondary text-sm">
                             Users
                           </Link>
+                          <Link to="/admin/venues" className="btn-secondary text-sm">
+                            Venues & access
+                          </Link>
                         </div>
 
             <section className="card p-4">
@@ -92,7 +97,7 @@ export function AdminHome() {
                     <p className="font-semibold text-sm truncate">{t.description}</p>
                     <p className="text-xs text-slate-400">{fmtDate(t.created_at)}</p>
                   </div>
-                  <p className="font-bold text-sm">{peso(t.amount)}</p>
+                  <p className="font-bold text-sm">{peso(t.amount)}{!isDemoMode || t.verification_status === 'unverified' ? ' recorded' : ''}</p>
                 </div>
               ))}
             </section>
@@ -309,6 +314,8 @@ export function AdminMemberForm() {
 
 export function AdminOps() {
   const { user } = useAuth()
+  const [venues, setVenues] = useState<Venue[]>([])
+  const [venueId, setVenueId] = useState('')
   const [courts, setCourts] = useState<Court[]>([])
   const [sessions, setSessions] = useState<CourtSession[]>([])
   const [members, setMembers] = useState<Member[]>([])
@@ -326,7 +333,18 @@ export function AdminOps() {
   const [wiAmount, setWiAmount] = useState(350)
 
   async function reload() {
-    const [c, s, m] = await Promise.all([api.listCourts(), api.playingSessions(), api.listMembers()])
+    let selectedVenueId = venueId
+    if (typeof api.listVenues === 'function') {
+      const accessibleVenues = await api.listVenues(user?.id, 'admin')
+      setVenues(accessibleVenues)
+      selectedVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId) ? venueId : accessibleVenues[0]?.id ?? ''
+      if (selectedVenueId !== venueId) setVenueId(selectedVenueId)
+    }
+    const [c, s, m] = await Promise.all([
+      selectedVenueId ? api.listCourts(selectedVenueId) : api.listCourts(),
+      selectedVenueId ? api.playingSessions(selectedVenueId) : api.playingSessions(),
+      api.listMembers(),
+    ])
     setCourts(c)
     setSessions(s)
     setMembers(m)
@@ -338,13 +356,14 @@ export function AdminOps() {
   useEffect(() => {
     void reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [venueId])
 
   async function rent(e: FormEvent) {
     e.preventDefault()
     try {
       await api.createRental({
         court_id: courtId,
+        ...(venueId ? { venue_id: venueId } : {}),
         member_id: memberId || undefined,
         guest_name: guest || undefined,
         hours,
@@ -381,6 +400,7 @@ export function AdminOps() {
       phone: wiPhone,
       purpose: wiPurpose,
       amount: wiAmount,
+      ...(venueId ? { venue_id: venueId } : {}),
       created_by: user?.id,
     })
     setMsg('Walk-in registered')
@@ -390,7 +410,8 @@ export function AdminOps() {
 
   async function checkIn(e: FormEvent) {
     e.preventDefault()
-    await api.checkIn(checkMemberId, user?.id, checkNote || undefined)
+    if (venueId) await api.checkIn(checkMemberId, user?.id, checkNote || undefined, venueId)
+    else await api.checkIn(checkMemberId, user?.id, checkNote || undefined)
     setMsg('Checked in')
     setCheckNote('')
     setTimeout(() => setMsg(null), 2000)
@@ -400,6 +421,14 @@ export function AdminOps() {
     <AppShell role="admin">
       <AppHeader title="Floor ops" subtitle="Check-in · courts · walk-in" right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-3 space-y-3">
+        {venues.length > 1 ? (
+          <section className="card p-3">
+            <label className="label" htmlFor="admin-ops-venue">Venue</label>
+            <select id="admin-ops-venue" className="input" value={venueId} onChange={(event) => setVenueId(event.target.value)}>
+              {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+            </select>
+          </section>
+        ) : null}
         <div className="flex gap-1 overflow-x-auto pb-1">
           {(
             [
@@ -562,7 +591,7 @@ export function AdminTransactions() {
 
   return (
     <AppShell role="admin">
-      <AppHeader title="Transactions" subtitle="All revenue" right={<SignOutButton />} />
+      <AppHeader title="Transactions" subtitle={isDemoMode ? 'All revenue' : 'Recorded charges'} right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-4">
         {loading ? (
           <LoadingBlock />
@@ -576,7 +605,7 @@ export function AdminTransactions() {
                     {t.member?.full_name ?? 'Walk-in / club'} · {fmtDate(t.created_at)}
                   </p>
                 </div>
-                <p className="font-bold text-sm">{peso(t.amount)}</p>
+                <p className="font-bold text-sm">{peso(t.amount)}{!isDemoMode || t.verification_status === 'unverified' ? ' recorded' : ''}</p>
               </div>
             ))}
           </section>

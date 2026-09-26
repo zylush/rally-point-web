@@ -3,7 +3,8 @@ import { Users } from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import type { Court, Member, OpenPlaySession, Role, SkillLevel } from '../types'
+import { isDemoMode } from '../lib/supabase'
+import type { Court, Member, OpenPlaySession, Role, SkillLevel, Venue } from '../types'
 import { fmtDateTime, peso, ymdLocal } from '../types'
 
 export function MemberOpenPlay() {
@@ -11,6 +12,8 @@ export function MemberOpenPlay() {
   const userId = user?.id
   const [list, setList] = useState<OpenPlaySession[]>([])
   const [member, setMember] = useState<Member | null>(null)
+  const [venues, setVenues] = useState<Venue[]>([])
+  const [venueId, setVenueId] = useState('')
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -18,11 +21,18 @@ export function MemberOpenPlay() {
   const reload = useCallback(async () => {
     if (!userId) return
     setLoading(true)
-    const [ops, m] = await Promise.all([api.listOpenPlays(), api.memberForUser(userId)])
+    const accessibleVenues = typeof api.listVenues === 'function' ? await api.listVenues(userId, 'member') : []
+    setVenues(accessibleVenues)
+    const nextVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId) ? venueId : accessibleVenues[0]?.id ?? ''
+    if (nextVenueId !== venueId) setVenueId(nextVenueId)
+    const [ops, m] = await Promise.all([
+      api.listOpenPlays(false, nextVenueId || undefined),
+      api.memberForUser(userId),
+    ])
     setList(ops)
     setMember(m)
     setLoading(false)
-  }, [userId])
+  }, [userId, venueId])
 
   useEffect(() => {
     void reload()
@@ -65,6 +75,14 @@ export function MemberOpenPlay() {
     <AppShell role="member">
       <AppHeader title="Open play" subtitle="Join a drop-in game — no private court needed" right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-4 space-y-3">
+        {venues.length > 1 ? (
+          <section className="card p-3">
+            <label className="label" htmlFor="member-open-play-venue">Venue</label>
+            <select id="member-open-play-venue" className="input" value={venueId} onChange={(event) => setVenueId(event.target.value)}>
+              {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+            </select>
+          </section>
+        ) : null}
         {loading ? (
           <LoadingBlock />
         ) : list.length === 0 ? (
@@ -85,7 +103,9 @@ export function MemberOpenPlay() {
                   </div>
                   <span className="pill bg-brand-50 text-brand-800 capitalize">{op.status}</span>
                 </div>
-                <p className="text-sm font-bold text-brand-800">{op.fee > 0 ? peso(op.fee) : 'Free'}</p>
+                <p className="text-sm font-bold text-brand-800">
+                  {isDemoMode ? (op.fee > 0 ? peso(op.fee) : 'Free') : op.fee > 0 ? `${peso(op.fee)} · recorded charge` : 'No charge recorded'}
+                </p>
                 {op.notes ? <p className="text-xs text-slate-500">{op.notes}</p> : null}
                 {mine ? (
                   <div className="flex gap-2">
@@ -127,6 +147,8 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
   const { user } = useAuth()
   const [list, setList] = useState<OpenPlaySession[]>([])
   const [courts, setCourts] = useState<Court[]>([])
+  const [venues, setVenues] = useState<Venue[]>([])
+  const [venueId, setVenueId] = useState('')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('Evening Open Play')
@@ -141,12 +163,19 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
 
   const reload = useCallback(async () => {
     setLoading(true)
-    const [ops, c] = await Promise.all([api.listOpenPlays(true), api.listCourts()])
+    const accessibleVenues = typeof api.listVenues === 'function' ? await api.listVenues(user?.id, role) : []
+    setVenues(accessibleVenues)
+    const nextVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId) ? venueId : accessibleVenues[0]?.id ?? ''
+    if (nextVenueId !== venueId) setVenueId(nextVenueId)
+    const [ops, c] = await Promise.all([
+      nextVenueId ? api.listOpenPlays(true, nextVenueId) : api.listOpenPlays(true),
+      nextVenueId ? api.listCourts(nextVenueId) : api.listCourts(),
+    ])
     setList(ops)
     setCourts(c)
     if (c[0]) setCourtId((current) => current || c[0].id)
     setLoading(false)
-  }, [])
+  }, [role, user?.id, venueId])
 
   useEffect(() => {
     void reload()
@@ -161,6 +190,7 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
       await api.createOpenPlay({
         title,
         court_id: courtId || undefined,
+        ...(venueId ? { venue_id: venueId } : {}),
         start_at: start.toISOString(),
         end_at: end.toISOString(),
         capacity,
@@ -189,6 +219,14 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
         }
       />
       <main className="safe-bottom px-4 pt-4 space-y-3">
+        {venues.length > 1 ? (
+          <section className="card p-3">
+            <label className="label" htmlFor="manage-open-play-venue">Venue</label>
+            <select id="manage-open-play-venue" className="input" value={venueId} onChange={(event) => setVenueId(event.target.value)}>
+              {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+            </select>
+          </section>
+        ) : null}
         {showForm ? (
           <form className="card p-4 space-y-3" onSubmit={create}>
             <div>
@@ -283,7 +321,7 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
               <p className="text-sm text-slate-500 mt-1">{fmtDateTime(op.start_at)}</p>
               <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
                 <Users size={12} /> {op.seats_taken ?? 0}/{op.capacity} · {op.court?.name ?? '—'} ·{' '}
-                {op.fee > 0 ? peso(op.fee) : 'Free'}
+                {isDemoMode ? (op.fee > 0 ? peso(op.fee) : 'Free') : op.fee > 0 ? `${peso(op.fee)} recorded` : 'No charge recorded'}
               </p>
               {(op.signups ?? []).filter((s) => s.status !== 'cancelled').length > 0 ? (
                 <div className="mt-2 border-t border-slate-100 pt-2 space-y-1">

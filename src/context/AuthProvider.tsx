@@ -14,7 +14,20 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
   if (!supabase) return null
   const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
   if (error) throw error
-  return data as Profile | null
+  if (!data) return null
+
+  // The profile row is identity data only. In live mode, authorization comes
+  // from the server-owned club assignment/roster boundary, never profiles.role.
+  // The optional guard keeps the focused auth unit tests compatible with their
+  // intentionally tiny Supabase double.
+  if (typeof supabase.rpc === 'function') {
+    const access = await supabase.rpc('get_current_access')
+    if (access.error) throw access.error
+    const row = Array.isArray(access.data) ? access.data[0] : access.data
+    if (!row?.role) return null
+    return { ...(data as Profile), role: row.role as Profile['role'] }
+  }
+  return data as Profile
 }
 
 const profileSetupError =

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Maximize2, RefreshCw } from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { api } from '../lib/api'
+import type { Venue } from '../types'
 import type { Court, Role, ScheduleBlock } from '../types'
 import { fmtTime, ymdLocal } from '../types'
 import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR } from '../types'
@@ -23,15 +24,42 @@ export function ScheduleBoard({
   const [dateYmd, setDateYmd] = useState(ymdLocal(new Date()))
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
   const [courts, setCourts] = useState<Court[]>([])
+  const [venues, setVenues] = useState<Venue[]>([])
+  const [venueId, setVenueId] = useState('')
   const [loading, setLoading] = useState(true)
   const [clock, setClock] = useState(new Date())
 
   async function reload() {
     setLoading(true)
     try {
-      const [b, c] = await Promise.all([api.daySchedule(dateYmd), api.listCourts()])
+      let selectedVenueId = venueId
+      if (!tv && role && typeof api.listVenues === 'function') {
+        const accessibleVenues = await api.listVenues(undefined, role)
+        setVenues(accessibleVenues)
+        selectedVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId)
+          ? venueId
+          : accessibleVenues[0]?.id ?? ''
+        if (selectedVenueId !== venueId) setVenueId(selectedVenueId)
+      }
+      const schedule = tv && typeof api.publicDaySchedule === 'function'
+        ? api.publicDaySchedule(dateYmd)
+        : selectedVenueId
+          ? api.daySchedule(dateYmd, selectedVenueId)
+          : api.daySchedule(dateYmd)
+      const courtsPromise = tv
+        ? Promise.resolve([] as Court[])
+        : selectedVenueId
+          ? api.listCourts(selectedVenueId)
+          : api.listCourts()
+      const [b, c] = await Promise.all([schedule, courtsPromise])
       setBlocks(b)
-      setCourts(c)
+      const tvCourts = b.filter((block): block is ScheduleBlock & { court_id: string } => typeof block.court_id === 'string')
+      setCourts(tv ? Array.from(new Map(tvCourts.map((block) => [block.court_id, {
+        id: block.court_id,
+        name: block.court_name,
+        status: 'occupied' as const,
+        hourly_rate: 0,
+      }])).values()) : c)
     } finally {
       setLoading(false)
     }
@@ -42,7 +70,7 @@ export function ScheduleBoard({
     const t = setInterval(() => void reload(), 30000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateYmd])
+  }, [dateYmd, venueId, role, tv])
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000)
@@ -78,6 +106,14 @@ export function ScheduleBoard({
         </header>
       ) : (
         <section className="card p-3 flex flex-wrap gap-2 items-center">
+          {venues.length > 1 ? (
+            <label className="sr-only" htmlFor="schedule-venue">Venue</label>
+          ) : null}
+          {venues.length > 1 ? (
+            <select id="schedule-venue" className="input max-w-[12rem]" value={venueId} onChange={(event) => setVenueId(event.target.value)}>
+              {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+            </select>
+          ) : null}
           <input
             type="date"
             className="input max-w-[11rem]"
@@ -115,7 +151,14 @@ export function ScheduleBoard({
                   key={c.id}
                   className={`p-2 text-sm font-extrabold border-l ${tv ? 'border-slate-800' : 'border-slate-100'}`}
                 >
-                  {c.name}
+                  {tv ? (
+                    <>
+                      <span className="block text-[10px] font-semibold text-slate-500 truncate">
+                        {blocks.find((block) => block.court_id === c.id)?.venue_name ?? 'Venue'}
+                      </span>
+                      {c.name}
+                    </>
+                  ) : c.name}
                 </div>
               ))}
               {hours.map((h) => (
@@ -173,6 +216,9 @@ export function ScheduleBoard({
                       {b.kind.replace('_', ' ')}
                     </span>
                   </div>
+                  {b.venue_name ? (
+                    <p className={`text-xs mt-1 ${tv ? 'text-slate-400' : 'text-slate-500'}`}>{b.venue_name}</p>
+                  ) : null}
                   <p className={`text-sm mt-1 ${tv ? 'text-slate-300' : 'text-slate-600'}`}>
                     {b.court_name} · {fmtTime(b.start_at)} – {fmtTime(b.end_at)}
                   </p>

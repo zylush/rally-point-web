@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 coverage
+.playwright-cli/
 *.local
 
 # Local project documentation and planning artifacts
@@ -27,4 +28,6 @@ docs/
 *.sln
 *.sw?
 .env
+.env.*
+!.env.example
 admin-credentials.local.txt

@@ -1,0 +1,12 @@
+-- Operator-run concurrency verification. Use two separate authenticated
+-- connections (A and B) against staging; this file is intentionally not a
+-- single-transaction pgTAP test because one connection cannot prove a race.
+--
+-- A: begin; select public.create_unpaid_desk_booking(... same court/time ...);
+-- B: begin; select public.create_unpaid_desk_booking(... same court/time ...);
+-- Commit A and then B. Exactly one command must commit; the loser must report
+-- the court_allocations_no_overlap exclusion violation. Roll back the loser.
+--
+-- Repeat with adjacent [start,end) intervals and with different courts. Both
+-- must commit. Then mark/cancel one allocation, retry the former interval, and
+-- verify that only active statuses (held/reserved/playing) contend.

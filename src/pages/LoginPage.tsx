@@ -168,7 +168,7 @@ export default function LoginPage() {
           <div className="mt-8 hidden lg:flex flex-wrap gap-3">
             <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3 backdrop-blur-md shadow-lg">
               <p className="text-sm font-bold text-teal-200">Members</p>
-              <p className="text-base font-semibold text-white">Book · pay · QR · open play</p>
+              <p className="text-base font-semibold text-white">{demo ? 'Book · pay · QR · open play' : 'Availability · QR · open play'}</p>
             </div>
             <div className="rounded-2xl border border-white/15 bg-black/35 px-4 py-3 backdrop-blur-md shadow-lg">
               <p className="text-sm font-bold text-teal-200">Staff / Admin</p>
@@ -221,7 +221,9 @@ export default function LoginPage() {
               </h2>
               <p className="mt-1.5 text-base text-slate-600">
                 {mode === 'join'
-                  ? 'For players only. You’ll get book, pay, open play, and your QR pass.'
+                  ? demo
+                    ? 'For players only. You’ll get book, pay, open play, and your QR pass.'
+                    : 'For players only. View availability, open play, and your QR pass.'
                   : mode === 'reset'
                   ? 'Enter your email and we’ll send a password reset link.'
                   : 'Members, staff, and admin all use this log-in.'}

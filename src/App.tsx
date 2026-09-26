@@ -24,6 +24,7 @@ import {
   AdminUsers,
 } from './pages/admin'
 import { AdminBookings, StaffBookings } from './pages/BookingsDesk'
+import { AdminVenues } from './pages/AdminVenues'
 import { LoadingBlock } from './components/Shell'
 import { useEffect } from 'react'
 import { api } from './lib/api'
@@ -94,6 +95,7 @@ export default function App() {
           <Route path="/admin/bookings" element={<AdminBookings />} />
           <Route path="/admin/transactions" element={<AdminTransactions />} />
           <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/admin/venues" element={<AdminVenues />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

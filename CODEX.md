@@ -28,11 +28,17 @@ The app uses seeded demo mode when either Supabase environment value is blank or
 npm test
 npm run lint
 npm run build
+npx --no-install playwright cli --help
+npx --no-install cs-mcp --help
 ```
 
 Vitest uses jsdom. CSS contract tests live under `tests/`; SQL tests require a prepared local/test Supabase database. `scripts/run-migration.mjs` applies only the first SQL migration, so do not use it as a complete setup or update command. Check the ordered SQL files and target migration history before any database operation.
 
-Verification on 2026-09-19: `npm run build` passed; `npm run lint` produced no warnings; `npm test` passed 38 of 38 tests. Vitest now loads `src/test/setup.ts` through `setupFiles`. The coverage command passed, but overall statement coverage is 29.8%, below the 80% target. Local demo Playwright CLI smoke tests passed for member, staff, and admin routes; this is not live Supabase verification.
+For browser QA, start the local app with `npm run dev` and use the installed CLI, for example `npx --no-install playwright cli open 'http://127.0.0.1:5173/rally-point-web/#/login'`. Use `npx --no-install playwright cli close` afterward. CLI snapshots and screenshots under `.playwright-cli/` are ignored; do not use Playwright MCP for this repo.
+
+CodeScene Code Health MCP is pinned as a dev dependency and registered in `.codex/config.toml` for this repo. `codex mcp list` confirms the server entry; its first start downloads a platform-specific binary into the ignored `node_modules` cache. Code Health review requires CodeScene account sign-in; do not commit a token or initiate login without the owner's approval.
+
+Verification on 2026-09-20: `npm run build` and `npm run lint` passed; the latest coverage run passed 127 of 127 tests and the 80% thresholds for statements, branches, functions, and lines. The repo-local Playwright CLI opened the local demo login page and captured a snapshot; this is not live Supabase verification. The recent-code refactor scope and results are in `tests/refactor-scope.md`.
 
 ## Current boundaries
 

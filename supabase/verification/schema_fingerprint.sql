@@ -1,5 +1,7 @@
 -- Read-only public-schema fingerprint for migration-history reconciliation.
 -- Returns canonical rows only; it does not inspect or emit application data.
+-- Pin session deparsing so auth/private references compare across environments.
+set search_path = public, extensions;
 
 with fingerprint as (
   select
@@ -152,5 +154,14 @@ with fingerprint as (
   where indexes.schemaname = 'public'
 )
 select category, identity, details
+from fingerprint
+union all
+select
+  '!fingerprint' as category,
+  'md5' as identity,
+  md5(string_agg(
+    category || chr(31) || identity || chr(31) || details,
+    chr(30) order by category, identity, details
+  )) as details
 from fingerprint
 order by category, identity, details;

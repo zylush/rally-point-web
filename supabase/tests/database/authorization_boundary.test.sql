@@ -48,7 +48,7 @@ select extensions.is(
 );
 
 select extensions.throws_ok(
-  'insert into public.members (user_id, member_code, full_name, email, membership_type, status, join_date, expiry_date, qr_token) values (''11111111-1111-4111-8111-111111111111'', ''RP-DUPLICATE-USER'', ''Duplicate User'', ''duplicate@example.com'', ''standard'', ''active'', current_date, current_date + 30, ''q_duplicate_user'')',
+  'insert into public.members (club_id, user_id, member_code, full_name, email, membership_type, status, join_date, expiry_date, qr_token) values (''aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'', ''11111111-1111-4111-8111-111111111111'', ''RP-DUPLICATE-USER'', ''Duplicate User'', ''duplicate@example.com'', ''standard'', ''active'', current_date, current_date + 30, ''q_duplicate_user'')',
   '23505',
   null,
   'member user_id uniqueness prevents duplicate provisioning'
@@ -64,9 +64,11 @@ select extensions.throws_ok(
   'a member cannot promote their own profile'
 );
 
-select extensions.lives_ok(
+select extensions.throws_ok(
   'update public.profiles set full_name = ''Member Updated Name'' where id = ''11111111-1111-4111-8111-111111111111''',
-  'a member can update a non-authoritative profile field'
+  '42501',
+  null,
+  'profile identity is read-only through the client boundary'
 );
 
 set local role postgres;
@@ -78,24 +80,26 @@ values (
   '{"full_name":"Trusted Admin"}'::jsonb
 );
 
-update public.profiles
-set role = 'admin'
-where id = '22222222-2222-4222-8222-222222222222';
+update public.profiles set role = 'admin' where id = '22222222-2222-4222-8222-222222222222';
+insert into public.club_staff_roles (club_id, user_id, role)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '22222222-2222-4222-8222-222222222222', 'admin');
 
 set local role authenticated;
 set local request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
 
-select extensions.lives_ok(
+select extensions.throws_ok(
   'update public.profiles set role = ''staff'' where id = ''11111111-1111-4111-8111-111111111111''',
-  'an authoritative admin can change another profile role'
+  '42501',
+  null,
+  'authorization role cannot be changed through the profiles table'
 );
 
 set local role postgres;
 
 select extensions.is(
-  (select role::text from public.profiles where id = '11111111-1111-4111-8111-111111111111'),
-  'staff',
-  'the trusted admin role change is persisted'
+  (select role::text from public.get_current_access() where club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+  'admin',
+  'the trusted club assignment resolves the admin role'
 );
 
 select * from extensions.finish();

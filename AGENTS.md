@@ -38,3 +38,5 @@ When changing a data operation, inspect both demo and live branches and the matc
 ## Verification
 
 Run proportionate checks: `npm test`, `npm run lint`, and `npm run build` for code changes. Check affected phone and desktop layouts and keyboard interactions for UI changes. Database policy changes need local/test SQL checks, including denied access. Report what actually ran and what remains unverified. Review the diff before any commit or push; deployment and third-party changes require explicit authorization.
+
+For browser checks, use the repo-local Playwright CLI (`npx --no-install playwright cli`), not Playwright MCP. Run it against the local demo or an authorized test environment, and close CLI sessions when done.

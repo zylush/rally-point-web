@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Member, Profile } from '../types'
 import { api } from '../lib/api'
-import { MemberHome, MemberNotifications, MemberPay } from './member'
+import { MemberHome, MemberNotifications, MemberPay, MemberProfile, MemberTransactions } from './member'
 
 const memberUser = {
   id: 'u-member',
@@ -50,6 +50,7 @@ vi.mock('../lib/api', () => ({
     notifications: vi.fn(),
     transactions: vi.fn(),
     payMembership: vi.fn(),
+    markNotifRead: vi.fn(),
   },
 }))
 
@@ -88,10 +89,26 @@ describe('MemberNotifications loading', () => {
     ))
     expect(api.notifications).toHaveBeenCalledWith('another-member')
   })
+
+  it('marks an unread message as read and refreshes its state', async () => {
+    const user = userEvent.setup()
+    const notice = { id: 'notice-1', user_id: memberUser.id, title: 'Court ready', body: 'See you soon', read: false, created_at: '2026-09-19T00:00:00.000Z' }
+    vi.mocked(api.notifications).mockResolvedValueOnce([notice]).mockResolvedValue([{ ...notice, read: true }])
+    vi.mocked(api.markNotifRead).mockReset()
+    vi.mocked(api.markNotifRead).mockResolvedValue(undefined)
+    render(<MemoryRouter><MemberNotifications /></MemoryRouter>)
+
+    await user.click(await screen.findByRole('button', { name: /Court ready/ }))
+    expect(api.markNotifRead).toHaveBeenCalledWith('notice-1')
+    await waitFor(() => expect(screen.queryByText('New')).not.toBeInTheDocument())
+    expect(api.notifications).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('MemberPay loading semantics', () => {
   beforeEach(() => {
+    vi.mocked(api.memberForUser).mockReset()
+    vi.mocked(api.payMembership).mockReset()
     vi.mocked(api.memberForUser).mockResolvedValue(membership)
   })
 
@@ -127,6 +144,38 @@ describe('MemberPay loading semantics', () => {
 
     resolvePayment()
     expect(await screen.findByRole('button', { name: /pay php 2,500/i })).toBeEnabled()
+  })
+
+  it('keeps renewal disabled without a linked membership', async () => {
+    vi.mocked(api.memberForUser).mockResolvedValue(null)
+    render(<MemoryRouter><MemberPay /></MemoryRouter>)
+    await waitFor(() => expect(api.memberForUser).toHaveBeenCalledWith(memberUser.id))
+    expect(screen.getByRole('button', { name: /pay php 2,500/i })).toBeDisabled()
+  })
+
+  it('reports a failed renewal and allows a retry', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.payMembership).mockRejectedValue(new Error('Payment unavailable'))
+    render(<MemoryRouter><MemberPay /></MemoryRouter>)
+    const button = await screen.findByRole('button', { name: /pay php 2,500/i })
+    await waitFor(() => expect(button).toBeEnabled())
+    await user.click(button)
+
+    expect(await screen.findByText('Payment unavailable')).toBeInTheDocument()
+    expect(button).toBeEnabled()
+  })
+
+  it('refreshes membership after a successful renewal', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.memberForUser).mockResolvedValueOnce(membership).mockResolvedValue({ ...membership, expiry_date: '2027-01-30' })
+    render(<MemoryRouter><MemberPay /></MemoryRouter>)
+    const button = await screen.findByRole('button', { name: /pay php 2,500/i })
+    await waitFor(() => expect(button).toBeEnabled())
+    await user.click(button)
+
+    expect(api.payMembership).toHaveBeenCalledWith(membership.id, 2500, memberUser.id)
+    expect(await screen.findByText('Payment recorded. Membership extended 30 days.')).toBeInTheDocument()
+    expect(api.memberForUser).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -199,5 +248,58 @@ describe('MemberHome renewal action', () => {
     expect(api.memberForUser).toHaveBeenCalledWith(memberUser.id)
     expect(api.notifications).toHaveBeenCalledWith(memberUser.id)
     expect(api.transactions).toHaveBeenCalledWith(memberUser.id, 'member')
+  })
+
+  it('shows unread reminders and only the three latest payments', async () => {
+    vi.mocked(api.notifications).mockResolvedValue([
+      { id: 'n1', user_id: memberUser.id, title: 'Reminder', body: 'Today', read: false, created_at: '2026-09-19T00:00:00.000Z' },
+      { id: 'n2', user_id: memberUser.id, title: 'Old', body: 'Yesterday', read: true, created_at: '2026-09-18T00:00:00.000Z' },
+    ])
+    vi.mocked(api.transactions).mockResolvedValue(Array.from({ length: 4 }, (_, i) => ({
+      id: `tx-${i}`, amount: 100 + i, type: 'membership' as const,
+      description: `Payment ${i}`, created_at: '2026-09-19T00:00:00.000Z',
+    })))
+    render(<MemoryRouter><MemberHome /></MemoryRouter>)
+
+    expect(await screen.findByText('Payment 2')).toBeInTheDocument()
+    expect(screen.queryByText('Payment 3')).not.toBeInTheDocument()
+    const messages = screen.getByRole('link', { name: /Messages/ })
+    expect(within(messages).getByText('1')).toBeInTheDocument()
+  })
+
+  it('shows a missing membership and an empty payment history', async () => {
+    vi.mocked(api.memberForUser).mockResolvedValue(null)
+    render(<MemoryRouter><MemberHome /></MemoryRouter>)
+
+    expect(await screen.findByText('No payments yet.')).toBeInTheDocument()
+    expect(screen.getByText('n/a')).toBeInTheDocument()
+  })
+})
+
+describe('Member account details', () => {
+  beforeEach(() => {
+    vi.mocked(api.memberForUser).mockResolvedValue(membership)
+    vi.mocked(api.transactions).mockResolvedValue([])
+  })
+
+  it('shows a member profile with the membership fallback phone', async () => {
+    vi.mocked(api.memberForUser).mockResolvedValue({ ...membership, phone: '09171234567' })
+    render(<MemoryRouter><MemberProfile /></MemoryRouter>)
+
+    expect(await screen.findByText('RP-001')).toBeInTheDocument()
+    expect(screen.getByText('09171234567')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Renew membership/ })).toHaveAttribute('href', '/member/pay')
+  })
+
+  it('renders transaction descriptions, types, and amounts', async () => {
+    vi.mocked(api.transactions).mockResolvedValue([{
+      id: 'tx-1', amount: 2500, type: 'court_rental', description: 'Court A rental',
+      created_at: '2026-09-19T00:00:00.000Z',
+    }])
+    render(<MemoryRouter><MemberTransactions /></MemoryRouter>)
+
+    expect(await screen.findByText('Court A rental')).toBeInTheDocument()
+    expect(screen.getByText(/court rental/)).toBeInTheDocument()
+    expect(screen.getByText('Php 2,500.00')).toBeInTheDocument()
   })
 })

@@ -4,11 +4,13 @@ import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { paymentConfig } from '../lib/payments'
+import { isDemoMode } from '../lib/supabase'
 import type {
   Booking,
   CourtDayAvailability,
   Member,
   PaymentMethod,
+  Venue,
 } from '../types'
 import {
   CLUB_CLOSE_HOUR,
@@ -44,6 +46,8 @@ export function MemberBook() {
   const { user } = useAuth()
   const days = useMemo(() => nextDays(7), [])
   const [dateYmd, setDateYmd] = useState(days[0].ymd)
+  const [venues, setVenues] = useState<Venue[]>([])
+  const [venueId, setVenueId] = useState('')
   const [hours, setHours] = useState(1)
   const [courtId, setCourtId] = useState<string | null>(null)
   const [startHour, setStartHour] = useState<number | null>(null)
@@ -65,9 +69,15 @@ export function MemberBook() {
     try {
       const m = await api.memberForUser(user.id)
       setMember(m)
+      const accessibleVenues = typeof api.listVenues === 'function' ? await api.listVenues(user.id, user.role) : []
+      setVenues(accessibleVenues)
+      const nextVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId)
+        ? venueId
+        : accessibleVenues[0]?.id ?? ''
+      if (nextVenueId !== venueId) setVenueId(nextVenueId)
       const [a, b] = await Promise.all([
-        api.availability(dateYmd),
-        m ? api.myBookings(m.id) : Promise.resolve([] as Booking[]),
+        api.availability(dateYmd, nextVenueId || undefined),
+        m ? api.myBookings(m.id, nextVenueId || undefined) : Promise.resolve([] as Booking[]),
       ])
       setAvail(a)
       setMine(b)
@@ -82,7 +92,7 @@ export function MemberBook() {
   useEffect(() => {
     void reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, dateYmd])
+  }, [user, dateYmd, venueId])
 
   const selectedCourt = avail.find((c) => c.court.id === courtId)
   const rate = selectedCourt?.court.hourly_rate ?? 0
@@ -99,12 +109,17 @@ export function MemberBook() {
   }
 
   async function goPay() {
+    if (!isDemoMode) {
+      setError('Online checkout is not available yet. Ask the desk to reserve this court.')
+      return
+    }
     if (!user || !member || !courtId || startHour == null) return
     setBusy(true)
     setError(null)
     try {
       const booking = await api.createBooking({
         court_id: courtId,
+        venue_id: venueId || undefined,
         member_id: member.id,
         dateYmd,
         startHour,
@@ -122,7 +137,7 @@ export function MemberBook() {
   }
 
   async function confirmPay() {
-    if (!user || !pending) return
+    if (!isDemoMode || !user || !pending) return
     setBusy(true)
     setError(null)
     try {
@@ -148,7 +163,11 @@ export function MemberBook() {
 
   return (
     <AppShell role="member">
-      <AppHeader title="Book a court" subtitle="1. Date · 2. Court · 3. Time · 4. Pay" right={<SignOutButton />} />
+      <AppHeader
+        title="Book a court"
+        subtitle={isDemoMode ? '1. Venue · 2. Date · 3. Court · 4. Pay' : 'View availability · reserve at the desk'}
+        right={<SignOutButton />}
+      />
       <main className="safe-bottom px-4 pt-4 space-y-4">
         {!member && !loading ? (
           <section className="card p-4">
@@ -256,6 +275,31 @@ export function MemberBook() {
 
         {step === 'pick' ? (
           <>
+            {!isDemoMode ? (
+              <section className="card border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <p className="font-extrabold">Online checkout is not available yet.</p>
+                <p className="mt-1">Choose a venue and time to check availability, then ask the desk to reserve it.</p>
+              </section>
+            ) : null}
+
+            {venues.length > 1 ? (
+              <section className="card p-3">
+                <label className="label px-1" htmlFor="member-book-venue">Venue</label>
+                <select
+                  id="member-book-venue"
+                  className="input"
+                  value={venueId}
+                  onChange={(event) => {
+                    setVenueId(event.target.value)
+                    setCourtId(null)
+                    setStartHour(null)
+                  }}
+                >
+                  {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+                </select>
+              </section>
+            ) : null}
+
             <section className="card p-3">
               <p className="label px-1 mb-2">Date</p>
               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -365,11 +409,11 @@ export function MemberBook() {
                 <button
                   type="button"
                   className="btn-primary w-full"
-                  disabled={!member || startHour == null || busy}
+                  disabled={!isDemoMode || !member || startHour == null || busy}
                   aria-busy={busy}
                   onClick={() => void goPay()}
                 >
-                  {busy ? 'Holding slot…' : `Continue · ${peso(total)}`}
+                  {busy ? 'Holding slot…' : isDemoMode ? `Continue · ${peso(total)}` : 'Ask the desk to reserve'}
                 </button>
               </>
             )}

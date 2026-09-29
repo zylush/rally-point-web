@@ -1,9 +1,18 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { ArrowRight, Eye, EyeOff, Shield, UserPlus, UserRound } from 'lucide-react'
+import {
+  ArrowRight,
+  Camera,
+  Eye,
+  EyeOff,
+  Shield,
+  UserPlus,
+  UserRound,
+} from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import type { Role } from '../types'
 import { RallyPointLogo } from '../components/RallyPointLogo'
+import { helpFaqs } from '../lib/helpContent'
 
 const demos: { role: Role; email: string; password: string; label: string }[] = [
   {
@@ -425,6 +434,49 @@ export default function LoginPage() {
                 Staff / admin accounts are created by the club — not by joining here.
               </p>
             )}
+
+            <section className="mt-6 border-t border-slate-200 pt-5" aria-labelledby="login-faq-title">
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 id="login-faq-title" className="text-lg font-extrabold text-slate-900">
+                  Quick questions
+                </h3>
+                <span className="text-xs font-semibold text-slate-500">FAQ</span>
+              </div>
+              <div className="mt-2 divide-y divide-slate-200">
+                {helpFaqs.slice(0, 3).map(({ question, answer }) => (
+                  <details key={question} className="py-1">
+                    <summary className="flex min-h-12 cursor-pointer items-center text-sm font-bold text-slate-800">
+                      {question}
+                    </summary>
+                    <p className="pb-3 text-sm leading-relaxed text-slate-600">{answer}</p>
+                  </details>
+                ))}
+              </div>
+              <p className="mt-2 text-center text-xs text-slate-500">
+                More FAQs and Contact Us are available in Help after you sign in.
+              </p>
+            </section>
+
+            <section className="mt-5 border-t border-slate-200 pt-4" aria-labelledby="login-social-title">
+              <h3 id="login-social-title" className="text-center text-sm font-bold text-slate-700">
+                Find us on social media
+              </h3>
+              <div className="mt-3 flex justify-center gap-3" aria-label="Social profile previews">
+                <span className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-600">
+                  <span aria-hidden className="inline-flex size-[18px] items-center justify-center rounded-full bg-blue-700 text-sm font-extrabold leading-none text-white">
+                    f
+                  </span>
+                  Facebook
+                </span>
+                <span className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-600">
+                  <Camera size={18} aria-hidden />
+                  Instagram
+                </span>
+              </div>
+              <p className="mt-2 text-center text-xs text-slate-500">
+                Social links will be added when the official pages are confirmed.
+              </p>
+            </section>
           </div>
         </div>
       </div>

@@ -15,6 +15,7 @@ describe('demo persistence normalization', () => {
       openPlays: undefined,
       openPlaySignups: undefined,
       reminders: undefined,
+      inquiries: undefined,
       members: demoStore.get().members.map((member) => ({ ...member })),
       sessionUserId: 'user_member',
       passwords: { member: 'legacy-secret' },
@@ -28,6 +29,7 @@ describe('demo persistence normalization', () => {
     expect(normalized.db.openPlays).toEqual([])
     expect(normalized.db.openPlaySignups).toEqual([])
     expect(normalized.db.reminders).toEqual([])
+    expect(normalized.db.inquiries).toEqual([])
     expect(normalized.db.members[0].qr_token).toBe('QR_RP1001')
     expect(normalized.db.sessionUserId).toBeNull()
     expect(stored.members[0].qr_token).toBeNull()
@@ -56,5 +58,24 @@ describe('demo persistence normalization', () => {
     expect(demoStore.get().walkins).toEqual([])
     expect(localStorage.getItem('rally_point_demo_v1')).toBeNull()
     expect(localStorage.getItem('rally_point_demo_v2')).toBeNull()
+  })
+
+  it('preserves inquiries created before club ownership was added', () => {
+    const stored = demoStore.get()
+    stored.inquiries.push({
+      id: 'legacy-inquiry',
+      user_id: 'user_staff',
+      category: 'other',
+      subject: 'Old question',
+      message: 'Please help.',
+      status: 'open',
+      created_at: new Date().toISOString(),
+    } as DemoDB['inquiries'][number])
+    delete (stored.inquiries[0] as Partial<DemoDB['inquiries'][number]>).club_id
+
+    const normalized = normalizeStored(stored, () => true)
+    expect(normalized.repaired).toBe(true)
+    expect(normalized.db.inquiries[0].club_id).toBe('club_rally_point')
+    expect(stored.inquiries[0].club_id).toBeUndefined()
   })
 })

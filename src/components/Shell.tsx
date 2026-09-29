@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   CalendarDays,
   Home,
+  HelpCircle,
   LayoutDashboard,
   LogOut,
   QrCode,
@@ -21,6 +22,7 @@ const memberTabs = [
   { to: '/member/open', label: 'Play', icon: Users },
   { to: '/member/pass', label: 'My QR', icon: QrCode },
   { to: '/member/profile', label: 'Account', icon: UserRound },
+  { to: '/member/help', label: 'Help', icon: HelpCircle },
 ]
 
 const staffTabs = [
@@ -29,6 +31,7 @@ const staffTabs = [
   { to: '/staff/board', label: 'Schedule', icon: Tv },
   { to: '/staff/open', label: 'Open play', icon: Users },
   { to: '/staff/courts', label: 'Courts', icon: Home },
+  { to: '/staff/help', label: 'Help', icon: HelpCircle },
 ]
 
 const adminTabs = [
@@ -37,6 +40,7 @@ const adminTabs = [
   { to: '/admin/board', label: 'Schedule', icon: Tv },
   { to: '/admin/open', label: 'Open play', icon: Users },
   { to: '/admin/bookings', label: 'Bookings', icon: CalendarDays },
+  { to: '/admin/help', label: 'Help', icon: HelpCircle },
 ]
 
 function tabsFor(role: Role) {
@@ -103,7 +107,12 @@ export function SideNav({ role }: { role: Role }) {
 
 export function BottomNav({ role }: { role: Role }) {
   const tabs = tabsFor(role)
-  const cols = tabs.length <= 4 ? 'grid-cols-4' : 'grid-cols-5'
+  const cols =
+    tabs.length >= 6
+      ? 'grid-cols-6'
+      : tabs.length === 5
+        ? 'grid-cols-5'
+        : 'grid-cols-4'
   return (
     <nav className="bottom-nav" aria-label="Main menu">
       <div className={`grid ${cols} px-1 pt-1.5 pb-1.5`}>

@@ -21,6 +21,7 @@ const roleLinks: Record<Role, Array<[label: string, href: string]>> = {
     ['Play', '/member/open'],
     ['My QR', '/member/pass'],
     ['Account', '/member/profile'],
+    ['Help', '/member/help'],
   ],
   staff: [
     ['Home', '/staff'],
@@ -28,6 +29,7 @@ const roleLinks: Record<Role, Array<[label: string, href: string]>> = {
     ['Schedule', '/staff/board'],
     ['Open play', '/staff/open'],
     ['Courts', '/staff/courts'],
+    ['Help', '/staff/help'],
   ],
   admin: [
     ['Home', '/admin'],
@@ -35,6 +37,7 @@ const roleLinks: Record<Role, Array<[label: string, href: string]>> = {
     ['Schedule', '/admin/board'],
     ['Open play', '/admin/open'],
     ['Bookings', '/admin/bookings'],
+    ['Help', '/admin/help'],
   ],
 }
 
@@ -56,6 +59,7 @@ describe('BottomNav', () => {
       const links = within(nav).getAllByRole('link')
 
       expect(nav).toHaveClass('bottom-nav')
+      expect(nav.firstElementChild).toHaveClass('grid-cols-6')
       expect(links).toHaveLength(expectedLinks.length)
       expectedLinks.forEach(([label, href], index) => {
         expect(links[index]).toHaveAccessibleName(label)

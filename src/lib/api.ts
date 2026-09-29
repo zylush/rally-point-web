@@ -23,6 +23,9 @@ import type {
   TenantContext,
   Venue,
   WalkIn,
+  SupportInquiry,
+  InquiryCategory,
+  InquiryStatus,
 } from '../types'
 import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR, hourLabel, localRangeISO } from '../types'
 import { RALLY_POINT_CLUB_ID, RALLY_POINT_CLUB_SLUG } from './tenant'
@@ -420,6 +423,62 @@ export const api = {
     if (isDemoMode) return demoStore.markNotifRead(id)
     const { error } = await supabase!.rpc('mark_notification_read', { p_notification_id: id })
     if (error) throw error
+  },
+
+  async createInquiry(input: {
+    user_id: string
+    category: InquiryCategory
+    subject: string
+    message: string
+  }): Promise<SupportInquiry> {
+    if (isDemoMode) return demoStore.createInquiry(input)
+    const { data, error } = await supabase!
+      .from('support_inquiries')
+      .insert({ ...input, club_id: RALLY_POINT_CLUB_ID, status: 'open' })
+      .select()
+      .single()
+    if (error) throw error
+    return data as SupportInquiry
+  },
+
+  async inquiries(userId: string, role: Role): Promise<SupportInquiry[]> {
+    if (isDemoMode) {
+      return role === 'admin'
+        ? demoStore.allInquiries()
+        : demoStore.inquiriesForUser(userId)
+    }
+    const base = supabase!
+      .from('support_inquiries')
+      .select('*')
+      .eq('club_id', RALLY_POINT_CLUB_ID)
+      .order('created_at', { ascending: false })
+    const query = role === 'admin' ? base : base.eq('user_id', userId)
+    const { data, error } = await query
+    if (error) throw error
+    const rows = (data ?? []) as SupportInquiry[]
+    if (role !== 'admin') return rows
+    const accounts = await this.staffAccounts()
+    return rows.map((row) => ({
+      ...row,
+      sender: accounts.find((account) => account.id === row.user_id) ?? null,
+    }))
+  },
+
+  async updateInquiry(input: {
+    id: string
+    status: InquiryStatus
+    response?: string
+  }): Promise<SupportInquiry> {
+    if (isDemoMode) {
+      return demoStore.respondToInquiry(input)
+    }
+    const { data, error } = await supabase!.rpc('admin_update_support_inquiry', {
+      p_inquiry_id: input.id,
+      p_status: input.status,
+      p_response: input.response?.trim() || null,
+    }).single()
+    if (error) throw error
+    return data as SupportInquiry
   },
 
   async createWalkIn(input: {

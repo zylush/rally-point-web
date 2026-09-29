@@ -12,10 +12,12 @@ Vite · React · TypeScript · Tailwind v4 · HashRouter · Supabase (demo fallb
 |------|-----------|
 | Auth | Login (member / staff / admin) |
 | Member | Book court · Open play · QR pass · Pay · Messages · Profile |
-| Staff | Check-in (QR) · Schedule board · Open play · Courts |
-| Admin | Home KPIs · Floor ops · Board · Open play · Bookings · Members · Users |
+| Staff | Check-in (QR) · Schedule board · Open play · Courts · Help inquiries and replies |
+| Admin | Home KPIs · Floor ops · Board · Open play · Bookings · Members · Users · Help inquiry inbox |
 | Public | TV board `/#/board/tv` |
 | Brand | Exact Figma `rpg_logo` (RALLY POINT GENSAN) |
+
+Help/FAQ, Admin inquiry inbox, Staff inquiry updates, migration prerequisites, and verification notes are documented in [Help and Inquiry Workflow](./docs/HELP-AND-INQUIRY-WORKFLOW.md).
 
 ## Quick start (demo)
 ```bash

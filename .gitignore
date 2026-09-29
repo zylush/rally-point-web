@@ -15,7 +15,8 @@ coverage
 *.local
 
 # Local project documentation and planning artifacts
-docs/
+docs/*
+!docs/HELP-AND-INQUIRY-WORKFLOW.md
 
 # Editor directories and files
 .vscode/*

@@ -1,4 +1,4 @@
-import type { Booking, CheckIn, Club, Court, CourtSession, Member, Notification, OpenPlaySession, OpenPlaySignup, Profile, Reminder, StaffVenueGrant, Transaction, Venue, WalkIn } from '../../types'
+import type { Booking, CheckIn, Club, Court, CourtSession, Member, Notification, OpenPlaySession, OpenPlaySignup, Profile, Reminder, StaffVenueGrant, SupportInquiry, Transaction, Venue, WalkIn } from '../../types'
 
 export interface DemoDB {
   clubs: Club[]
@@ -15,6 +15,7 @@ export interface DemoDB {
   checkins: CheckIn[]
   transactions: Transaction[]
   notifications: Notification[]
+  inquiries: SupportInquiry[]
   walkins: WalkIn[]
   sessionUserId: string | null
 }

@@ -324,6 +324,7 @@ export function seed(): DemoDB {
       verification_status: 'unverified' as const,
     })),
     notifications: notifications.map((notification) => ({ ...notification, club_id })),
+    inquiries: [],
     walkins: [],
     sessionUserId: null,
   }

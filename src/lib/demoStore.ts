@@ -11,6 +11,7 @@ import { openPlayOperations } from './demo/openPlay'
 import { scheduleOperations } from './demo/schedule'
 import { staffOperations } from './demo/staff'
 import { DEMO_CLUB_ID, chooseVenueId } from './tenant'
+import { inquiryOperations } from './demo/inquiries'
 
 export type { DemoDB } from './demo/model'
 
@@ -162,4 +163,5 @@ export const demoStore = {
   ...openPlayOperations,
   ...scheduleOperations,
   ...ledgerOperations,
+  ...inquiryOperations,
 }

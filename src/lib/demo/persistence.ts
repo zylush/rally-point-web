@@ -33,6 +33,7 @@ export function normalizeStored(
       ? withoutPasswords.openPlaySignups
       : [],
     reminders: Array.isArray(withoutPasswords.reminders) ? withoutPasswords.reminders : [],
+    inquiries: Array.isArray(withoutPasswords.inquiries) ? withoutPasswords.inquiries : [],
   }
   if (
     db.profiles.some((profile) => profile.id === 'user_staff' && profile.role === 'staff') &&
@@ -55,7 +56,8 @@ export function normalizeStored(
   const transactions = db.transactions.map((transaction) => ({ ...transaction, club_id: transaction.club_id ?? DEMO_CLUB_ID, venue_id: transaction.venue_id === undefined ? null : transaction.venue_id, verification_status: transaction.verification_status ?? 'unverified' as const }))
   const notifications = db.notifications.map((notification) => ({ ...notification, club_id: notification.club_id ?? DEMO_CLUB_ID }))
   const reminders = db.reminders.map((reminder) => ({ ...reminder, club_id: reminder.club_id ?? DEMO_CLUB_ID }))
-  const normalizedOwnership = { ...db, courts, members: membersWithOwnership, sessions, bookings, openPlays, openPlaySignups, checkins, transactions, notifications, reminders }
+  const inquiries = db.inquiries.map((inquiry) => ({ ...inquiry, club_id: inquiry.club_id ?? DEMO_CLUB_ID }))
+  const normalizedOwnership = { ...db, courts, members: membersWithOwnership, sessions, bookings, openPlays, openPlaySignups, checkins, transactions, notifications, reminders, inquiries }
   const members = normalizedOwnership.members.map((member) =>
     member.qr_token
       ? member
@@ -85,6 +87,8 @@ export function normalizeStored(
     !Array.isArray(withoutPasswords.openPlays) ||
     !Array.isArray(withoutPasswords.openPlaySignups) ||
     !Array.isArray(withoutPasswords.reminders)
+    || !Array.isArray(withoutPasswords.inquiries)
+    || db.inquiries.some((inquiry) => !inquiry.club_id)
 
   return { db: normalizedDb, repaired }
 }

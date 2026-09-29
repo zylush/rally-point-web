@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -174,6 +174,28 @@ describe("LoginPage authentication form safety", () => {
     expect(screen.getByLabelText("Email")).toHaveValue("player@example.com");
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send reset link" })).toBeInTheDocument();
+  });
+
+  it("shows public FAQ answers and clearly non-clickable social previews", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    const faqRegion = screen.getByRole("region", { name: "Quick questions" });
+    expect(within(faqRegion).getAllByRole("group")).toHaveLength(3);
+    expect(screen.getByText("More FAQs and Contact Us are available in Help after you sign in.")).toBeInTheDocument();
+    const bookingQuestion = screen.getByText("How do I book a court?");
+    await user.click(bookingQuestion);
+    expect(
+      screen.getByText(/choose a date, court, and time, then complete payment/i),
+    ).toBeInTheDocument();
+
+    const socialHeading = screen.getByRole("heading", { name: "Find us on social media" });
+    const socialSection = socialHeading.parentElement;
+    if (!socialSection) throw new Error("Social preview section is missing");
+    expect(within(socialSection).getByText("Facebook")).toBeInTheDocument();
+    expect(within(socialSection).getByText("Instagram")).toBeInTheDocument();
+    expect(socialSection.querySelectorAll("a")).toHaveLength(0);
+    expect(within(socialSection).getByText("Social links will be added when the official pages are confirmed.")).toBeInTheDocument();
   });
 
   it("sends a password reset request and shows a success message", async () => {

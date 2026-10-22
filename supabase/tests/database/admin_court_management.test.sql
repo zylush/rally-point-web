@@ -68,8 +68,8 @@ select extensions.throws_ok(
   $$select public.admin_upsert_court(null, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac', 'Pricey Member Court', 500, 600, true)$$,
   '22023', 'Member rate must be between 0 and the regular rate', 'a member rate above the regular rate is refused');
 select extensions.is(
-  (select coalesce(member_rate::text, 'none') from public.courts
-   where id = (public.admin_upsert_court(null, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac', 'Member Court', 500, 400, true)).id),
+  (select coalesce(member_rate::text, 'none')
+   from public.admin_upsert_court(null, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac', 'Member Court', 500, 400, true)),
   '400.00', 'an admin sets a lower member rate');
 select extensions.throws_ok(
   $$select public.admin_upsert_court(null, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc', 'Other Club Court', 500, null, true)$$,

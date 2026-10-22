@@ -126,7 +126,8 @@ select extensions.ok(
    where table_schema = 'public' and table_name = 'venues' and column_name = 'close_hour') = '24',
   'new venues open around the clock by default');
 select extensions.throws_ok(
-  $$insert into public.venues (club_id, slug, name, timezone) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'tokyo', 'Tokyo', 'Asia/Tokyo')$$,
+  $$insert into public.venues (id, club_id, slug, name, timezone)
+    values ('c7100000-0000-4000-8000-000000000009', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'tokyo', 'Tokyo', 'Asia/Tokyo')$$,
   '23514', null, 'venues stay on Philippine time');
 
 set local role authenticated;
@@ -155,7 +156,7 @@ select extensions.is(
   '12 Sample St|Koronadal City|6.130000|124.850000',
   'the club page shows the location''s address and map pin');
 select extensions.ok(
-  'Koronadal City' = any((select cities from public.list_public_clubs() where slug = 'rally-point-gensan')),
+  (select 'Koronadal City' = any(cities) from public.list_public_clubs() where slug = 'rally-point-gensan'),
   'the city filter includes the cities of a club''s locations');
 
 select * from extensions.finish();

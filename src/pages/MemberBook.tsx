@@ -14,6 +14,7 @@ import type {
   Venue,
 } from '../types'
 import {
+  APP_TIME_ZONE,
   CLUB_CLOSE_HOUR,
   courtRateFor,
   fmtDate,
@@ -27,19 +28,19 @@ import {
 type Step = 'pick' | 'pay' | 'done'
 
 function nextDays(n: number) {
+  // Days are counted in Philippine time, so "Today" matches the club's calendar on any phone.
   const out: { ymd: string; label: string }[] = []
-  const base = new Date()
-  base.setHours(12, 0, 0, 0)
+  const now = Date.now()
   for (let i = 0; i < n; i++) {
-    const d = new Date(base)
-    d.setDate(base.getDate() + i)
-    const ymd = ymdLocal(d)
+    const ymd = ymdLocal(new Date(now + i * 86400000))
     const label =
       i === 0
         ? 'Today'
         : i === 1
           ? 'Tomorrow'
-          : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+          : new Date(`${ymd}T12:00:00+08:00`).toLocaleDateString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric', timeZone: APP_TIME_ZONE,
+          })
     out.push({ ymd, label })
   }
   return out
@@ -408,7 +409,7 @@ export function MemberBook() {
 
                 <section className="card p-3">
                   <div className="flex items-center justify-between px-1 mb-2">
-                    <p className="label mb-0">Available times · {fmtDate(dateYmd + 'T12:00:00')}</p>
+                    <p className="label mb-0">Available times · {fmtDate(dateYmd + 'T12:00:00+08:00')}</p>
                     <p className="text-xs font-bold text-brand-700">{peso(total)}</p>
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">

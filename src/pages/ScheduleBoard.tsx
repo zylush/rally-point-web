@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Maximize2, RefreshCw } from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
@@ -7,8 +7,11 @@ import { api } from '../lib/api'
 import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
 import type { PublicClub, Venue } from '../types'
 import type { Court, Role, ScheduleBlock } from '../types'
-import { fmtTime, ymdLocal } from '../types'
+import { APP_TIME_ZONE, appHour, fmtTime, hourLabel, ymdLocal } from '../types'
 import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR } from '../types'
+
+/** A TV board court: every court of the club, with its location, whether or not it has bookings. */
+type BoardCourt = Court & { venue_name?: string }
 
 function kindColor(kind: ScheduleBlock['kind']) {
   if (kind === 'open_play') return 'bg-violet-500/90 border-violet-300'
@@ -29,17 +32,40 @@ export function ScheduleBoard({
   const { activeClub } = useAuth()
   const [dateYmd, setDateYmd] = useState(ymdLocal(new Date()))
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
-  const [courts, setCourts] = useState<Court[]>([])
-  const [venues, setVenues] = useState<Venue[]>([])
+  const [courts, setCourts] = useState<BoardCourt[]>([])
+  const [venues, setVenues] = useState<Pick<Venue, 'id' | 'name'>[]>([])
   const [venueId, setVenueId] = useState('')
   const [loading, setLoading] = useState(true)
   const [clock, setClock] = useState(new Date())
+  // The TV board's location choice lives in its link (?venue=<id>), so each screen keeps its own.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tvVenueId = tv ? searchParams.get('venue') ?? '' : ''
 
   async function reload() {
     setLoading(true)
     try {
+      if (tv) {
+        // Every court of the club comes from its public page, so free courts show too.
+        const detail = club && typeof api.publicClubDetail === 'function' ? await api.publicClubDetail(club.slug) : null
+        const allVenues = detail?.venues ?? []
+        setVenues(allVenues.map((venue) => ({ id: venue.id, name: venue.name })))
+        const shownVenues = tvVenueId ? allVenues.filter((venue) => venue.id === tvVenueId) : allVenues
+        const b = typeof api.publicDaySchedule === 'function'
+          ? await api.publicDaySchedule(dateYmd, tvVenueId || undefined, club?.id)
+          : []
+        setBlocks(b)
+        setCourts(shownVenues.flatMap((venue) => venue.courts.map((court) => ({
+          id: court.id,
+          venue_id: venue.id,
+          venue_name: venue.name,
+          name: court.name,
+          status: court.in_service ? 'available' as const : 'maintenance' as const,
+          hourly_rate: court.hourly_rate,
+        }))))
+        return
+      }
       let selectedVenueId = venueId
-      if (!tv && role && typeof api.listVenues === 'function') {
+      if (role && typeof api.listVenues === 'function') {
         const accessibleVenues = await api.listVenues(undefined, role)
         setVenues(accessibleVenues)
         selectedVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId)
@@ -47,25 +73,12 @@ export function ScheduleBoard({
           : accessibleVenues[0]?.id ?? ''
         if (selectedVenueId !== venueId) setVenueId(selectedVenueId)
       }
-      const schedule = tv && typeof api.publicDaySchedule === 'function'
-        ? api.publicDaySchedule(dateYmd, undefined, club?.id)
-        : selectedVenueId
-          ? api.daySchedule(dateYmd, selectedVenueId)
-          : api.daySchedule(dateYmd)
-      const courtsPromise = tv
-        ? Promise.resolve([] as Court[])
-        : selectedVenueId
-          ? api.listCourts(selectedVenueId)
-          : api.listCourts()
-      const [b, c] = await Promise.all([schedule, courtsPromise])
+      const [b, c] = await Promise.all([
+        selectedVenueId ? api.daySchedule(dateYmd, selectedVenueId) : api.daySchedule(dateYmd),
+        selectedVenueId ? api.listCourts(selectedVenueId) : api.listCourts(),
+      ])
       setBlocks(b)
-      const tvCourts = b.filter((block): block is ScheduleBlock & { court_id: string } => typeof block.court_id === 'string')
-      setCourts(tv ? Array.from(new Map(tvCourts.map((block) => [block.court_id, {
-        id: block.court_id,
-        name: block.court_name,
-        status: 'occupied' as const,
-        hourly_rate: 0,
-      }])).values()) : c)
+      setCourts(c)
     } finally {
       setLoading(false)
     }
@@ -76,39 +89,63 @@ export function ScheduleBoard({
     const t = setInterval(() => void reload(), 30000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateYmd, venueId, role, tv, club?.id])
+  }, [dateYmd, venueId, tvVenueId, role, tv, club?.id, club?.slug])
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
 
+  // Booking runs around the clock. On today's TV board, start an hour back so the screen shows what is ahead.
+  const isToday = dateYmd === ymdLocal(clock)
+  const firstHour = tv && isToday ? Math.max(CLUB_OPEN_HOUR, appHour(clock.toISOString()) - 1) : CLUB_OPEN_HOUR
   const hours = useMemo(() => {
     const h: number[] = []
-    for (let i = CLUB_OPEN_HOUR; i < CLUB_CLOSE_HOUR; i++) h.push(i)
+    for (let i = firstHour; i < CLUB_CLOSE_HOUR; i++) h.push(i)
     return h
-  }, [])
+  }, [firstHour])
+  const showVenueNames = tv && new Set(courts.map((court) => court.venue_id)).size > 1
 
   const body = (
     <div className={tv ? 'min-h-screen bg-slate-950 text-white p-4 md:p-6' : 'safe-bottom px-4 pt-4 space-y-3'}>
       {tv ? (
         <header className="flex flex-wrap items-end justify-between gap-3 mb-4">
           <div>
-            <p className="text-teal-300 text-xs font-bold uppercase tracking-widest">{club?.name ?? 'Rally Point'} · Live board</p>
+            <p className="text-teal-300 text-xs font-bold uppercase tracking-widest">
+              {club?.name ?? 'Rally Point'}
+              {tvVenueId ? ` · ${venues.find((venue) => venue.id === tvVenueId)?.name ?? ''}` : ''} · Live board
+            </p>
             <h1 className="text-3xl md:text-4xl font-black mt-1">
-              {new Date(dateYmd + 'T12:00:00').toLocaleDateString('en-US', {
+              {new Date(dateYmd + 'T12:00:00+08:00').toLocaleDateString('en-US', {
                 weekday: 'long',
                 month: 'long',
                 day: 'numeric',
+                timeZone: APP_TIME_ZONE,
               })}
             </h1>
           </div>
           <div className="text-right">
             <p className="text-4xl md:text-5xl font-black tabular-nums">
-              {clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+              {clock.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: APP_TIME_ZONE })}
             </p>
-            <p className="text-slate-400 text-sm mt-1">{blocks.length} blocks today</p>
+            <p className="text-slate-400 text-sm mt-1">
+              {courts.length} {courts.length === 1 ? 'court' : 'courts'} · {blocks.length} {blocks.length === 1 ? 'booking' : 'bookings'} today
+            </p>
           </div>
+          {venues.length > 1 ? (
+            <div className="w-full">
+              <label className="sr-only" htmlFor="tv-venue">Location</label>
+              <select
+                id="tv-venue"
+                className="min-h-12 rounded-xl border border-slate-700 bg-slate-900 px-3 text-white"
+                value={tvVenueId}
+                onChange={(event) => setSearchParams(event.target.value ? { venue: event.target.value } : {}, { replace: true })}
+              >
+                <option value="">All locations</option>
+                {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+              </select>
+            </div>
+          ) : null}
         </header>
       ) : (
         <section className="card p-3 flex flex-wrap gap-2 items-center">
@@ -157,14 +194,13 @@ export function ScheduleBoard({
                   key={c.id}
                   className={`p-2 text-sm font-extrabold border-l ${tv ? 'border-slate-800' : 'border-slate-100'}`}
                 >
-                  {tv ? (
-                    <>
-                      <span className="block text-[10px] font-semibold text-slate-500 truncate">
-                        {blocks.find((block) => block.court_id === c.id)?.venue_name ?? 'Venue'}
-                      </span>
-                      {c.name}
-                    </>
-                  ) : c.name}
+                  {showVenueNames ? (
+                    <span className="block text-[10px] font-semibold text-slate-500 truncate">{c.venue_name}</span>
+                  ) : null}
+                  {c.name}
+                  {c.status === 'maintenance' ? (
+                    <span className={`block text-[10px] font-semibold ${tv ? 'text-amber-300' : 'text-amber-700'}`}>Out of service</span>
+                  ) : null}
                 </div>
               ))}
               {hours.map((h) => (
@@ -172,14 +208,10 @@ export function ScheduleBoard({
                   <div
                     className={`p-2 text-xs font-semibold border-t h-16 ${tv ? 'border-slate-800 text-slate-500' : 'border-slate-100 text-slate-400'}`}
                   >
-                    {fmtTime(new Date(2000, 0, 1, h).toISOString())}
+                    {hourLabel(h)}
                   </div>
                   {courts.map((c) => {
-                    const cellBlocks = blocks.filter((b) => {
-                      if (b.court_id !== c.id) return false
-                      const sh = new Date(b.start_at).getHours()
-                      return sh === h
-                    })
+                    const cellBlocks = blocks.filter((b) => b.court_id === c.id && appHour(b.start_at) === h)
                     return (
                       <div
                         key={`${c.id}-${h}`}
@@ -206,7 +238,28 @@ export function ScheduleBoard({
 
           {/* Mobile / list */}
           <div className={`${tv ? 'md:hidden' : 'lg:hidden'} space-y-2`}>
-            {blocks.length === 0 ? (
+            {tv ? courts.map((c) => {
+              const courtBlocks = blocks.filter((b) => b.court_id === c.id)
+              return (
+                <div key={c.id} className="rounded-2xl p-4 border bg-slate-900 border-slate-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-extrabold">{c.name}</p>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      c.status === 'maintenance' ? 'bg-amber-400 text-amber-950' : courtBlocks.length ? 'bg-sky-500 text-white' : 'bg-emerald-500 text-emerald-950'
+                    }`}>
+                      {c.status === 'maintenance' ? 'Out of service' : courtBlocks.length ? `${courtBlocks.length} booked` : 'Free'}
+                    </span>
+                  </div>
+                  {showVenueNames ? <p className="text-xs mt-1 text-slate-400">{c.venue_name}</p> : null}
+                  {courtBlocks.map((b) => (
+                    <p key={b.id} className="text-sm mt-1 text-slate-300">
+                      {fmtTime(b.start_at)} – {fmtTime(b.end_at)} · {b.title}
+                    </p>
+                  ))}
+                </div>
+              )
+            }) : null}
+            {tv ? null : blocks.length === 0 ? (
               <p className={`text-sm ${tv ? 'text-slate-400' : 'text-slate-500'} card p-4`}>Nothing scheduled.</p>
             ) : (
               blocks.map((b) => (

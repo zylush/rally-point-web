@@ -3,13 +3,15 @@ import { BackButton } from '../components/BackButton'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import type { Court, CourtInput, Profile, Venue } from '../types'
-import { peso } from '../types'
+import type { Court, CourtInput, Profile, Venue, VenueLocationInput } from '../types'
+import { openingHoursLabel, peso } from '../types'
+import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
 
 const DEFAULT_COURT_RATE = 500
 
 /** Returns true when saved, so the form can close. */
 type SaveCourt = (input: CourtInput, busyKey: string) => Promise<boolean>
+type SaveLocation = (input: VenueLocationInput) => Promise<boolean>
 
 export function AdminVenues() {
   const { activeClub } = useAuth()
@@ -52,8 +54,8 @@ export function AdminVenues() {
         name: name.trim(),
         slug: slug.trim().toLowerCase(),
         timezone: 'Asia/Manila',
-        open_hour: 6,
-        close_hour: 22,
+        open_hour: 0,
+        close_hour: 24,
         is_active: true,
       })
       setName('')
@@ -95,6 +97,21 @@ export function AdminVenues() {
     }
   }
 
+  const saveLocation: SaveLocation = async (input) => {
+    setBusy(`location:${input.venue_id}`)
+    try {
+      await api.updateVenueLocation(input)
+      setMessage('Location saved')
+      await reload()
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save the location')
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function toggleGrant(account: Profile, venue: Venue) {
     const assigned = account.venue_ids?.includes(venue.id) ?? false
     setBusy(`${account.id}:${venue.id}`)
@@ -121,7 +138,7 @@ export function AdminVenues() {
         <form className="card p-4 space-y-3" onSubmit={createVenue}>
           <div>
             <h2 className="font-extrabold">Add a venue</h2>
-            <p className="text-xs text-slate-500 mt-1">All venues start in Asia/Manila, 06:00–22:00. Deactivate instead of deleting history.</p>
+            <p className="text-xs text-slate-500 mt-1">Venues are open for booking 24 hours, in Philippine time. Deactivate instead of deleting history.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
@@ -148,6 +165,7 @@ export function AdminVenues() {
                 busy={busy}
                 onToggleVenue={() => void toggleVenue(venue)}
                 onSaveCourt={saveCourt}
+                onSaveLocation={saveLocation}
               />
             ))}
 
@@ -195,15 +213,21 @@ function VenueCard({
   busy,
   onToggleVenue,
   onSaveCourt,
+  onSaveLocation,
 }: {
   venue: Venue
   courts: Court[]
   busy: string | null
   onToggleVenue: () => void
   onSaveCourt: SaveCourt
+  onSaveLocation: SaveLocation
 }) {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingLocation, setEditingLocation] = useState(false)
+  const place = placeLine(venue)
+  const directions = directionsUrl(venue)
+  const mapUrl = mapEmbedUrl(venue)
   const inService = courts.filter((court) => court.status !== 'maintenance').length
   const headingId = `venue-${venue.id}-title`
 
@@ -213,12 +237,43 @@ function VenueCard({
         <div>
           <h2 id={headingId} className="font-extrabold">{venue.name}</h2>
           <p className="text-xs text-slate-500">
-            {venue.slug} · {venue.timezone} · {venue.open_hour}:00–{venue.close_hour}:00{venue.is_active ? '' : ' · Inactive'}
+            {venue.slug} · Philippine time · {openingHoursLabel(venue.open_hour, venue.close_hour)}{venue.is_active ? '' : ' · Inactive'}
           </p>
         </div>
         <button type="button" className="btn-secondary text-sm" onClick={onToggleVenue} disabled={busy === venue.id}>
           {venue.is_active ? `Deactivate ${venue.name}` : `Activate ${venue.name}`}
         </button>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-bold text-slate-700">Location</h3>
+        {editingLocation ? (
+          <LocationForm
+            venue={venue}
+            saving={busy === `location:${venue.id}`}
+            onCancel={() => setEditingLocation(false)}
+            onSave={async (input) => {
+              if (await onSaveLocation(input)) setEditingLocation(false)
+            }}
+          />
+        ) : (
+          <div className="mt-1 space-y-2">
+            <p className="text-sm text-slate-700">
+              {place || 'No address yet. Players see the club’s city until you add one.'}
+            </p>
+            <div className="flex flex-wrap gap-x-4">
+              {directions ? (
+                <a className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-800 underline" href={directions} target="_blank" rel="noopener noreferrer">
+                  Check on Google Maps
+                </a>
+              ) : null}
+              <button type="button" className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-800 underline" onClick={() => setEditingLocation(true)}>
+                {place || mapUrl ? 'Edit location' : 'Add address and map pin'}
+              </button>
+            </div>
+            {mapUrl ? null : place ? <p className="text-xs text-slate-500">Add a map pin so players see a map.</p> : null}
+          </div>
+        )}
       </div>
 
       <div>
@@ -287,6 +342,69 @@ function VenueCard({
         </button>
       )}
     </section>
+  )
+}
+
+function LocationForm({
+  venue,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  venue: Venue
+  saving: boolean
+  onCancel: () => void
+  onSave: (input: VenueLocationInput) => Promise<void>
+}) {
+  const [address, setAddress] = useState(venue.address ?? '')
+  const [city, setCity] = useState(venue.city ?? '')
+  const [latitude, setLatitude] = useState(venue.latitude != null ? String(venue.latitude) : '')
+  const [longitude, setLongitude] = useState(venue.longitude != null ? String(venue.longitude) : '')
+  const id = `venue-${venue.id}-location`
+  const asNumber = (value: string) => (value.trim() === '' ? null : Number(value))
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    void onSave({
+      venue_id: venue.id,
+      address: address.trim() || null,
+      city: city.trim() || null,
+      latitude: asNumber(latitude),
+      longitude: asNumber(longitude),
+    })
+  }
+
+  return (
+    <form className="mt-2 space-y-3" onSubmit={submit} aria-label={`Location of ${venue.name}`}>
+      <div>
+        <label className="label" htmlFor={`${id}-address`}>Street address</label>
+        <input id={`${id}-address`} className="input" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="Building, street, barangay" />
+      </div>
+      <div>
+        <label className="label" htmlFor={`${id}-city`}>City</label>
+        <input id={`${id}-city`} className="input" value={city} onChange={(e) => setCity(e.target.value)} maxLength={80} placeholder="General Santos City" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="label" htmlFor={`${id}-lat`}>Latitude</label>
+          <input id={`${id}-lat`} className="input" type="number" inputMode="decimal" step="any" min={-90} max={90} value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder="6.1164" />
+        </div>
+        <div>
+          <label className="label" htmlFor={`${id}-lng`}>Longitude</label>
+          <input id={`${id}-lng`} className="input" type="number" inputMode="decimal" step="any" min={-180} max={180} value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder="125.1716" />
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">
+        For the map pin, open Google Maps, press and hold (or right-click) on the courts, and copy the two numbers shown.
+        Leave both empty for no map.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving}>
+          {saving ? 'Saving…' : 'Save location'}
+        </button>
+      </div>
+    </form>
   )
 }
 

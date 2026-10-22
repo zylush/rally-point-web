@@ -24,7 +24,7 @@ export const helpFaqs = [
   {
     question: 'What are the club hours?',
     answer:
-      'Rally Point is open daily from 6:00 AM to 10:00 PM. Court availability can change during events and maintenance.',
+      'Courts can be booked any time, 24 hours a day, every day (Philippine time). A booking ends by midnight. Availability can change during events and maintenance.',
   },
 ] as const
 

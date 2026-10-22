@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { ymdLocal } from '../types'
 import { demoStore } from './demoStore'
 import { setActiveClubId } from './clubContext'
 import { DEMO_CLUB_ID, DEMO_DAVAO_CLUB_ID, DEMO_DAVAO_VENUE_ID } from './tenant'
 
-const futureYmd = () => {
-  const date = new Date()
-  date.setDate(date.getDate() + 3)
-  return date.toISOString().slice(0, 10)
-}
+// A Philippine-time date three days ahead.
+const futureYmd = () => ymdLocal(new Date(Date.now() + 3 * 86400000))
 
 function newPlayer() {
   return demoStore.registerMember({
@@ -99,6 +97,21 @@ describe('demo player marketplace (mirrors the public directory and join_club_as
       court_id: 'court_davao_2', venue_id: DEMO_DAVAO_VENUE_ID, dateYmd: futureYmd(), startHour: 14, hours: 1,
       member_id: playerRow.id, user_id: player.id,
     }).amount).toBe(400)
+  })
+
+  it("sets a location's address and map pin, and shows it on the club page and city filter", () => {
+    setActiveClubId(DEMO_DAVAO_CLUB_ID)
+    expect(() => demoStore.updateVenueLocation({ venue_id: DEMO_DAVAO_VENUE_ID, address: 'x', city: 'y', latitude: 7.1, longitude: null }))
+      .toThrow('Enter both latitude and longitude, or neither')
+    expect(() => demoStore.updateVenueLocation({ venue_id: DEMO_DAVAO_VENUE_ID, address: 'x', city: 'y', latitude: 95, longitude: 125 }))
+      .toThrow('Latitude must be between -90 and 90')
+    expect(() => demoStore.updateVenueLocation({ venue_id: 'venue_lagao', address: 'x', city: 'y', latitude: null, longitude: null }))
+      .toThrow('venue not found')
+
+    demoStore.updateVenueLocation({ venue_id: DEMO_DAVAO_VENUE_ID, address: ' 9 Sample Ave ', city: 'Panabo City', latitude: 7.3001234567, longitude: 125.68 })
+    const venue = demoStore.publicClubDetail('rally-point-davao')?.venues[0]
+    expect(venue).toMatchObject({ address: '9 Sample Ave', city: 'Panabo City', latitude: 7.300123, longitude: 125.68 })
+    expect(demoStore.publicClubs().find((club) => club.slug === 'rally-point-davao')?.cities).toEqual(['Davao City', 'Panabo City'])
   })
 
   it('still gives the free 30-day membership through sign-up and join links', () => {

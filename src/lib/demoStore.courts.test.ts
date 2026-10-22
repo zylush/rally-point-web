@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { ymdLocal } from '../types'
 import { demoStore } from './demoStore'
 import { setActiveClubId } from './clubContext'
 import { DEMO_DAVAO_CLUB_ID, DEMO_DAVAO_VENUE_ID, DEMO_VENUE_ID } from './tenant'
 
-const futureYmd = () => {
-  const date = new Date()
-  date.setDate(date.getDate() + 3)
-  return date.toISOString().slice(0, 10)
-}
+// A Philippine-time date three days ahead.
+const futureYmd = () => ymdLocal(new Date(Date.now() + 3 * 86400000))
 
 describe('demo court management (mirrors admin_upsert_court)', () => {
   beforeEach(() => {

@@ -2,7 +2,7 @@ begin;
 set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions, pg_catalog;
-select extensions.plan(18);
+select extensions.plan(26);
 
 -- Fixture:
 --   user 1: plain account with no club role
@@ -111,6 +111,52 @@ select extensions.is(
            and user_id in ('c7000000-0000-4000-8000-000000000001', 'c7000000-0000-4000-8000-000000000002')) t),
   'c7000000-0000-4000-8000-000000000001:player:1,c7000000-0000-4000-8000-000000000002:standard:1',
   'the new player has one row with no membership; the existing member keeps their plan');
+
+-- Locations, opening hours and Philippine time.
+--   user 4: Gensan admin
+insert into auth.users (id, email, raw_user_meta_data)
+values ('c7000000-0000-4000-8000-000000000004', 'player-4@fixture.invalid', '{"full_name":"Player 4"}');
+insert into public.club_staff_roles (club_id, user_id, role)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'c7000000-0000-4000-8000-000000000004', 'admin');
+
+select extensions.ok(
+  (select column_default from information_schema.columns
+   where table_schema = 'public' and table_name = 'venues' and column_name = 'open_hour') = '0'
+  and (select column_default from information_schema.columns
+   where table_schema = 'public' and table_name = 'venues' and column_name = 'close_hour') = '24',
+  'new venues open around the clock by default');
+select extensions.throws_ok(
+  $$insert into public.venues (club_id, slug, name, timezone) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'tokyo', 'Tokyo', 'Asia/Tokyo')$$,
+  '23514', null, 'venues stay on Philippine time');
+
+set local role authenticated;
+select set_config('request.headers', '', true);
+select set_config('request.jwt.claim.sub', 'c7000000-0000-4000-8000-000000000001', true);
+select extensions.throws_ok(
+  $$select public.admin_update_venue_location('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac', 'Somewhere', 'Somecity', null, null)$$,
+  '42501', 'admin access required', 'a player cannot change a location');
+select set_config('request.jwt.claim.sub', 'c7000000-0000-4000-8000-000000000004', true);
+select extensions.lives_ok(
+  $$select public.admin_update_venue_location('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac', ' 12 Sample St ', 'Koronadal City', 6.13, 124.85)$$,
+  'an admin sets a location''s address, city and map pin');
+select extensions.throws_ok(
+  $$select public.admin_update_venue_location('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac', 'x', 'y', 6.13, null)$$,
+  '22023', 'Enter both latitude and longitude, or neither', 'a map pin needs both coordinates');
+select extensions.throws_ok(
+  $$select public.admin_update_venue_location('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc', 'x', 'y', null, null)$$,
+  'P0002', 'venue not found', 'an admin cannot change another club''s location');
+
+reset role;
+set local role anon;
+select extensions.is(
+  (select (v ->> 'address') || '|' || (v ->> 'city') || '|' || (v ->> 'latitude') || '|' || (v ->> 'longitude')
+   from jsonb_array_elements(public.get_public_club_detail('rally-point-gensan') -> 'venues') v
+   where v ->> 'id' = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac'),
+  '12 Sample St|Koronadal City|6.130000|124.850000',
+  'the club page shows the location''s address and map pin');
+select extensions.ok(
+  'Koronadal City' = any((select cities from public.list_public_clubs() where slug = 'rally-point-gensan')),
+  'the city filter includes the cities of a club''s locations');
 
 select * from extensions.finish();
 rollback;

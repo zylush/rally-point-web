@@ -1,5 +1,5 @@
 import type { Booking, BookingStatus, CourtDayAvailability, CourtSession, PaymentMethod } from '../../types'
-import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR, courtRateFor, hourLabel, localRangeISO } from '../../types'
+import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR, courtRateFor, fmtDateTime, hourLabel, localRangeISO } from '../../types'
 import { makePaymentRef } from '../payments'
 import { activeClubId } from './access'
 import { hydrateBooking, isSlotFree, todayISO, uid } from './common'
@@ -129,7 +129,7 @@ export const bookingOperations = {
       venue_id: b.venue_id ?? null,
       user_id: opts.user_id,
       title: 'Booking confirmed',
-      body: `${court?.name ?? 'Court'} · ${new Date(b.start_at).toLocaleString()} · Ref ${ref}. Show at desk.`,
+      body: `${court?.name ?? 'Court'} · ${fmtDateTime(b.start_at)} · Ref ${ref}. Show at desk.`,
       read: false,
       created_at: todayISO(),
     })

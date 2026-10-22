@@ -28,10 +28,10 @@ export function normalizeStored(
   const defaults = seed()
   const storedVenues = Array.isArray(withoutLegacy.venues) && withoutLegacy.venues.length
     ? withoutLegacy.venues
-    : [{ id: DEMO_VENUE_ID, club_id: DEMO_CLUB_ID, slug: 'gensan-main', name: 'Rally Point Gensan', timezone: 'Asia/Manila', open_hour: 6, close_hour: 22, is_active: true }]
+    : [{ id: DEMO_VENUE_ID, club_id: DEMO_CLUB_ID, slug: 'gensan-main', name: 'Rally Point Gensan', timezone: 'Asia/Manila', open_hour: 0, close_hour: 24, is_active: true }]
   const venues = storedVenues.some((venue) => venue.id === 'venue_lagao')
     ? storedVenues
-    : [...storedVenues, { id: 'venue_lagao', club_id: DEMO_CLUB_ID, slug: 'gensan-lagao', name: 'Rally Point Lagao', timezone: 'Asia/Manila', open_hour: 6, close_hour: 22, is_active: true }]
+    : [...storedVenues, { id: 'venue_lagao', club_id: DEMO_CLUB_ID, slug: 'gensan-lagao', name: 'Rally Point Lagao', timezone: 'Asia/Manila', open_hour: 0, close_hour: 24, is_active: true }]
   const profiles = Array.isArray(withoutLegacy.profiles) ? withoutLegacy.profiles : defaults.profiles
   const clubs = Array.isArray(withoutLegacy.clubs) && withoutLegacy.clubs.length ? withoutLegacy.clubs : [demoClub]
   // Legacy single-club data: staff and admin profiles all belonged to the one club.

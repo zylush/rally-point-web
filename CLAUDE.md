@@ -62,6 +62,15 @@ Never edit, move, or regenerate anything under `docs/release-private/`. Those ar
   - **Published site:** since 2026-10-17, https://zylush.github.io/rally-point-web/ runs this branch's frontend: the staging build of `b3b1ca2`, published to `gh-pages` as `e3533ed`. It was smoke-tested locally and live (TV board and sign-in, staging API calls returning 200, no console errors).
   - **Production** is unchanged and stays one club.
   - **Details and evidence:** `docs/TENANT-READY-ROLLOUT.md`; evidence is under `docs/release-private/` (local only).
+- **Branch `feat/court-management` (2026-10-22, local and demo only; nothing applied to staging):**
+  - **Courts:** admins add courts, rename them, set an hourly rate and an optional member rate, and take them out of service (`maintenance`) on `/admin/venues`. Courts are never deleted. Function `admin_upsert_court`.
+  - **Find a court:** public `/clubs` list and `/clubs/<slug>` pages (`list_public_clubs`, `get_public_club_detail`, open to visitors, no member data). Booking from a club page adds the person as a **player**: a `members` row with no `membership_type` or `expiry_date` (`join_club_as_player`). Players pay the regular rate; an active membership gets the member rate. Join links and sign-up still give the free 30-day membership (owner decision pending).
+  - **Locations:** each venue has its own address, city and optional map pin (`admin_update_venue_location`). Club pages show a "Get directions" link (Google Maps) and an OpenStreetMap embed; neither needs an API key.
+  - **Hours and time:** booking is open 24 hours (a booking ends by midnight, as the paused booking functions require). The app shows and books in Philippine time (`APP_TIME_ZONE` in `src/types.ts`) whatever the device timezone; venues and clubs are held to `Asia/Manila` by check constraints.
+  - **TV board:** lists every court of the club, grouped by location, with a location picker kept in the link (`?venue=`).
+  - **Migrations:** `20261022090000_admin_court_management.sql`, `20261022100000_player_marketplace.sql`, `20261022110000_open_all_day_ph_time.sql`. They touch the reservation-write pause scope (court writes), so a hosted apply needs its own approved release package. The two new pgTAP suites (`admin_court_management`, `player_marketplace`) have **not been run** yet (Docker was unavailable).
+  - **Still not live:** member self-booking and checkout stay off in live mode; the member rate is enforced only in the demo until the paused booking functions are reworked.
+- **Branch `staging`:** tracks what can run against hosted staging today (cut from `feat/rally-point-tenancy-handoff`). Feature branches reach it by pull request once their migrations are approved and applied.
 - **Local SQL** runs through `npx supabase test db` (515 checks in 16 suites as of 2026-10-17). On the plain chain, `null_role_guards` and `tenant_boundary` fail where they call the nine paused RPCs; this predates the multi-club work. With those RPCs temporarily granted in the local database (as `scripts/run-reservation-resume-gate23-local.mjs` does), every suite passes.
 
 ## Hosted systems and connected tools

@@ -32,6 +32,20 @@ export interface Venue {
   open_hour: number
   close_hour: number
   is_active: boolean
+  /** Where this location is, shown to players with a map. Optional until the club fills it in. */
+  address?: string | null
+  city?: string | null
+  latitude?: number | null
+  longitude?: number | null
+}
+
+/** What an admin sends to set a location's address and map pin. */
+export interface VenueLocationInput {
+  venue_id: string
+  address: string | null
+  city: string | null
+  latitude: number | null
+  longitude: number | null
 }
 
 export interface StaffVenueGrant {
@@ -237,6 +251,8 @@ export interface PublicClubListing {
   name: string
   city: string | null
   address: string | null
+  /** Cities of the club's locations (and the club's own city), for the city filter. */
+  cities: string[]
   venue_count: number
   court_count: number
   min_rate: number | null
@@ -254,6 +270,10 @@ export interface PublicClubDetail {
     name: string
     open_hour: number
     close_hour: number
+    address: string | null
+    city: string | null
+    latitude: number | null
+    longitude: number | null
     courts: { id: string; name: string; hourly_rate: number; member_rate: number | null; in_service: boolean }[]
   }[]
 }
@@ -509,44 +529,69 @@ export function friendlyStatus(status: string): string {
   return map[status] ?? status.replace(/_/g, ' ')
 }
 
-/** Club open hours (local) */
-export const CLUB_OPEN_HOUR = 6
-export const CLUB_CLOSE_HOUR = 22
+/**
+ * Courts can be booked around the clock (Philippine time). A booking ends by
+ * midnight: the server's booking functions require start + hours <= 24.
+ */
+export const CLUB_OPEN_HOUR = 0
+export const CLUB_CLOSE_HOUR = 24
 
 export function peso(n: number) {
   return `Php ${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/**
+ * Every club and venue is in the Philippines, so the app shows and books times in
+ * Philippine time whatever the phone's own timezone. Asia/Manila is UTC+8 all year
+ * (no daylight saving), which keeps the arithmetic below exact.
+ */
+export const APP_TIME_ZONE = 'Asia/Manila'
+const APP_UTC_OFFSET_HOURS = 8
+
 export function fmtDate(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: APP_TIME_ZONE })
 }
 
 export function fmtTime(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: APP_TIME_ZONE })
 }
 
 export function fmtDateTime(iso: string) {
   return `${fmtDate(iso)} · ${fmtTime(iso)}`
 }
 
+/** "6:00 AM" for hour 6; hour 0 and hour 24 are both midnight ("12:00 AM"). */
 export function hourLabel(h: number) {
-  const d = new Date()
-  d.setHours(h, 0, 0, 0)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const hour = ((h % 24) + 24) % 24
+  const twelve = hour % 12 === 0 ? 12 : hour % 12
+  return `${twelve}:00 ${hour < 12 ? 'AM' : 'PM'}`
 }
 
+/** "Open 24 hours", or "Open 6:00 AM to 10:00 PM" for a venue with set hours. */
+export function openingHoursLabel(openHour: number, closeHour: number) {
+  return openHour === 0 && closeHour === 24 ? 'Open 24 hours' : `Open ${hourLabel(openHour)} to ${hourLabel(closeHour)}`
+}
+
+/** The hour of day (0–23) of an instant, in Philippine time. */
+export function appHour(iso: string) {
+  return (new Date(iso).getUTCHours() + APP_UTC_OFFSET_HOURS) % 24
+}
+
+/** The calendar date (YYYY-MM-DD) of an instant, in Philippine time. */
 export function ymdLocal(d: Date) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  const shifted = new Date(d.getTime() + APP_UTC_OFFSET_HOURS * 3600000)
+  const y = shifted.getUTCFullYear()
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(shifted.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
+/** A booking range that starts at `startHour` Philippine time on `dateYmd`. */
 export function localRangeISO(dateYmd: string, startHour: number, hours: number) {
   const [y, m, d] = dateYmd.split('-').map(Number)
-  const start = new Date(y, m - 1, d, startHour, 0, 0, 0)
+  const start = new Date(Date.UTC(y, m - 1, d, startHour - APP_UTC_OFFSET_HOURS, 0, 0, 0))
   const end = new Date(start.getTime() + hours * 3600000)
   return { start_at: start.toISOString(), end_at: end.toISOString() }
 }

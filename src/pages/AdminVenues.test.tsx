@@ -22,6 +22,7 @@ vi.mock('../lib/api', () => ({
     staffAccounts: vi.fn(),
     upsertVenue: vi.fn(),
     upsertCourt: vi.fn(),
+    updateVenueLocation: vi.fn(),
     setStaffVenueGrant: vi.fn(),
   },
 }))
@@ -109,6 +110,28 @@ describe('AdminVenues courts', () => {
     expect(api.upsertCourt).toHaveBeenCalledWith({
       id: 'court-a', venue_id: 'venue-main', name: 'Court A', hourly_rate: 500, member_rate: null, in_service: false,
     })
+  })
+
+  it("saves a location's address and map pin", async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.updateVenueLocation).mockResolvedValue({ ...eastVenue, address: '9 Sample Ave', city: 'Davao City', latitude: 7.1, longitude: 125.6 })
+    renderPage()
+    await screen.findByRole('heading', { name: 'East Venue' })
+
+    const east = venueCard('East Venue')
+    expect(east.getByText(/No address yet/)).toBeInTheDocument()
+    await user.click(east.getByRole('button', { name: 'Add address and map pin' }))
+    const form = within(screen.getByRole('form', { name: 'Location of East Venue' }))
+    await user.type(form.getByLabelText('Street address'), '9 Sample Ave')
+    await user.type(form.getByLabelText('City'), 'Davao City')
+    await user.type(form.getByLabelText('Latitude'), '7.1')
+    await user.type(form.getByLabelText('Longitude'), '125.6')
+    await user.click(form.getByRole('button', { name: 'Save location' }))
+
+    expect(api.updateVenueLocation).toHaveBeenCalledWith({
+      venue_id: 'venue-east', address: '9 Sample Ave', city: 'Davao City', latitude: 7.1, longitude: 125.6,
+    })
+    expect(await screen.findByRole('status')).toHaveTextContent('Location saved')
   })
 
   it('sets a member rate, and shows it on the court', async () => {

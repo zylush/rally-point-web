@@ -5,7 +5,8 @@ import { AppShell, LoadingBlock } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import type { PublicClubDetail, PublicClubListing } from '../types'
-import { hourLabel, peso } from '../types'
+import { openingHoursLabel, peso } from '../types'
+import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
 
 /** Signed-in people keep their menu; visitors see the page on its own with a way to log in. */
 function Frame({ children }: { children: ReactNode }) {
@@ -31,9 +32,6 @@ function rateLine(regular: number | null, member: number | null) {
   return member != null && member < regular ? `${from} · Members from ${peso(member)}` : from
 }
 
-function placeLine(address: string | null, city: string | null) {
-  return [address, city].filter((value, index, all) => value && all.indexOf(value) === index).join(', ')
-}
 
 export function ClubDirectory() {
   const [clubs, setClubs] = useState<PublicClubListing[] | null>(null)
@@ -50,13 +48,13 @@ export function ClubDirectory() {
   }, [])
 
   const cities = useMemo(
-    () => [...new Set((clubs ?? []).map((club) => club.city).filter((c): c is string => !!c))].sort(),
+    () => [...new Set((clubs ?? []).flatMap((club) => club.cities))].sort(),
     [clubs],
   )
   const shown = (clubs ?? []).filter((club) => {
     const q = query.trim().toLowerCase()
-    const matchesQuery = !q || [club.name, club.city, club.address].some((field) => field?.toLowerCase().includes(q))
-    return matchesQuery && (!city || club.city === city)
+    const matchesQuery = !q || [club.name, club.address, ...club.cities].some((field) => field?.toLowerCase().includes(q))
+    return matchesQuery && (!city || club.cities.includes(city))
   })
 
   return (
@@ -104,8 +102,8 @@ export function ClubDirectory() {
               <span className="action-tile-icon shrink-0" aria-hidden><MapPin size={22} /></span>
               <span className="flex-1 min-w-0">
                 <span className="block text-subtitle font-bold text-slate-900">{club.name}</span>
-                {placeLine(club.address, club.city) ? (
-                  <span className="block text-body text-slate-600">{placeLine(club.address, club.city)}</span>
+                {club.cities.length ? (
+                  <span className="block text-body text-slate-600">{club.cities.join(' · ')}</span>
                 ) : null}
                 <span className="block text-body text-slate-600">
                   {club.venue_count} {club.venue_count === 1 ? 'location' : 'locations'} · {club.court_count} {club.court_count === 1 ? 'court' : 'courts'}
@@ -167,7 +165,7 @@ export function ClubDetailPage() {
     )
   }
 
-  const place = placeLine(club.address, club.city)
+  const place = placeLine(club)
   const isPlatform = user?.role === 'superadmin'
 
   return (
@@ -186,12 +184,37 @@ export function ClubDetailPage() {
 
       {club.venues.map((venue) => {
         const bookable = venue.courts.some((court) => court.in_service)
+        const venuePlace = placeLine(venue)
+        const directions = directionsUrl(venue)
+        const mapUrl = mapEmbedUrl(venue)
         return (
           <section key={venue.id} className="card p-4 space-y-3" aria-labelledby={`venue-${venue.id}`}>
             <div>
               <h2 id={`venue-${venue.id}`} className="text-title font-bold text-slate-900">{venue.name}</h2>
-              <p className="text-body text-slate-600">Open {hourLabel(venue.open_hour)} to {hourLabel(venue.close_hour)}</p>
+              {venuePlace ? (
+                <p className="text-body text-slate-700 flex items-start gap-1"><MapPin size={16} className="mt-1 shrink-0" aria-hidden /> {venuePlace}</p>
+              ) : null}
+              <p className="text-body text-slate-600">{openingHoursLabel(venue.open_hour, venue.close_hour)}</p>
+              {directions ? (
+                <a
+                  className="inline-flex min-h-12 items-center font-semibold text-brand-800 underline underline-offset-2"
+                  href={directions}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Get directions
+                </a>
+              ) : null}
             </div>
+            {mapUrl ? (
+              <iframe
+                title={`Map of ${venue.name}`}
+                src={mapUrl}
+                className="w-full h-48 rounded-xl border border-slate-200"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            ) : null}
             <ul className="divide-y divide-slate-100">
               {venue.courts.map((court) => (
                 <li key={court.id} className="py-2 flex items-center justify-between gap-3">

@@ -1,4 +1,5 @@
 import type { OpenPlaySession, OpenPlaySignup, SkillLevel } from '../../types'
+import { fmtDateTime } from '../../types'
 import { activeClubId } from './access'
 import { todayISO, uid } from './common'
 import type { DemoDB } from './model'
@@ -109,7 +110,7 @@ export const openPlayOperations = {
       title: status === 'joined' ? 'Open play joined' : 'Waitlisted',
       body:
         status === 'joined'
-          ? `${op.title} · ${new Date(op.start_at).toLocaleString()}. You're in!`
+          ? `${op.title} · ${fmtDateTime(op.start_at)}. You're in!`
           : `${op.title} is full — you're on the waitlist.`,
       read: false,
       created_at: todayISO(),

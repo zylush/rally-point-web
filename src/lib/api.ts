@@ -9,6 +9,7 @@ import type {
   CourtInput,
   PublicClubDetail,
   PublicClubListing,
+  VenueLocationInput,
   CourtDayAvailability,
   CourtSession,
   DashboardStats,
@@ -72,7 +73,7 @@ export const api = {
     }
     const { data: venues, error: venueError } = await supabase
       .from('venues')
-      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active')
+      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active, address, city, latitude, longitude')
       .eq('club_id', club.id)
       .eq('is_active', true)
       .order('name')
@@ -88,7 +89,7 @@ export const api = {
     if (isDemoMode) return demoStore.allVenues()
     const { data, error } = await supabase!
       .from('venues')
-      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active')
+      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active, address, city, latitude, longitude')
       .eq('club_id', requireActiveClubId())
       .order('name')
     if (error) throw error
@@ -560,6 +561,20 @@ export const api = {
       p_open_hour: input.open_hour,
       p_close_hour: input.close_hour,
       p_is_active: input.is_active,
+    })
+    if (error) throw error
+    return data as Venue
+  },
+
+  /** Admin only: set or clear a location's address, city and map pin. */
+  async updateVenueLocation(input: VenueLocationInput): Promise<Venue> {
+    if (isDemoMode) return demoStore.updateVenueLocation(input)
+    const { data, error } = await supabase!.rpc('admin_update_venue_location', {
+      p_venue_id: input.venue_id,
+      p_address: input.address,
+      p_city: input.city,
+      p_latitude: input.latitude,
+      p_longitude: input.longitude,
     })
     if (error) throw error
     return data as Venue

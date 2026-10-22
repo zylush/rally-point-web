@@ -1,5 +1,6 @@
 import type {
   Court, CourtInput, MyClub, Profile, PublicClub, PublicClubDetail, PublicClubListing, StaffVenueGrant, Venue,
+  VenueLocationInput,
 } from '../types'
 import { daysFromNow, todayISO, uid } from './demo/common'
 import { getDemoPassword, normalizeDemoEmail, resetDemoPasswords, setDemoPassword } from './demo/credentials'
@@ -192,11 +193,14 @@ export const demoStore = {
         const courts = db.courts.filter((court) =>
           court.club_id === club.id && court.venue_id && activeVenueIds.has(court.venue_id) && court.status !== 'maintenance')
         const min = (values: number[]) => values.length ? Math.min(...values) : null
+        const cities = [account?.city, ...db.venues.filter((v) => v.club_id === club.id && v.is_active).map((v) => v.city)]
+          .filter((city): city is string => !!city)
         return {
           slug: club.slug,
           name: club.name,
           city: account?.city ?? null,
           address: account?.address ?? null,
+          cities: [...new Set(cities)].sort(),
           venue_count: activeVenueIds.size,
           court_count: courts.length,
           min_rate: min(courts.map((court) => court.hourly_rate)),
@@ -224,6 +228,10 @@ export const demoStore = {
           name: venue.name,
           open_hour: venue.open_hour,
           close_hour: venue.close_hour,
+          address: venue.address ?? null,
+          city: venue.city ?? null,
+          latitude: venue.latitude ?? null,
+          longitude: venue.longitude ?? null,
           courts: db.courts
             .filter((court) => court.club_id === club.id && court.venue_id === venue.id)
             .sort((a, b) => a.name.localeCompare(b.name))
@@ -302,6 +310,31 @@ export const demoStore = {
     else db.venues.push(venue)
     save(db)
     return venue
+  },
+  /** Mirrors public.admin_update_venue_location: same checks and messages. */
+  updateVenueLocation(input: VenueLocationInput): Venue {
+    const db = load()
+    const clubId = activeClubId(db)
+    const address = input.address?.trim() || null
+    const city = input.city?.trim() || null
+    if ((input.latitude == null) !== (input.longitude == null)) {
+      throw new Error('Enter both latitude and longitude, or neither')
+    }
+    if (input.latitude != null && input.longitude != null && (
+      !Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)
+      || Math.abs(input.latitude) > 90 || Math.abs(input.longitude) > 180
+    )) {
+      throw new Error('Latitude must be between -90 and 90, and longitude between -180 and 180')
+    }
+    if ((address?.length ?? 0) > 200 || (city?.length ?? 0) > 80) {
+      throw new Error('Address is limited to 200 characters and city to 80')
+    }
+    const venue = db.venues.find((row) => row.id === input.venue_id && row.club_id === clubId)
+    if (!venue) throw new Error('venue not found')
+    const round6 = (n: number | null) => (n == null ? null : Math.round(n * 1e6) / 1e6)
+    Object.assign(venue, { address, city, latitude: round6(input.latitude), longitude: round6(input.longitude) })
+    save(db)
+    return { ...venue }
   },
   /** Mirrors public.admin_upsert_court: same checks and messages. Courts are never deleted. */
   upsertCourt(input: CourtInput): Court {

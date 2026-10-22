@@ -23,7 +23,7 @@ Most of `docs/` is Git-ignored. Only `docs/README.md`, `docs/CODEX.md`, and `doc
 | Club/venue tenancy map | `git show b0a5110:TENANCY-HANDOFF.md` (removed from the working tree) | 2026-09-26 snapshot. Re-check its environment facts. |
 | Club/venue design diagrams | `architecture/tenant-ready/README.md` | Proposals. Physical tables are still `members` and `courts`. |
 | Tenancy release gates | `docs/TENANT-READY-ROLLOUT.md`, `docs/TENANT-READY-GATE-EVIDENCE.md` | Local-only, dated checkpoints. Not proof of hosted state. |
-| Branches, superadmin, commissions (history) | `RALLY-POINT-TENANCY-HANDOFF.pdf` (text source: `scripts/generate_handoff_pdf.py`) | PR #3's handoff, superseded by the club-based platform layer below. Its migration was removed, so its "apply the migration" step no longer applies. |
+| Branches, superadmin, commissions (history) | `git show 1f21c92:RALLY-POINT-TENANCY-HANDOFF.pdf` (text source: `git show 1f21c92:scripts/generate_handoff_pdf.py`; both removed from the working tree) | PR #3's handoff, superseded by the club-based platform layer below. Its migration was removed, so its "apply the migration" step no longer applies. |
 | Help and inquiries | `docs/HELP-AND-INQUIRY-WORKFLOW.md` | Its migrations were recorded as not applied to any hosted database. |
 
 Never edit, move, or regenerate anything under `docs/release-private/`. Those are frozen release packages, and tests read their files and hashes.

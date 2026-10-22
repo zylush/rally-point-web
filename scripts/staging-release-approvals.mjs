@@ -7,6 +7,7 @@ export const releaseApprovals = Object.freeze({
   'advisor-fixes-20261017': '323fad33293298bc12f7cd2bf2300502a17e13b3d981f965dc5c17a3574cb5d9',
   // Owner, 2026-10-17, after the second dry run passed: "Approve and apply".
   'advisor-followup-20261017': '611863752244ae494e21bf3fad63a97eee3d2b7cdc24fcd847436bb99f645ee0',
-  // Not approved yet: set after the dry run on a restored copy of staging passes.
-  'court-marketplace-20261022': null,
+  // Owner, 2026-10-22: "do the staging release and publish the staging site". Recorded after the
+  // dry run on a restored copy of staging passed (all checks, isolation 55/55, schema matches the build).
+  'court-marketplace-20261022': '4e319844304d280c91fdda969c4e2c06285b0e4f4c3b80513ebe0d33f1c454d3',
 })

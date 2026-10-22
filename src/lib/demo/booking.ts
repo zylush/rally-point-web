@@ -1,5 +1,5 @@
 import type { Booking, BookingStatus, CourtDayAvailability, CourtSession, PaymentMethod } from '../../types'
-import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR, hourLabel, localRangeISO } from '../../types'
+import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR, courtRateFor, fmtDateTime, hourLabel, localRangeISO } from '../../types'
 import { makePaymentRef } from '../payments'
 import { activeClubId } from './access'
 import { hydrateBooking, isSlotFree, todayISO, uid } from './common'
@@ -51,7 +51,8 @@ export const bookingOperations = {
       throw new Error('That slot is no longer available')
     }
 
-    const amount = court.hourly_rate * opts.hours
+    // Players with an active membership pay the court's member rate, when it has one.
+    const amount = courtRateFor(court, member) * opts.hours
     const booking: Booking = {
       id: uid('bk'),
       club_id: court.club_id,
@@ -128,7 +129,7 @@ export const bookingOperations = {
       venue_id: b.venue_id ?? null,
       user_id: opts.user_id,
       title: 'Booking confirmed',
-      body: `${court?.name ?? 'Court'} · ${new Date(b.start_at).toLocaleString()} · Ref ${ref}. Show at desk.`,
+      body: `${court?.name ?? 'Court'} · ${fmtDateTime(b.start_at)} · Ref ${ref}. Show at desk.`,
       read: false,
       created_at: todayISO(),
     })

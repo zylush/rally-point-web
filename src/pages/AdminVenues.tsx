@@ -3,11 +3,20 @@ import { BackButton } from '../components/BackButton'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import type { Profile, Venue } from '../types'
+import type { Court, CourtInput, Profile, Venue, VenueLocationInput } from '../types'
+import { openingHoursLabel, peso } from '../types'
+import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
+
+const DEFAULT_COURT_RATE = 500
+
+/** Returns true when saved, so the form can close. */
+type SaveCourt = (input: CourtInput, busyKey: string) => Promise<boolean>
+type SaveLocation = (input: VenueLocationInput) => Promise<boolean>
 
 export function AdminVenues() {
   const { activeClub } = useAuth()
   const [venues, setVenues] = useState<Venue[]>([])
+  const [courts, setCourts] = useState<Court[]>([])
   const [staff, setStaff] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
@@ -18,11 +27,13 @@ export function AdminVenues() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [nextVenues, nextStaff] = await Promise.all([
+      const [nextVenues, nextCourts, nextStaff] = await Promise.all([
         api.listAllVenues(),
+        api.listCourts(),
         api.staffAccounts(),
       ])
       setVenues(nextVenues)
+      setCourts(nextCourts)
       setStaff(nextStaff.filter((account) => account.role === 'staff'))
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load venue settings')
@@ -43,13 +54,13 @@ export function AdminVenues() {
         name: name.trim(),
         slug: slug.trim().toLowerCase(),
         timezone: 'Asia/Manila',
-        open_hour: 6,
-        close_hour: 22,
+        open_hour: 0,
+        close_hour: 24,
         is_active: true,
       })
       setName('')
       setSlug('')
-      setMessage('Venue added')
+      setMessage('Venue added. Add its courts so players can book it.')
       await reload()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not add venue')
@@ -71,6 +82,36 @@ export function AdminVenues() {
     }
   }
 
+  const saveCourt: SaveCourt = async (input, busyKey) => {
+    setBusy(busyKey)
+    try {
+      const saved = await api.upsertCourt(input)
+      setMessage(input.id ? `${saved.name} saved` : `${saved.name} added`)
+      await reload()
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save the court')
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const saveLocation: SaveLocation = async (input) => {
+    setBusy(`location:${input.venue_id}`)
+    try {
+      await api.updateVenueLocation(input)
+      setMessage('Location saved')
+      await reload()
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save the location')
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function toggleGrant(account: Profile, venue: Venue) {
     const assigned = account.venue_ids?.includes(venue.id) ?? false
     setBusy(`${account.id}:${venue.id}`)
@@ -87,7 +128,7 @@ export function AdminVenues() {
 
   return (
     <AppShell role="admin">
-      <AppHeader title="Venues & staff access" subtitle="Assign operations by venue" right={<SignOutButton />} />
+      <AppHeader title="Venues & courts" subtitle="Venues, their courts, and staff access" right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-3 space-y-4">
         <div className="flex items-center gap-2">
           <BackButton />
@@ -97,7 +138,7 @@ export function AdminVenues() {
         <form className="card p-4 space-y-3" onSubmit={createVenue}>
           <div>
             <h2 className="font-extrabold">Add a venue</h2>
-            <p className="text-xs text-slate-500 mt-1">All venues start in Asia/Manila, 06:00–22:00. Deactivate instead of deleting history.</p>
+            <p className="text-xs text-slate-500 mt-1">Venues are open for booking 24 hours, in Philippine time. Deactivate instead of deleting history.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
@@ -106,7 +147,7 @@ export function AdminVenues() {
             </div>
             <div>
               <label className="label" htmlFor="venue-slug">Short slug</label>
-              <input id="venue-slug" className="input" value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="gensan-east" required />
+              <input id="venue-slug" className="input" value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="downtown" required />
             </div>
           </div>
           <button className="btn-primary" type="submit" disabled={busy === 'new-venue'} aria-busy={busy === 'new-venue'}>
@@ -116,20 +157,17 @@ export function AdminVenues() {
 
         {loading ? <LoadingBlock /> : (
           <>
-            <section className="card p-4 space-y-2">
-              <h2 className="font-extrabold">Venues</h2>
-              {venues.map((venue) => (
-                <div key={venue.id} className="list-row">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate">{venue.name}</p>
-                    <p className="text-xs text-slate-500">{venue.slug} · {venue.timezone} · {venue.open_hour}:00–{venue.close_hour}:00</p>
-                  </div>
-                  <button type="button" className="btn-secondary text-xs" onClick={() => void toggleVenue(venue)} disabled={busy === venue.id}>
-                    {venue.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
-                </div>
-              ))}
-            </section>
+            {venues.map((venue) => (
+              <VenueCard
+                key={venue.id}
+                venue={venue}
+                courts={courts.filter((court) => court.venue_id === venue.id)}
+                busy={busy}
+                onToggleVenue={() => void toggleVenue(venue)}
+                onSaveCourt={saveCourt}
+                onSaveLocation={saveLocation}
+              />
+            ))}
 
             <section className="card p-4 space-y-3">
               <div>
@@ -166,5 +204,311 @@ export function AdminVenues() {
       </main>
       {message ? <div className="toast" role="status">{message}</div> : null}
     </AppShell>
+  )
+}
+
+function VenueCard({
+  venue,
+  courts,
+  busy,
+  onToggleVenue,
+  onSaveCourt,
+  onSaveLocation,
+}: {
+  venue: Venue
+  courts: Court[]
+  busy: string | null
+  onToggleVenue: () => void
+  onSaveCourt: SaveCourt
+  onSaveLocation: SaveLocation
+}) {
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingLocation, setEditingLocation] = useState(false)
+  const place = placeLine(venue)
+  const directions = directionsUrl(venue)
+  const mapUrl = mapEmbedUrl(venue)
+  const inService = courts.filter((court) => court.status !== 'maintenance').length
+  const headingId = `venue-${venue.id}-title`
+
+  return (
+    <section className="card p-4 space-y-3" aria-labelledby={headingId}>
+      <div className="space-y-2">
+        <div>
+          <h2 id={headingId} className="font-extrabold">{venue.name}</h2>
+          <p className="text-xs text-slate-500">
+            {venue.slug} · Philippine time · {openingHoursLabel(venue.open_hour, venue.close_hour)}{venue.is_active ? '' : ' · Inactive'}
+          </p>
+        </div>
+        <button type="button" className="btn-secondary text-sm" onClick={onToggleVenue} disabled={busy === venue.id}>
+          {venue.is_active ? `Deactivate ${venue.name}` : `Activate ${venue.name}`}
+        </button>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-bold text-slate-700">Location</h3>
+        {editingLocation ? (
+          <LocationForm
+            venue={venue}
+            saving={busy === `location:${venue.id}`}
+            onCancel={() => setEditingLocation(false)}
+            onSave={async (input) => {
+              if (await onSaveLocation(input)) setEditingLocation(false)
+            }}
+          />
+        ) : (
+          <div className="mt-1 space-y-2">
+            <p className="text-sm text-slate-700">
+              {place || 'No address yet. Players see the club’s city until you add one.'}
+            </p>
+            <div className="flex flex-wrap gap-x-4">
+              {directions ? (
+                <a className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-800 underline" href={directions} target="_blank" rel="noopener noreferrer">
+                  Check on Google Maps
+                </a>
+              ) : null}
+              <button type="button" className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-800 underline" onClick={() => setEditingLocation(true)}>
+                {place || mapUrl ? 'Edit location' : 'Add address and map pin'}
+              </button>
+            </div>
+            {mapUrl ? null : place ? <p className="text-xs text-slate-500">Add a map pin so players see a map.</p> : null}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-bold text-slate-700">Courts</h3>
+        {inService === 0 ? (
+          <p className="mt-1 text-sm font-semibold text-amber-800" role="note">
+            {courts.length === 0
+              ? 'No courts yet. Players cannot book this venue until you add one.'
+              : 'Every court here is out of service. Players cannot book this venue.'}
+          </p>
+        ) : null}
+        <ul className="mt-2 space-y-2">
+          {courts.map((court) => (
+            <li key={court.id} className="rounded-xl border border-slate-200 p-3">
+              {editingId === court.id ? (
+                <CourtForm
+                  venue={venue}
+                  court={court}
+                  saving={busy === `court:${court.id}`}
+                  onCancel={() => setEditingId(null)}
+                  onSave={async (input) => {
+                    if (await onSaveCourt(input, `court:${court.id}`)) setEditingId(null)
+                  }}
+                />
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{court.name}</p>
+                    <p className="text-sm text-slate-600">{peso(court.hourly_rate)} per hour</p>
+                    {court.member_rate != null ? (
+                      <p className="text-sm text-brand-800">Members {peso(court.member_rate)} per hour</p>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <CourtStatusPill court={court} />
+                    <button
+                      type="button"
+                      className="btn-secondary min-w-[4.5rem] text-sm"
+                      onClick={() => { setAdding(false); setEditingId(court.id) }}
+                      aria-label={`Edit ${court.name}`}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {adding ? (
+        <div className="rounded-xl border border-slate-200 p-3">
+          <CourtForm
+            venue={venue}
+            saving={busy === `new-court:${venue.id}`}
+            onCancel={() => setAdding(false)}
+            onSave={async (input) => {
+              if (await onSaveCourt(input, `new-court:${venue.id}`)) setAdding(false)
+            }}
+          />
+        </div>
+      ) : (
+        <button type="button" className="btn-secondary w-full" onClick={() => { setEditingId(null); setAdding(true) }}>
+          Add a court to {venue.name}
+        </button>
+      )}
+    </section>
+  )
+}
+
+function LocationForm({
+  venue,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  venue: Venue
+  saving: boolean
+  onCancel: () => void
+  onSave: (input: VenueLocationInput) => Promise<void>
+}) {
+  const [address, setAddress] = useState(venue.address ?? '')
+  const [city, setCity] = useState(venue.city ?? '')
+  const [latitude, setLatitude] = useState(venue.latitude != null ? String(venue.latitude) : '')
+  const [longitude, setLongitude] = useState(venue.longitude != null ? String(venue.longitude) : '')
+  const id = `venue-${venue.id}-location`
+  const asNumber = (value: string) => (value.trim() === '' ? null : Number(value))
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    void onSave({
+      venue_id: venue.id,
+      address: address.trim() || null,
+      city: city.trim() || null,
+      latitude: asNumber(latitude),
+      longitude: asNumber(longitude),
+    })
+  }
+
+  return (
+    <form className="mt-2 space-y-3" onSubmit={submit} aria-label={`Location of ${venue.name}`}>
+      <div>
+        <label className="label" htmlFor={`${id}-address`}>Street address</label>
+        <input id={`${id}-address`} className="input" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="Building, street, barangay" />
+      </div>
+      <div>
+        <label className="label" htmlFor={`${id}-city`}>City</label>
+        <input id={`${id}-city`} className="input" value={city} onChange={(e) => setCity(e.target.value)} maxLength={80} placeholder="General Santos City" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="label" htmlFor={`${id}-lat`}>Latitude</label>
+          <input id={`${id}-lat`} className="input" type="number" inputMode="decimal" step="any" min={-90} max={90} value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder="6.1164" />
+        </div>
+        <div>
+          <label className="label" htmlFor={`${id}-lng`}>Longitude</label>
+          <input id={`${id}-lng`} className="input" type="number" inputMode="decimal" step="any" min={-180} max={180} value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder="125.1716" />
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">
+        For the map pin, open Google Maps, press and hold (or right-click) on the courts, and copy the two numbers shown.
+        Leave both empty for no map.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving}>
+          {saving ? 'Saving…' : 'Save location'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function CourtStatusPill({ court }: { court: Court }) {
+  if (court.status === 'maintenance') return <span className="pill pill-warn whitespace-nowrap">Out of service</span>
+  if (court.status === 'occupied') return <span className="pill pill-brand whitespace-nowrap">In use</span>
+  return <span className="pill pill-ok whitespace-nowrap">In service</span>
+}
+
+function CourtForm({
+  venue,
+  court,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  venue: Venue
+  court?: Court
+  saving: boolean
+  onCancel: () => void
+  onSave: (input: CourtInput) => Promise<void>
+}) {
+  const [name, setName] = useState(court?.name ?? '')
+  const [rate, setRate] = useState(String(court?.hourly_rate ?? DEFAULT_COURT_RATE))
+  const [memberRate, setMemberRate] = useState(court?.member_rate != null ? String(court.member_rate) : '')
+  const [inService, setInService] = useState(court ? court.status !== 'maintenance' : true)
+  const idPrefix = court ? `court-${court.id}` : `new-court-${venue.id}`
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    void onSave({
+      id: court?.id,
+      venue_id: venue.id,
+      name,
+      hourly_rate: Number(rate),
+      member_rate: memberRate.trim() === '' ? null : Number(memberRate),
+      in_service: inService,
+    })
+  }
+
+  return (
+    <form className="space-y-3" onSubmit={submit} aria-label={court ? `Edit ${court.name}` : `Add a court to ${venue.name}`}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-name`}>Court name</label>
+          <input
+            id={`${idPrefix}-name`}
+            className="input"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={40}
+            required
+            placeholder="Court 3"
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-rate`}>Hourly rate (Php)</label>
+          <input
+            id={`${idPrefix}-rate`}
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={100000}
+            step="0.01"
+            value={rate}
+            onChange={(event) => setRate(event.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-member-rate`}>Member rate (Php, optional)</label>
+          <input
+            id={`${idPrefix}-member-rate`}
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={memberRate}
+            onChange={(event) => setMemberRate(event.target.value)}
+            placeholder="Same as hourly rate"
+          />
+        </div>
+      </div>
+      <label className="min-h-12 rounded-xl border border-slate-200 px-3 py-2 flex items-center gap-3 text-sm">
+        <input type="checkbox" className="h-5 w-5" checked={inService} onChange={(event) => setInService(event.target.checked)} />
+        <span className="flex-1">
+          <span className="font-semibold">In service</span>
+          <span className="block text-xs text-slate-500">Out-of-service courts cannot be booked. Bookings already made stay.</span>
+        </span>
+      </label>
+      <p className="text-xs text-slate-500">
+        Players with an active membership pay the member rate. Leave it empty to charge everyone the hourly rate.
+        A new rate applies to bookings made from now on.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+        <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving}>
+          {saving ? 'Saving…' : court ? 'Save court' : 'Add court'}
+        </button>
+      </div>
+    </form>
   )
 }

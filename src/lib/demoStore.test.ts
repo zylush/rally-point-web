@@ -1,15 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { localRangeISO, ymdLocal } from '../types'
 import { demoStore, type DemoDB } from './demoStore'
 import type { Reminder } from '../types'
 
 const futureDate = (days = 2) => {
-  const date = new Date()
-  date.setDate(date.getDate() + days)
-  date.setHours(12, 0, 0, 0)
-  return date
+  // Noon, Philippine time, on a day ahead: the demo books in Philippine time whatever the machine's timezone.
+  return new Date(localRangeISO(ymdLocal(new Date(Date.now() + days * 86400000)), 12, 1).start_at)
 }
 
-const ymd = (date: Date) => date.toISOString().slice(0, 10)
+const ymd = (date: Date) => ymdLocal(date)
 
 function resetStore() {
   localStorage.clear()
@@ -202,7 +201,7 @@ describe('demoStore booking and payment behavior', () => {
     const date = futureDate()
     const availability = demoStore.availability(ymd(date))
     expect(availability).toHaveLength(4)
-    expect(availability.every((court) => court.slots.length === 16)).toBe(true)
+    expect(availability.every((court) => court.slots.length === 24)).toBe(true)
     expect(availability.find((court) => court.court.id === 'court_2')?.slots.some((slot) => slot.available)).toBe(true)
 
     const booking = demoStore.createBooking({
@@ -254,8 +253,8 @@ describe('demoStore booking and payment behavior', () => {
     updateDb((db) => { db.courts.find((court) => court.id === 'court_2')!.status = 'available' })
     expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', hours: 0 })).toThrow('Book 1–3 hours')
     expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', hours: 4 })).toThrow('Book 1–3 hours')
-    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', startHour: 21, hours: 2 })).toThrow('Outside club hours')
-    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', dateYmd: ymd(new Date()) , startHour: 6 })).toThrow('That time has already passed')
+    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', startHour: 23, hours: 2 })).toThrow('Outside club hours')
+    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', dateYmd: ymd(new Date(Date.now() - 86400000)), startHour: 6 })).toThrow('That time has already passed')
 
     const existing = demoStore.createBooking({ ...base, court_id: 'court_2' })
     expect(() => demoStore.createBooking({ ...base, court_id: 'court_2' })).toThrow('That slot is no longer available')
@@ -392,7 +391,8 @@ describe('demoStore QR, open play, schedules, and reminders', () => {
       ]
       db.reminders = reminders
     })
-    const blocks = demoStore.daySchedule(ymd(date))
+    // Only this test's items: seeded demo open plays can share the day.
+    const blocks = demoStore.daySchedule(ymd(date)).filter((block) => block.id.startsWith('schedule-'))
     expect(blocks.map((block) => block.id)).toEqual(['schedule-session', 'schedule-booking', 'schedule-open'])
     expect(blocks[0].title).toBe('Schedule Guest')
     expect(blocks[2].court_name).toBe('Open floor')

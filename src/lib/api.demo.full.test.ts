@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { localRangeISO, ymdLocal } from '../types'
 import { demoStore } from './demoStore'
 import { api } from './api'
 
-const futureDate = () => {
-  const date = new Date()
-  date.setDate(date.getDate() + 2)
-  date.setHours(12, 0, 0, 0)
-  return date
+const futureDate = (days = 2) => {
+  // Noon, Philippine time, on a day ahead: the demo books in Philippine time whatever the machine's timezone.
+  return new Date(localRangeISO(ymdLocal(new Date(Date.now() + days * 86400000)), 12, 1).start_at)
 }
 
 describe('api demo adapter', () => {
@@ -27,10 +26,10 @@ describe('api demo adapter', () => {
     await api.saveMember({ id: 'mem_001', full_name: 'Mia API', membership_type: 'premium' })
     expect((await api.listCourts())).toHaveLength(4)
     expect((await api.playingSessions()).length).toBeGreaterThan(0)
-    expect((await api.availability(date.toISOString().slice(0, 10))).length).toBe(4)
+    expect((await api.availability(ymdLocal(date))).length).toBe(4)
 
     const booking = await api.createBooking({
-      court_id: 'court_2', member_id: 'mem_001', dateYmd: date.toISOString().slice(0, 10), startHour: 12, hours: 1, user_id: 'user_member',
+      court_id: 'court_2', member_id: 'mem_001', dateYmd: ymdLocal(date), startHour: 12, hours: 1, user_id: 'user_member',
     })
     expect(booking.status).toBe('pending_payment')
     expect((await api.myBookings('mem_001')).length).toBe(1)
@@ -43,7 +42,7 @@ describe('api demo adapter', () => {
     try {
       const date = futureDate()
       const booking = await api.createBooking({
-        court_id: 'court_2', member_id: 'mem_001', dateYmd: date.toISOString().slice(0, 10), startHour: 12, hours: 1, user_id: 'user_member',
+        court_id: 'court_2', member_id: 'mem_001', dateYmd: ymdLocal(date), startHour: 12, hours: 1, user_id: 'user_member',
       })
       const paidPromise = api.payBooking({ booking_id: booking.id, method: 'gcash', user_id: 'user_member' })
       await vi.advanceTimersByTimeAsync(900)
@@ -76,7 +75,7 @@ describe('api demo adapter', () => {
     })
     expect((await api.joinOpenPlay(created.id, 'mem_001', 'user_member')).signup.status).toBe('joined')
     await api.leaveOpenPlay(created.id, 'mem_001')
-    expect((await api.daySchedule(date.toISOString().slice(0, 10))).some((block) => block.id === created.id)).toBe(true)
+    expect((await api.daySchedule(ymdLocal(date))).some((block) => block.id === created.id)).toBe(true)
     expect(await api.processDueReminders()).toBeGreaterThanOrEqual(0)
     expect((await api.ensureMemberQr('mem_001')).qr_token).toBeTruthy()
     expect((await api.checkInByQr('RP-1001', 'user_staff')).member.id).toBe('mem_001')

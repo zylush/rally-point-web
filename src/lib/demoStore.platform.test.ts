@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { localRangeISO, ymdLocal } from '../types'
 import { demoStore, type DemoDB } from './demoStore'
 import { getActiveClubId, setActiveClubId } from './clubContext'
 import { DEMO_CLUB_ID, DEMO_DAVAO_CLUB_ID, DEMO_DAVAO_VENUE_ID, DEMO_VENUE_ID } from './tenant'
@@ -15,10 +16,9 @@ const provisionInput = {
 }
 
 const futureYmd = (days = 2) => {
-  const date = new Date()
-  date.setDate(date.getDate() + days)
-  date.setHours(12, 0, 0, 0)
-  return { date, ymd: date.toISOString().slice(0, 10) }
+  // Noon, Philippine time, on a day ahead.
+  const ymd = ymdLocal(new Date(Date.now() + days * 86400000))
+  return { date: new Date(localRangeISO(ymd, 12, 1).start_at), ymd }
 }
 
 function resetAll() {
@@ -289,7 +289,7 @@ describe('demo club membership', () => {
     expect(memberships.map((row) => row.club_id).sort()).toEqual([DEMO_CLUB_ID, DEMO_DAVAO_CLUB_ID].sort())
     const davaoMembership = memberships.find((row) => row.club_id === DEMO_DAVAO_CLUB_ID)!
     expect(davaoMembership).toMatchObject({ status: 'active', membership_type: 'standard' })
-    const days = (Date.parse(davaoMembership.expiry_date) - Date.parse(davaoMembership.join_date)) / 86400000
+    const days = (Date.parse(davaoMembership.expiry_date ?? '') - Date.parse(davaoMembership.join_date)) / 86400000
     expect(Math.round(days)).toBe(30)
 
     expect(() => demoStore.joinClub(joiner.id, 'no-such-club')).toThrow('This club link is not valid')

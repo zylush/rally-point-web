@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Profile } from "../types";
 import LoginPage from "./LoginPage";
@@ -23,6 +23,10 @@ vi.mock("../context/AuthContext", () => ({
 vi.mock("../components/RallyPointLogo", () => ({
   RallyPointLogo: () => <div aria-label="Rally Point logo" />,
 }));
+
+function Where() {
+  return <p>At {useLocation().pathname}</p>;
+}
 
 function renderLogin() {
   return render(
@@ -320,5 +324,46 @@ describe("LoginPage authentication form safety", () => {
     expect(
       screen.queryByText(/Staff \/ admin accounts are created by the club/i),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("LoginPage return to a club page", () => {
+  beforeEach(() => {
+    authState.user = null;
+    authState.loading = false;
+    authState.signIn.mockReset();
+  });
+
+  function renderWithReturn(returnTo: string) {
+    return render(
+      <MemoryRouter initialEntries={[{ pathname: "/login", state: { returnTo } }]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<Where />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("goes back to the club page after logging in", async () => {
+    const user = userEvent.setup();
+    authState.signIn.mockResolvedValue({ id: "u1", email: "p@example.com", full_name: "Pia", role: "member", created_at: "2026-09-01" });
+    renderWithReturn("/clubs/rally-point-davao");
+
+    await user.type(screen.getByLabelText("Email"), "p@example.com");
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.click(loginSubmitButton());
+    expect(await screen.findByText("At /clubs/rally-point-davao")).toBeInTheDocument();
+  });
+
+  it("ignores a return path outside the club pages", async () => {
+    const user = userEvent.setup();
+    authState.signIn.mockResolvedValue({ id: "u1", email: "p@example.com", full_name: "Pia", role: "member", created_at: "2026-09-01" });
+    renderWithReturn("/admin/users");
+
+    await user.type(screen.getByLabelText("Email"), "p@example.com");
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.click(loginSubmitButton());
+    expect(await screen.findByText("At /member")).toBeInTheDocument();
   });
 });

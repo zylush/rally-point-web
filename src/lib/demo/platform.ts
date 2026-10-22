@@ -126,7 +126,7 @@ export const platformOperations = {
       contact_email: normalizeDemoEmail(input.contact_email) || null,
       contact_phone: input.contact_phone.trim() || null,
     })
-    db.venues.push({ id: venueId, club_id: clubId, slug: 'main', name, timezone: 'Asia/Manila', open_hour: 6, close_hour: 22, is_active: true })
+    db.venues.push({ id: venueId, club_id: clubId, slug: 'main', name, timezone: 'Asia/Manila', open_hour: 0, close_hour: 24, is_active: true })
     for (let n = 1; n <= courtCount; n++) {
       db.courts.push({ id: uid('court'), club_id: clubId, venue_id: venueId, name: `Court ${n}`, status: 'available', hourly_rate: 500 })
     }

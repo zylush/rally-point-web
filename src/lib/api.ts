@@ -6,6 +6,10 @@ import type {
   CheckIn,
   Club,
   Court,
+  CourtInput,
+  PublicClubDetail,
+  PublicClubListing,
+  VenueLocationInput,
   CourtDayAvailability,
   CourtSession,
   DashboardStats,
@@ -69,7 +73,7 @@ export const api = {
     }
     const { data: venues, error: venueError } = await supabase
       .from('venues')
-      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active')
+      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active, address, city, latitude, longitude')
       .eq('club_id', club.id)
       .eq('is_active', true)
       .order('name')
@@ -85,7 +89,7 @@ export const api = {
     if (isDemoMode) return demoStore.allVenues()
     const { data, error } = await supabase!
       .from('venues')
-      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active')
+      .select('id, club_id, slug, name, timezone, open_hour, close_hour, is_active, address, city, latitude, longitude')
       .eq('club_id', requireActiveClubId())
       .order('name')
     if (error) throw error
@@ -562,6 +566,35 @@ export const api = {
     return data as Venue
   },
 
+  /** Admin only: set or clear a location's address, city and map pin. */
+  async updateVenueLocation(input: VenueLocationInput): Promise<Venue> {
+    if (isDemoMode) return demoStore.updateVenueLocation(input)
+    const { data, error } = await supabase!.rpc('admin_update_venue_location', {
+      p_venue_id: input.venue_id,
+      p_address: input.address,
+      p_city: input.city,
+      p_latitude: input.latitude,
+      p_longitude: input.longitude,
+    })
+    if (error) throw error
+    return data as Venue
+  },
+
+  /** Admin only: add a court to a venue, or rename, re-price, or take one out of service. */
+  async upsertCourt(input: CourtInput): Promise<Court> {
+    if (isDemoMode) return demoStore.upsertCourt(input)
+    const { data, error } = await supabase!.rpc('admin_upsert_court', {
+      p_court_id: input.id ?? null,
+      p_venue_id: input.venue_id,
+      p_name: input.name,
+      p_hourly_rate: input.hourly_rate,
+      p_member_rate: input.member_rate ?? null,
+      p_in_service: input.in_service,
+    })
+    if (error) throw error
+    return data as Court
+  },
+
   async setStaffVenueGrant(userId: string, venueId: string, isActive: boolean): Promise<void> {
     if (isDemoMode) {
       demoStore.setStaffVenueGrant(userId, venueId, isActive)
@@ -809,6 +842,50 @@ export const api = {
     async joinClub(userId: string, slug: string): Promise<string> {
       if (isDemoMode) return demoStore.joinClub(userId, slug)
       const { data, error } = await supabase!.rpc('join_club', { p_slug: slug })
+      if (error) throw error
+      return data as string
+    },
+
+    // ---- Find a court: public club list and pages, and booking as a player ----
+
+    /** Every club taking bookings, for the public "Find a court" list. */
+    async listPublicClubs(): Promise<PublicClubListing[]> {
+      if (isDemoMode) return demoStore.publicClubs()
+      const { data, error } = await supabase!.rpc('list_public_clubs')
+      if (error) throw error
+      return ((data ?? []) as PublicClubListing[]).map((row) => ({
+        ...row,
+        venue_count: Number(row.venue_count),
+        court_count: Number(row.court_count),
+        min_rate: row.min_rate == null ? null : Number(row.min_rate),
+        min_member_rate: row.min_member_rate == null ? null : Number(row.min_member_rate),
+      }))
+    },
+
+    /** One club's public page: venues, courts and rates. Null when the club is not taking bookings. */
+    async publicClubDetail(slug: string): Promise<PublicClubDetail | null> {
+      if (isDemoMode) return demoStore.publicClubDetail(slug)
+      const { data, error } = await supabase!.rpc('get_public_club_detail', { p_slug: slug })
+      if (error) throw error
+      if (!data) return null
+      const detail = data as PublicClubDetail
+      return {
+        ...detail,
+        venues: detail.venues.map((venue) => ({
+          ...venue,
+          courts: venue.courts.map((court) => ({
+            ...court,
+            hourly_rate: Number(court.hourly_rate),
+            member_rate: court.member_rate == null ? null : Number(court.member_rate),
+          })),
+        })),
+      }
+    },
+
+    /** Adds the signed-in person to a club as a player (no membership), so they can book there. */
+    async joinClubAsPlayer(userId: string, slug: string): Promise<string> {
+      if (isDemoMode) return demoStore.joinClubAsPlayer(userId, slug)
+      const { data, error } = await supabase!.rpc('join_club_as_player', { p_slug: slug })
       if (error) throw error
       return data as string
     },

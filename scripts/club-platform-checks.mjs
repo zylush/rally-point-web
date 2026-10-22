@@ -62,6 +62,12 @@ export const advisorFollowupChecks = Object.freeze([
   'private_schema_closed_to_anon', 'reservation_writes_still_paused', 'platform_tables_closed',
 ])
 
+export const courtMarketplaceChecks = Object.freeze([
+  'ledger_has_court_marketplace', 'reservation_writes_still_paused', 'court_and_join_functions_signed_in_only',
+  'club_directory_open_to_visitors', 'new_functions_pin_search_path', 'court_member_rate', 'player_membership_pair',
+  'venue_locations', 'venues_open_all_day', 'philippine_time_only', 'listed_clubs',
+])
+
 export const isolationCheckCount = 55
 
 const same = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message)
@@ -88,7 +94,7 @@ export function verifySuiteInventory(names) {
  */
 export function evaluateChecks(rows, kind, { ignore = [] } = {}) {
   const kinds = { preflight: preflightChecks, postflight: postflightChecks, advisor: advisorChecks,
-    advisorFollowup: advisorFollowupChecks }
+    advisorFollowup: advisorFollowupChecks, courtMarketplace: courtMarketplaceChecks }
   const expected = Object.hasOwn(kinds, kind) ? kinds[kind] : null
   assert.ok(expected, 'Unknown check kind')
   assert.ok(ignore.every(name => expected.includes(name)), `${kind}: unknown check in ignore list`)

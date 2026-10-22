@@ -32,6 +32,20 @@ export interface Venue {
   open_hour: number
   close_hour: number
   is_active: boolean
+  /** Where this location is, shown to players with a map. Optional until the club fills it in. */
+  address?: string | null
+  city?: string | null
+  latitude?: number | null
+  longitude?: number | null
+}
+
+/** What an admin sends to set a location's address and map pin. */
+export interface VenueLocationInput {
+  venue_id: string
+  address: string | null
+  city: string | null
+  latitude: number | null
+  longitude: number | null
 }
 
 export interface StaffVenueGrant {
@@ -199,10 +213,11 @@ export interface Member {
   full_name: string
   email?: string | null
   phone?: string | null
-  membership_type: MembershipType
+  /** NULL for a player with no membership at this club; set together with expiry_date. */
+  membership_type: MembershipType | null
   status: MemberStatus
   join_date: string
-  expiry_date: string
+  expiry_date: string | null
   notes?: string | null
   qr_token?: string | null
   created_at: string
@@ -215,6 +230,64 @@ export interface Court {
   name: string
   status: CourtStatus
   hourly_rate: number
+  /** Lower price for players with an active membership; NULL means the regular rate. */
+  member_rate?: number | null
+}
+
+/** What an admin sends to add or edit a court. Out of service is the 'maintenance' status. */
+export interface CourtInput {
+  id?: string
+  venue_id: string
+  name: string
+  hourly_rate: number
+  /** Optional lower member price; null or omitted means members pay the regular rate. */
+  member_rate?: number | null
+  in_service: boolean
+}
+
+/** One club in the public "Find a court" list. */
+export interface PublicClubListing {
+  slug: string
+  name: string
+  city: string | null
+  address: string | null
+  /** Cities of the club's locations (and the club's own city), for the city filter. */
+  cities: string[]
+  venue_count: number
+  court_count: number
+  min_rate: number | null
+  min_member_rate: number | null
+}
+
+/** A club's public page: its active venues and their courts. */
+export interface PublicClubDetail {
+  slug: string
+  name: string
+  city: string | null
+  address: string | null
+  venues: {
+    id: string
+    name: string
+    open_hour: number
+    close_hour: number
+    address: string | null
+    city: string | null
+    latitude: number | null
+    longitude: number | null
+    courts: { id: string; name: string; hourly_rate: number; member_rate: number | null; in_service: boolean }[]
+  }[]
+}
+
+/** A membership counts when it has a plan, is active, and has not expired. Players have no plan. */
+export function hasActiveMembership(member: Pick<Member, 'membership_type' | 'status' | 'expiry_date'> | null | undefined, today = new Date()) {
+  if (!member?.membership_type || !member.expiry_date || member.status !== 'active') return false
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  return member.expiry_date.slice(0, 10) >= todayYmd
+}
+
+/** The hourly price this person pays for a court: the member rate only with an active membership. */
+export function courtRateFor(court: Pick<Court, 'hourly_rate' | 'member_rate'>, member: Parameters<typeof hasActiveMembership>[0]) {
+  return hasActiveMembership(member) && court.member_rate != null ? court.member_rate : court.hourly_rate
 }
 
 export interface CourtSessionPlayer {
@@ -456,44 +529,69 @@ export function friendlyStatus(status: string): string {
   return map[status] ?? status.replace(/_/g, ' ')
 }
 
-/** Club open hours (local) */
-export const CLUB_OPEN_HOUR = 6
-export const CLUB_CLOSE_HOUR = 22
+/**
+ * Courts can be booked around the clock (Philippine time). A booking ends by
+ * midnight: the server's booking functions require start + hours <= 24.
+ */
+export const CLUB_OPEN_HOUR = 0
+export const CLUB_CLOSE_HOUR = 24
 
 export function peso(n: number) {
   return `Php ${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/**
+ * Every club and venue is in the Philippines, so the app shows and books times in
+ * Philippine time whatever the phone's own timezone. Asia/Manila is UTC+8 all year
+ * (no daylight saving), which keeps the arithmetic below exact.
+ */
+export const APP_TIME_ZONE = 'Asia/Manila'
+const APP_UTC_OFFSET_HOURS = 8
+
 export function fmtDate(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: APP_TIME_ZONE })
 }
 
 export function fmtTime(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: APP_TIME_ZONE })
 }
 
 export function fmtDateTime(iso: string) {
   return `${fmtDate(iso)} · ${fmtTime(iso)}`
 }
 
+/** "6:00 AM" for hour 6; hour 0 and hour 24 are both midnight ("12:00 AM"). */
 export function hourLabel(h: number) {
-  const d = new Date()
-  d.setHours(h, 0, 0, 0)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const hour = ((h % 24) + 24) % 24
+  const twelve = hour % 12 === 0 ? 12 : hour % 12
+  return `${twelve}:00 ${hour < 12 ? 'AM' : 'PM'}`
 }
 
+/** "Open 24 hours", or "Open 6:00 AM to 10:00 PM" for a venue with set hours. */
+export function openingHoursLabel(openHour: number, closeHour: number) {
+  return openHour === 0 && closeHour === 24 ? 'Open 24 hours' : `Open ${hourLabel(openHour)} to ${hourLabel(closeHour)}`
+}
+
+/** The hour of day (0–23) of an instant, in Philippine time. */
+export function appHour(iso: string) {
+  return (new Date(iso).getUTCHours() + APP_UTC_OFFSET_HOURS) % 24
+}
+
+/** The calendar date (YYYY-MM-DD) of an instant, in Philippine time. */
 export function ymdLocal(d: Date) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  const shifted = new Date(d.getTime() + APP_UTC_OFFSET_HOURS * 3600000)
+  const y = shifted.getUTCFullYear()
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(shifted.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
+/** A booking range that starts at `startHour` Philippine time on `dateYmd`. */
 export function localRangeISO(dateYmd: string, startHour: number, hours: number) {
   const [y, m, d] = dateYmd.split('-').map(Number)
-  const start = new Date(y, m - 1, d, startHour, 0, 0, 0)
+  const start = new Date(Date.UTC(y, m - 1, d, startHour - APP_UTC_OFFSET_HOURS, 0, 0, 0))
   const end = new Date(start.getTime() + hours * 3600000)
   return { start_at: start.toISOString(), end_at: end.toISOString() }
 }

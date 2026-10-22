@@ -227,7 +227,7 @@ export function StaffMembers() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{m.full_name}</p>
                   <p className="text-xs text-slate-400">
-                    {m.member_code} · <span className="capitalize">{m.membership_type}</span>
+                    {m.member_code} · <span className="capitalize">{m.membership_type ?? 'Player, no membership'}</span>
                   </p>
                 </div>
                 <span className={`pill ${m.status === 'active' ? 'pill-ok' : 'pill-warn'}`}>{m.status}</span>

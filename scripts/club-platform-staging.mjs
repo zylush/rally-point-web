@@ -96,8 +96,47 @@ export const advisorFollowupRelease = Object.freeze({
   }),
   databases: Object.freeze({ restore: 'rally_staging_backup_20261017_r3_restore', dryRun: 'rally_staging_backup_20261017_r3_dryrun2' }),
 })
+// Court management, the public club list and players without a membership, venue
+// locations, 24-hour booking and Philippine time. admin_upsert_court is a narrow
+// admin-only court write path; the reservation-write pause itself stays in force.
+export const courtMarketplaceRelease = Object.freeze({
+  id: 'court-marketplace-20261022',
+  title: 'Court management and player marketplace',
+  baseVersions: Object.freeze([...advisorFollowupRelease.baseVersions, '20261017170000']),
+  migrations: Object.freeze(['20261022090000_admin_court_management.sql', '20261022100000_player_marketplace.sql',
+    '20261022110000_open_all_day_ph_time.sql']),
+  // The SQL that runs and the code that runs it. Approval pins all of these bytes.
+  files: Object.freeze(['supabase/migrations/20261022090000_admin_court_management.sql',
+    'supabase/migrations/20261022100000_player_marketplace.sql', 'supabase/migrations/20261022110000_open_all_day_ph_time.sql',
+    'supabase/verification/court_marketplace_postflight.sql', 'supabase/verification/supabase_advisor_followup_postflight.sql',
+    'supabase/verification/supabase_advisor_postflight.sql', 'supabase/verification/club_platform_postflight.sql',
+    'supabase/verification/two_club_isolation.sql', 'supabase/verification/schema_fingerprint.sql',
+    'supabase/verification/backup_content_inventory.sql', 'supabase/verification/reservation_write_pause_readonly.sql',
+    'supabase/verification/staging_privacy_readonly_preflight.sql', 'scripts/run-staging-release-apply.mjs',
+    'scripts/club-platform-staging.mjs', 'scripts/club-platform-checks.mjs', 'scripts/restore-catalog-checks.mjs',
+    'scripts/restore-data-checks.mjs']),
+  stateCheck: Object.freeze({ file: 'supabase_advisor_followup_postflight.sql', kind: 'advisorFollowup' }),
+  postChecks: Object.freeze([
+    Object.freeze({ file: 'court_marketplace_postflight.sql', kind: 'courtMarketplace', ignore: Object.freeze([]) }),
+    // Earlier postflights count 22 or 23 migrations; this release brings staging to 26.
+    Object.freeze({ file: 'supabase_advisor_followup_postflight.sql', kind: 'advisorFollowup',
+      ignore: Object.freeze(['ledger_has_followup']) }),
+    Object.freeze({ file: 'supabase_advisor_postflight.sql', kind: 'advisor',
+      ignore: Object.freeze(['ledger_has_advisor_fix', 'only_schedule_board_is_definer_view']) }),
+    Object.freeze({ file: 'club_platform_postflight.sql', kind: 'postflight', ignore: Object.freeze(['ledger_has_every_migration']) }),
+  ]),
+  isolation: Object.freeze({ file: 'two_club_isolation.sql', plan: 55 }),
+  dirs: Object.freeze({
+    capture: 'docs/release-private/staging-backup-20261022-r1',
+    restore: 'docs/release-private/staging-backup-restore-20261022-r1',
+    dryRun: 'docs/release-private/court-marketplace-staging-dryrun-20261022-r1',
+    apply: 'docs/release-private/court-marketplace-staging-apply-20261022-r1',
+  }),
+  databases: Object.freeze({ restore: 'rally_staging_backup_20261022_r1_restore', dryRun: 'rally_staging_backup_20261022_r1_dryrun' }),
+})
+
 export const releases = Object.freeze({ [advisorFixesRelease.id]: advisorFixesRelease,
-  [advisorFollowupRelease.id]: advisorFollowupRelease })
+  [advisorFollowupRelease.id]: advisorFollowupRelease, [courtMarketplaceRelease.id]: courtMarketplaceRelease })
 
 export function getRelease(id) {
   assert.ok(Object.hasOwn(releases, id ?? ''), `Unknown release: ${id}. Known: ${Object.keys(releases).join(', ')}`)

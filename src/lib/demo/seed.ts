@@ -117,8 +117,8 @@ export function seed(): DemoDB {
   const courts: Court[] = [
     { id: 'court_1', name: 'Court A', status: 'occupied', hourly_rate: 500 },
     { id: 'court_2', name: 'Court B', status: 'available', hourly_rate: 500 },
-    { id: 'court_3', name: 'Court C', status: 'occupied', hourly_rate: 650 },
-    { id: 'court_4', name: 'Court D', status: 'available', hourly_rate: 650 },
+    { id: 'court_3', name: 'Court C', status: 'occupied', hourly_rate: 650, member_rate: 550 },
+    { id: 'court_4', name: 'Court D', status: 'available', hourly_rate: 650, member_rate: 550 },
   ]
 
   const now = Date.now()
@@ -300,9 +300,14 @@ export function seed(): DemoDB {
     slug: 'gensan-main',
     name: 'Rally Point Gensan',
     timezone: 'Asia/Manila',
-    open_hour: 6,
-    close_hour: 22,
+    open_hour: 0,
+    close_hour: 24,
     is_active: true,
+    // Sample location for the demo, not a real address.
+    address: 'Sample address, City Heights',
+    city: 'General Santos City',
+    latitude: 6.1164,
+    longitude: 125.1716,
   }
   const secondVenue = {
     id: 'venue_lagao',
@@ -310,9 +315,13 @@ export function seed(): DemoDB {
     slug: 'lagao',
     name: 'Rally Point Lagao',
     timezone: 'Asia/Manila',
-    open_hour: 6,
-    close_hour: 22,
+    open_hour: 0,
+    close_hour: 24,
     is_active: true,
+    address: 'Sample address, Lagao',
+    city: 'General Santos City',
+    latitude: 6.134,
+    longitude: 125.183,
   }
 
   // A second, independent club with its own venue, courts, admin and members.
@@ -322,13 +331,17 @@ export function seed(): DemoDB {
     slug: 'davao-main',
     name: 'Rally Point Davao',
     timezone: 'Asia/Manila',
-    open_hour: 6,
-    close_hour: 22,
+    open_hour: 0,
+    close_hour: 24,
     is_active: true,
+    address: 'Sample address, Lanang',
+    city: 'Davao City',
+    latitude: 7.103,
+    longitude: 125.631,
   }
   const davaoCourts: Court[] = [
-    { id: 'court_davao_1', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 1', status: 'available', hourly_rate: 450 },
-    { id: 'court_davao_2', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 2', status: 'available', hourly_rate: 450 },
+    { id: 'court_davao_1', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 1', status: 'available', hourly_rate: 450, member_rate: 400 },
+    { id: 'court_davao_2', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 2', status: 'available', hourly_rate: 450, member_rate: 400 },
   ]
   // Mia belongs to both clubs: each membership is owned by its club and has its own code.
   const davaoMembers: Member[] = [

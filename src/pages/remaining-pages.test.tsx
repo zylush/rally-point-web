@@ -282,6 +282,38 @@ describe('member booking and pass pages', () => {
     expect(screen.getByText(/Available times/)).toBeInTheDocument()
   })
 
+  it('charges an active member the member rate and shows players what members pay', async () => {
+    const slots = Array.from({ length: 16 }, (_, index) => ({ startHour: index + 6, label: `${index + 6}:00`, available: true }))
+    const discounted: Court = { ...court, member_rate: 400 }
+    apiMock.availability.mockResolvedValue([{ court: discounted, slots }])
+    const first = render(<MemoryRouter><MemberBook /></MemoryRouter>)
+    expect(await screen.findByRole('button', { name: /Court B/ })).toHaveTextContent('Php 400.00/hr')
+    expect(screen.getByText(/You pay the member rate/)).toBeInTheDocument()
+    first.unmount()
+
+    apiMock.memberForUser.mockResolvedValue({ ...member, membership_type: null, expiry_date: null })
+    render(<MemoryRouter><MemberBook /></MemoryRouter>)
+    const courtButton = await screen.findByRole('button', { name: /Court B/ })
+    expect(courtButton).toHaveTextContent('Php 500.00/hr')
+    expect(courtButton).toHaveTextContent('Members Php 400.00/hr')
+    expect(screen.getByRole('link', { name: 'Book at another club' })).toHaveAttribute('href', '/clubs')
+  })
+
+  it('shows an out-of-service court as unavailable and starts on a bookable court', async () => {
+    const slots = Array.from({ length: 16 }, (_, index) => ({ startHour: index + 6, label: `${index + 6}:00`, available: true }))
+    const closed: Court = { ...court, id: 'court_closed', name: 'Court Z', status: 'maintenance' }
+    apiMock.availability.mockResolvedValueOnce([
+      { court: closed, slots: slots.map((slot) => ({ ...slot, available: false })) },
+      { court, slots },
+    ])
+    render(<MemoryRouter><MemberBook /></MemoryRouter>)
+
+    const closedButton = await screen.findByRole('button', { name: /Court Z/ })
+    expect(closedButton).toBeDisabled()
+    expect(closedButton).toHaveTextContent('Out of service')
+    expect(screen.getByRole('button', { name: /12:00/ })).toBeEnabled()
+  })
+
   it('renders a member QR pass and the no-membership state', async () => {
     const first = render(<MemoryRouter><MemberPass /></MemoryRouter>)
     expect(await screen.findByRole('img', { name: 'Check-in QR code' })).toBeInTheDocument()

@@ -232,9 +232,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const joinClub = useCallback(
-    async (slug: string) => {
+    async (slug: string, options?: { asPlayer?: boolean }) => {
       if (!user) throw new Error('Please sign in to join a club')
-      const clubId = await api.joinClub(user.id, slug)
+      // As a player: no membership, just enough to book there. A join link keeps its own terms.
+      const clubId = options?.asPlayer
+        ? await api.joinClubAsPlayer(user.id, slug)
+        : await api.joinClub(user.id, slug)
       const identity = isDemoMode ? demoStore.currentUser() : await fetchIdentity(user.id)
       const access = identity ? await loadAccess(identity, clubId) : null
       if (!access?.activeClub) throw new Error(profileSetupError)

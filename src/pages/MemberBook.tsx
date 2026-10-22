@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { CheckCircle2, ChevronLeft, Loader2 } from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
@@ -13,8 +14,11 @@ import type {
   Venue,
 } from '../types'
 import {
+  APP_TIME_ZONE,
   CLUB_CLOSE_HOUR,
+  courtRateFor,
   fmtDate,
+  hasActiveMembership,
   fmtDateTime,
   hourLabel,
   peso,
@@ -24,19 +28,19 @@ import {
 type Step = 'pick' | 'pay' | 'done'
 
 function nextDays(n: number) {
+  // Days are counted in Philippine time, so "Today" matches the club's calendar on any phone.
   const out: { ymd: string; label: string }[] = []
-  const base = new Date()
-  base.setHours(12, 0, 0, 0)
+  const now = Date.now()
   for (let i = 0; i < n; i++) {
-    const d = new Date(base)
-    d.setDate(base.getDate() + i)
-    const ymd = ymdLocal(d)
+    const ymd = ymdLocal(new Date(now + i * 86400000))
     const label =
       i === 0
         ? 'Today'
         : i === 1
           ? 'Tomorrow'
-          : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+          : new Date(`${ymd}T12:00:00+08:00`).toLocaleDateString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric', timeZone: APP_TIME_ZONE,
+          })
     out.push({ ymd, label })
   }
   return out
@@ -47,7 +51,12 @@ export function MemberBook() {
   const days = useMemo(() => nextDays(7), [])
   const [dateYmd, setDateYmd] = useState(days[0].ymd)
   const [venues, setVenues] = useState<Venue[]>([])
-  const [venueId, setVenueId] = useState('')
+  // A club page can open this screen on one of its venues.
+  const location = useLocation()
+  const [venueId, setVenueId] = useState(() => {
+    const requested = (location.state as { venueId?: unknown } | null)?.venueId
+    return typeof requested === 'string' ? requested : ''
+  })
   const [hours, setHours] = useState(1)
   const [courtId, setCourtId] = useState<string | null>(null)
   const [startHour, setStartHour] = useState<number | null>(null)
@@ -81,7 +90,10 @@ export function MemberBook() {
       ])
       setAvail(a)
       setMine(b)
-      if (!courtId && a[0]) setCourtId(a[0].court.id)
+      if (!courtId) {
+        const firstBookable = a.find((row) => row.court.status !== 'maintenance') ?? a[0]
+        if (firstBookable) setCourtId(firstBookable.court.id)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load availability')
     } finally {
@@ -95,7 +107,9 @@ export function MemberBook() {
   }, [user, dateYmd, venueId])
 
   const selectedCourt = avail.find((c) => c.court.id === courtId)
-  const rate = selectedCourt?.court.hourly_rate ?? 0
+  // Members with an active membership pay the court's member rate; players pay the regular rate.
+  const rate = selectedCourt ? courtRateFor(selectedCourt.court, member) : 0
+  const isMember = hasActiveMembership(member)
   const total = rate * hours
 
   const slotOk = (h: number) => {
@@ -275,6 +289,14 @@ export function MemberBook() {
 
         {step === 'pick' ? (
           <>
+            <div className="px-1">
+              <p className="text-body text-slate-600">
+                {isMember ? 'You pay the member rate where a court has one.' : 'You pay the regular rate. Members pay less where a court has a member rate.'}
+              </p>
+              <Link to="/clubs" className="inline-flex min-h-12 items-center font-semibold text-brand-800 underline underline-offset-2">
+                Book at another club
+              </Link>
+            </div>
             {!isDemoMode ? (
               <section className="card border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                 <p className="font-extrabold">Online checkout is not available yet.</p>
@@ -353,30 +375,41 @@ export function MemberBook() {
                 <section className="card p-3 space-y-3">
                   <p className="label px-1">Court</p>
                   <div className="grid grid-cols-2 gap-2">
-                    {avail.map(({ court }) => (
-                      <button
-                        key={court.id}
-                        type="button"
-                        onClick={() => {
-                          setCourtId(court.id)
-                          setStartHour(null)
-                        }}
-                        className={`rounded-xl border px-3 py-3 text-left min-h-14 ${
-                          courtId === court.id
-                            ? 'border-brand-600 bg-brand-50'
-                            : 'border-slate-200 bg-white'
-                        }`}
-                      >
-                        <p className="font-extrabold">{court.name}</p>
-                        <p className="text-xs text-slate-500">{peso(court.hourly_rate)}/hr</p>
-                      </button>
-                    ))}
+                    {avail.map(({ court }) => {
+                      const outOfService = court.status === 'maintenance'
+                      return (
+                        <button
+                          key={court.id}
+                          type="button"
+                          disabled={outOfService}
+                          onClick={() => {
+                            setCourtId(court.id)
+                            setStartHour(null)
+                          }}
+                          className={`rounded-xl border px-3 py-3 text-left min-h-14 ${
+                            outOfService
+                              ? 'border-slate-200 bg-slate-50 text-slate-500'
+                              : courtId === court.id
+                                ? 'border-brand-600 bg-brand-50'
+                                : 'border-slate-200 bg-white'
+                          }`}
+                        >
+                          <p className="font-extrabold">{court.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {outOfService ? 'Out of service' : `${peso(courtRateFor(court, member))}/hr`}
+                          </p>
+                          {!outOfService && !isMember && court.member_rate != null && court.member_rate < court.hourly_rate ? (
+                            <p className="text-xs text-brand-800">Members {peso(court.member_rate)}/hr</p>
+                          ) : null}
+                        </button>
+                      )
+                    })}
                   </div>
                 </section>
 
                 <section className="card p-3">
                   <div className="flex items-center justify-between px-1 mb-2">
-                    <p className="label mb-0">Available times · {fmtDate(dateYmd + 'T12:00:00')}</p>
+                    <p className="label mb-0">Available times · {fmtDate(dateYmd + 'T12:00:00+08:00')}</p>
                     <p className="text-xs font-bold text-brand-700">{peso(total)}</p>
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">

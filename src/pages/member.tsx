@@ -5,6 +5,7 @@ import {
   ChevronRight,
   CreditCard,
   CalendarDays,
+  MapPin,
 } from 'lucide-react'
 import {
   AppHeader,
@@ -57,6 +58,25 @@ export function MemberHome() {
           <LoadingBlock />
         ) : (
           <>
+            {member && !member.membership_type ? (
+              <section className="stat-card">
+                <p className="text-body font-normal text-teal-100">Your membership</p>
+                <p className="text-heading-2 font-semibold mt-1">No membership yet</p>
+                <p className="text-body font-normal text-teal-50 mt-2">
+                  You can book courts here at the regular rate. Members pay the member rate where the club offers one.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-teal-50 font-normal text-body">ID {member.member_code}</span>
+                  <Link
+                    to="/member/pay"
+                    className="control-feedback min-h-12 min-w-28 px-4 rounded-xl bg-white text-brand-800 text-subtitle font-medium inline-flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <CreditCard size={18} aria-hidden />
+                    Become a member
+                  </Link>
+                </div>
+              </section>
+            ) : (
             <section className="stat-card">
               <p className="text-body font-normal text-teal-100">
                 Your membership
@@ -77,7 +97,7 @@ export function MemberHome() {
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <p className="text-body font-normal text-teal-50 flex items-center gap-2">
                   <CalendarDays size={18} aria-hidden /> Valid until{' '}
-                  {member ? fmtDate(member.expiry_date) : '—'}
+                  {member?.expiry_date ? fmtDate(member.expiry_date) : '—'}
                 </p>
                 <Link
                   to="/member/pay"
@@ -89,6 +109,23 @@ export function MemberHome() {
                 </Link>
               </div>
             </section>
+            )}
+
+            <Link
+              to="/clubs"
+              className="control-feedback card p-4 flex items-center gap-3 min-h-[72px]"
+            >
+              <span className="action-tile-icon shrink-0" aria-hidden>
+                <MapPin size={22} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-subtitle font-semibold">Find a court</p>
+                <p className="text-body font-normal text-slate-600">
+                  Browse clubs and book at any of them
+                </p>
+              </div>
+              <ChevronRight className="text-slate-400" size={22} aria-hidden />
+            </Link>
 
             <Link
               to="/member/notifications"
@@ -171,9 +208,10 @@ export function MemberPay() {
     if (!isDemoMode || !user || !member) return
     setBusy(true)
     try {
+      const starting = !member.membership_type
       await api.payMembership(member.id, amount, user.id)
       setMember(await api.memberForUser(user.id))
-      setMsg('Payment recorded. Membership extended 30 days.')
+      setMsg(starting ? 'Payment recorded. Your 30-day membership has started.' : 'Payment recorded. Membership extended 30 days.')
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Payment failed')
     } finally {
@@ -197,8 +235,10 @@ export function MemberPay() {
           <p className="text-heading-1 font-bold text-slate-900 mt-1">
             {peso(amount)}
           </p>
-          <p className="text-body font-normal text-slate-500 mt-2 capitalize">
-            {member?.membership_type ?? '—'} plan · {member?.member_code}
+          <p className="text-body font-normal text-slate-500 mt-2">
+            {member && !member.membership_type
+              ? `New standard membership, 30 days · ${member.member_code}`
+              : <span className="capitalize">{member?.membership_type ?? '—'} plan · {member?.member_code}</span>}
           </p>
         </section>
         {!isDemoMode ? (
@@ -361,7 +401,7 @@ export function MemberProfile() {
         <section className="card p-4 space-y-3 text-body">
           <Row label="Member ID" value={member?.member_code ?? '—'} />
           <Row label="Phone" value={user?.phone || member?.phone || '—'} />
-          <Row label="Plan" value={member?.membership_type ?? '—'} />
+          <Row label="Plan" value={member ? member.membership_type ?? 'No membership (player)' : '—'} />
           <Row label="Status" value={member?.status ?? '—'} />
           <Row
             label="Joined"
@@ -369,11 +409,14 @@ export function MemberProfile() {
           />
           <Row
             label="Expires"
-            value={member ? fmtDate(member.expiry_date) : '—'}
+            value={member?.expiry_date ? fmtDate(member.expiry_date) : '—'}
           />
         </section>
+        <Link to="/clubs" className="btn-secondary">
+          Find a court at another club <ChevronRight size={16} />
+        </Link>
         <Link to="/member/pay" className="btn-secondary">
-          Renew membership <ChevronRight size={16} />
+          {member && !member.membership_type ? 'Become a member' : 'Renew membership'} <ChevronRight size={16} />
         </Link>
         <section className="border-t border-slate-200 pt-4">
           <p className="text-body text-slate-600 mb-2">Finished for now?</p>

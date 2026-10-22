@@ -289,7 +289,7 @@ describe('demo club membership', () => {
     expect(memberships.map((row) => row.club_id).sort()).toEqual([DEMO_CLUB_ID, DEMO_DAVAO_CLUB_ID].sort())
     const davaoMembership = memberships.find((row) => row.club_id === DEMO_DAVAO_CLUB_ID)!
     expect(davaoMembership).toMatchObject({ status: 'active', membership_type: 'standard' })
-    const days = (Date.parse(davaoMembership.expiry_date) - Date.parse(davaoMembership.join_date)) / 86400000
+    const days = (Date.parse(davaoMembership.expiry_date ?? '') - Date.parse(davaoMembership.join_date)) / 86400000
     expect(Math.round(days)).toBe(30)
 
     expect(() => demoStore.joinClub(joiner.id, 'no-such-club')).toThrow('This club link is not valid')

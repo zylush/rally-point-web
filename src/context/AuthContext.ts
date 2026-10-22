@@ -11,8 +11,11 @@ interface AuthState {
   activeClub: MyClub | null
   /** Switch to another of the person's clubs. Their role follows the club. */
   switchClub: (clubId: string) => void
-  /** Join another club through its link while signed in; returns that club. */
-  joinClub: (slug: string) => Promise<MyClub>
+  /**
+   * Join another club while signed in and switch to it; returns that club.
+   * With `asPlayer`, the person joins with no membership (to book from "Find a court").
+   */
+  joinClub: (slug: string, options?: { asPlayer?: boolean }) => Promise<MyClub>
   signIn: (email: string, password: string) => Promise<Profile>
   /** Public join — always creates a member (never admin/staff). */
   signUpMember: (input: {

@@ -1,4 +1,6 @@
-import type { MyClub, Profile, PublicClub, StaffVenueGrant, Venue } from '../types'
+import type {
+  Court, CourtInput, MyClub, Profile, PublicClub, PublicClubDetail, PublicClubListing, StaffVenueGrant, Venue,
+} from '../types'
 import { daysFromNow, todayISO, uid } from './demo/common'
 import { getDemoPassword, normalizeDemoEmail, resetDemoPasswords, setDemoPassword } from './demo/credentials'
 import type { DemoDB } from './demo/model'
@@ -16,6 +18,36 @@ import { inquiryOperations } from './demo/inquiries'
 import { platformOperations } from './demo/platform'
 
 export type { DemoDB } from './demo/model'
+
+/** Active club whose account is active too (not still being set up). Mirrors the public directory rules. */
+function bookableClubBySlug(db: DemoDB, slug: string) {
+  const club = activeClubBySlug(db, slug)
+  if (!club) return undefined
+  const account = db.clubAccounts.find((row) => row.club_id === club.id)
+  return !account || account.status === 'active' ? club : undefined
+}
+
+/** A player record with no membership, as public.join_club_as_player creates. */
+function addPlayer(db: DemoDB, clubId: string, profile: Profile) {
+  if (db.members.some((member) => member.club_id === clubId && member.user_id === profile.id)) return false
+  db.members.push({
+    id: uid('mem'),
+    club_id: clubId,
+    user_id: profile.id,
+    member_code: nextMemberCode(db, clubId),
+    full_name: profile.full_name,
+    email: profile.email,
+    phone: profile.phone ?? null,
+    membership_type: null,
+    status: 'active',
+    join_date: new Date().toISOString().slice(0, 10),
+    expiry_date: null,
+    notes: null,
+    qr_token: `q_${Math.random().toString(36).slice(2, 10)}`,
+    created_at: todayISO(),
+  })
+  return true
+}
 
 /** A 30-day active membership: the terms every sign-up and club join gets. Repeating it changes nothing. */
 function addMembership(db: DemoDB, clubId: string, profile: Profile) {
@@ -137,6 +169,74 @@ export const demoStore = {
     if (addMembership(db, club.id, profile)) save(db)
     return club.id
   },
+  /** Mirrors public.join_club_as_player: a player with no membership. An existing record is kept as it is. */
+  joinClubAsPlayer(userId: string, slug: string): string {
+    const db = load()
+    if (isPlatformSuperadmin(db, userId)) throw new Error('Platform accounts cannot book courts')
+    const club = bookableClubBySlug(db, slug)
+    if (!club) throw new Error('This club is not taking bookings')
+    const profile = db.profiles.find((p) => p.id === userId)
+    if (!profile) throw new Error('Your profile is not ready yet')
+    if (addPlayer(db, club.id, profile)) save(db)
+    return club.id
+  },
+  /** Mirrors public.list_public_clubs: active clubs with an active venue; rates from in-service courts. */
+  publicClubs(): PublicClubListing[] {
+    const db = load()
+    return db.clubs
+      .filter((club) => bookableClubBySlug(db, club.slug))
+      .filter((club) => db.venues.some((venue) => venue.club_id === club.id && venue.is_active))
+      .map((club) => {
+        const account = db.clubAccounts.find((row) => row.club_id === club.id)
+        const activeVenueIds = new Set(db.venues.filter((v) => v.club_id === club.id && v.is_active).map((v) => v.id))
+        const courts = db.courts.filter((court) =>
+          court.club_id === club.id && court.venue_id && activeVenueIds.has(court.venue_id) && court.status !== 'maintenance')
+        const min = (values: number[]) => values.length ? Math.min(...values) : null
+        return {
+          slug: club.slug,
+          name: club.name,
+          city: account?.city ?? null,
+          address: account?.address ?? null,
+          venue_count: activeVenueIds.size,
+          court_count: courts.length,
+          min_rate: min(courts.map((court) => court.hourly_rate)),
+          min_member_rate: min(courts.map((court) => court.member_rate ?? court.hourly_rate)),
+        }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  },
+  /** Mirrors public.get_public_club_detail: venues and courts only, never member details. */
+  publicClubDetail(slug: string): PublicClubDetail | null {
+    const db = load()
+    const club = bookableClubBySlug(db, slug)
+    if (!club) return null
+    const account = db.clubAccounts.find((row) => row.club_id === club.id)
+    return {
+      slug: club.slug,
+      name: club.name,
+      city: account?.city ?? null,
+      address: account?.address ?? null,
+      venues: db.venues
+        .filter((venue) => venue.club_id === club.id && venue.is_active)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((venue) => ({
+          id: venue.id,
+          name: venue.name,
+          open_hour: venue.open_hour,
+          close_hour: venue.close_hour,
+          courts: db.courts
+            .filter((court) => court.club_id === club.id && court.venue_id === venue.id)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((court) => ({
+              id: court.id,
+              name: court.name,
+              hourly_rate: court.hourly_rate,
+              member_rate: court.member_rate ?? null,
+              in_service: court.status !== 'maintenance',
+            })),
+        })),
+    }
+  },
   tenantContext(userId?: string, role?: Profile['role']) {
     const db = load()
     const resolvedUserId = userId ?? db.sessionUserId ?? undefined
@@ -202,6 +302,64 @@ export const demoStore = {
     else db.venues.push(venue)
     save(db)
     return venue
+  },
+  /** Mirrors public.admin_upsert_court: same checks and messages. Courts are never deleted. */
+  upsertCourt(input: CourtInput): Court {
+    const db = load()
+    const clubId = activeClubId(db)
+    const name = input.name.trim()
+    if (name.length < 1 || name.length > 40) throw new Error('Court name must be 1 to 40 characters')
+    const rate = input.hourly_rate
+    // Compare with a tolerance: 500.1 * 100 is not exactly 50010 in floating point.
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100000 || Math.abs(Math.round(rate * 100) - rate * 100) > 1e-6) {
+      throw new Error('Hourly rate must be between 0 and 100,000 pesos')
+    }
+    const memberRate = input.member_rate ?? null
+    if (memberRate != null && (!Number.isFinite(memberRate) || memberRate < 0 || memberRate > rate
+      || Math.abs(Math.round(memberRate * 100) - memberRate * 100) > 1e-6)) {
+      throw new Error('Member rate must be between 0 and the regular rate')
+    }
+    const current = input.id ? db.courts.find((court) => court.id === input.id && court.club_id === clubId) : undefined
+    if (input.id) {
+      if (!current) throw new Error('court not found')
+      if (input.venue_id !== current.venue_id) throw new Error('A court cannot move to another venue')
+      const inUse = current.status === 'occupied'
+        || db.sessions.some((session) => session.court_id === current.id && session.status === 'playing')
+      if (!input.in_service && current.status !== 'maintenance' && inUse) {
+        throw new Error('This court is in use. Take it out of service after the session ends.')
+      }
+    } else if (!db.venues.some((venue) => venue.id === input.venue_id && venue.club_id === clubId)) {
+      throw new Error('venue not found')
+    }
+    const duplicate = db.courts.some((court) =>
+      court.club_id === clubId
+      && court.venue_id === input.venue_id
+      && court.name.toLowerCase() === name.toLowerCase()
+      && court.id !== input.id)
+    if (duplicate) throw new Error('This venue already has a court with that name')
+
+    if (current) {
+      current.name = name
+      current.hourly_rate = rate
+      current.member_rate = memberRate
+      // Putting a court back in service never overrides 'occupied'.
+      if (!input.in_service) current.status = 'maintenance'
+      else if (current.status === 'maintenance') current.status = 'available'
+      save(db)
+      return { ...current }
+    }
+    const court: Court = {
+      id: uid('court'),
+      club_id: clubId,
+      venue_id: input.venue_id,
+      name,
+      status: input.in_service ? 'available' : 'maintenance',
+      hourly_rate: rate,
+      member_rate: memberRate,
+    }
+    db.courts.push(court)
+    save(db)
+    return { ...court }
   },
   setStaffVenueGrant(userId: string, venueId: string, isActive: boolean): StaffVenueGrant {
     const db = load()

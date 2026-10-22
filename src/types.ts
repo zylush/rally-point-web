@@ -199,10 +199,11 @@ export interface Member {
   full_name: string
   email?: string | null
   phone?: string | null
-  membership_type: MembershipType
+  /** NULL for a player with no membership at this club; set together with expiry_date. */
+  membership_type: MembershipType | null
   status: MemberStatus
   join_date: string
-  expiry_date: string
+  expiry_date: string | null
   notes?: string | null
   qr_token?: string | null
   created_at: string
@@ -215,6 +216,58 @@ export interface Court {
   name: string
   status: CourtStatus
   hourly_rate: number
+  /** Lower price for players with an active membership; NULL means the regular rate. */
+  member_rate?: number | null
+}
+
+/** What an admin sends to add or edit a court. Out of service is the 'maintenance' status. */
+export interface CourtInput {
+  id?: string
+  venue_id: string
+  name: string
+  hourly_rate: number
+  /** Optional lower member price; null or omitted means members pay the regular rate. */
+  member_rate?: number | null
+  in_service: boolean
+}
+
+/** One club in the public "Find a court" list. */
+export interface PublicClubListing {
+  slug: string
+  name: string
+  city: string | null
+  address: string | null
+  venue_count: number
+  court_count: number
+  min_rate: number | null
+  min_member_rate: number | null
+}
+
+/** A club's public page: its active venues and their courts. */
+export interface PublicClubDetail {
+  slug: string
+  name: string
+  city: string | null
+  address: string | null
+  venues: {
+    id: string
+    name: string
+    open_hour: number
+    close_hour: number
+    courts: { id: string; name: string; hourly_rate: number; member_rate: number | null; in_service: boolean }[]
+  }[]
+}
+
+/** A membership counts when it has a plan, is active, and has not expired. Players have no plan. */
+export function hasActiveMembership(member: Pick<Member, 'membership_type' | 'status' | 'expiry_date'> | null | undefined, today = new Date()) {
+  if (!member?.membership_type || !member.expiry_date || member.status !== 'active') return false
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  return member.expiry_date.slice(0, 10) >= todayYmd
+}
+
+/** The hourly price this person pays for a court: the member rate only with an active membership. */
+export function courtRateFor(court: Pick<Court, 'hourly_rate' | 'member_rate'>, member: Parameters<typeof hasActiveMembership>[0]) {
+  return hasActiveMembership(member) && court.member_rate != null ? court.member_rate : court.hourly_rate
 }
 
 export interface CourtSessionPlayer {

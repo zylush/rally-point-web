@@ -34,6 +34,7 @@ import { SuperadminPage } from './pages/Superadmin'
 import { JoinClubPage } from './pages/JoinClub'
 import { homeFor } from './lib/roleHome'
 import { PrivacyNoticePage } from './pages/PrivacyNoticePage'
+import { ClubDetailPage, ClubDirectory } from './pages/Clubs'
 
 function Protected({ roles }: { roles?: Role[] }) {
   const { user, loading } = useAuth()
@@ -70,6 +71,9 @@ function AppRoutes() {
       <Routes key={activeClub?.club_id ?? 'no-club'}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyNoticePage />} />
+        {/* Find a court: open to visitors; booking asks them to sign in. */}
+        <Route path="/clubs" element={<ClubDirectory />} />
+        <Route path="/clubs/:slug" element={<ClubDetailPage />} />
         <Route path="/" element={<RootRedirect />} />
         {/* Club join links: sign up, or join while signed in */}
         <Route path="/join/:slug" element={<JoinClubPage />} />

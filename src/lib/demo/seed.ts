@@ -117,8 +117,8 @@ export function seed(): DemoDB {
   const courts: Court[] = [
     { id: 'court_1', name: 'Court A', status: 'occupied', hourly_rate: 500 },
     { id: 'court_2', name: 'Court B', status: 'available', hourly_rate: 500 },
-    { id: 'court_3', name: 'Court C', status: 'occupied', hourly_rate: 650 },
-    { id: 'court_4', name: 'Court D', status: 'available', hourly_rate: 650 },
+    { id: 'court_3', name: 'Court C', status: 'occupied', hourly_rate: 650, member_rate: 550 },
+    { id: 'court_4', name: 'Court D', status: 'available', hourly_rate: 650, member_rate: 550 },
   ]
 
   const now = Date.now()
@@ -327,8 +327,8 @@ export function seed(): DemoDB {
     is_active: true,
   }
   const davaoCourts: Court[] = [
-    { id: 'court_davao_1', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 1', status: 'available', hourly_rate: 450 },
-    { id: 'court_davao_2', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 2', status: 'available', hourly_rate: 450 },
+    { id: 'court_davao_1', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 1', status: 'available', hourly_rate: 450, member_rate: 400 },
+    { id: 'court_davao_2', club_id: DEMO_DAVAO_CLUB_ID, venue_id: DEMO_DAVAO_VENUE_ID, name: 'Davao Court 2', status: 'available', hourly_rate: 450, member_rate: 400 },
   ]
   // Mia belongs to both clubs: each membership is owned by its club and has its own code.
   const davaoMembers: Member[] = [

@@ -71,10 +71,12 @@ export const ledgerOperations = {
     const db = load()
     const m = db.members.find((x) => x.id === memberId)
     if (!m) throw new Error('Member not found')
-    const exp = new Date(m.expiry_date)
+    // A player with no membership starts a standard one; a member extends theirs.
+    const exp = m.expiry_date ? new Date(m.expiry_date) : new Date()
     if (exp < new Date()) exp.setTime(Date.now())
     exp.setDate(exp.getDate() + 30)
     m.expiry_date = exp.toISOString().slice(0, 10)
+    m.membership_type = m.membership_type ?? 'standard'
     m.status = 'active'
     recordTransaction(db, {
       id: uid('tx'),

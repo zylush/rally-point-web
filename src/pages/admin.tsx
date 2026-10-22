@@ -77,7 +77,7 @@ export function AdminHome() {
                             Users
                           </Link>
                           <Link to="/admin/venues" className="btn-secondary text-sm">
-                            Venues & access
+                            Venues & courts
                           </Link>
                         </div>
 
@@ -179,7 +179,7 @@ export function AdminMembers() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{m.full_name}</p>
                   <p className="text-xs text-slate-400">
-                    {m.member_code} · <span className="capitalize">{m.membership_type}</span>
+                    {m.member_code} · <span className="capitalize">{m.membership_type ?? 'Player, no membership'}</span>
                   </p>
                 </div>
                 <span className={`pill ${m.status === 'active' ? 'pill-ok' : 'pill-warn'}`}>{m.status}</span>
@@ -204,6 +204,7 @@ export function AdminMemberForm() {
   const [status, setStatus] = useState<MemberStatus>('active')
   const [expiry, setExpiry] = useState('')
   const [notes, setNotes] = useState('')
+  const [isPlayer, setIsPlayer] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -218,9 +219,11 @@ export function AdminMemberForm() {
       setFullName(m.full_name)
       setEmail(m.email ?? '')
       setPhone(m.phone ?? '')
-      setType(m.membership_type)
+      // A player has no plan yet; saving this form with a plan makes them a member.
+      setIsPlayer(!m.membership_type)
+      setType(m.membership_type ?? 'standard')
       setStatus(m.status)
-      setExpiry(m.expiry_date)
+      setExpiry(m.expiry_date ?? '')
       setNotes(m.notes ?? '')
       setLoading(false)
     })
@@ -275,6 +278,11 @@ export function AdminMemberForm() {
             </div>
             <div>
               <label className="label">Membership type</label>
+              {isPlayer ? (
+                <p className="text-sm text-amber-800 mb-2" role="note">
+                  This player has no membership yet. Saving gives them the plan you choose here.
+                </p>
+              ) : null}
               <select className="input" value={type} onChange={(e) => setType(e.target.value as MembershipType)}>
                 <option value="basic">Basic</option>
                 <option value="standard">Standard</option>

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   Camera,
@@ -94,8 +94,12 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   // Keep the join link's club, so returning from the notice still signs up into it.
   const privacyPath = privacyNoticePath(joinClub?.slug)
   const privacyState: PrivacyNoticeState = { from: joinClub ? `/join/${joinClub.slug}` : '/login' }
+  // A club page sends visitors here to sign in, then expects them back to finish booking.
+  const location = useLocation()
+  const requested = (location.state as { returnTo?: unknown } | null)?.returnTo
+  const returnTo = typeof requested === 'string' && requested.startsWith('/clubs/') ? requested : null
 
-  if (!loading && user) return <Navigate to={homeFor(user.role)} replace />
+  if (!loading && user) return <Navigate to={returnTo ?? homeFor(user.role)} replace />
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -111,14 +115,14 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
           phone: phone || undefined,
           clubSlug: joinClub?.slug,
         })
-        nav(homeFor(profile.role), { replace: true })
+        nav(returnTo ?? homeFor(profile.role), { replace: true })
       } else if (mode === 'reset') {
         await resetPassword(email)
         setResetSuccess(true)
       } else {
         const profile = await signIn(email, password)
         // From a join link, existing players come back to confirm joining the club.
-        nav(joinClub ? `/join/${joinClub.slug}` : homeFor(profile.role), { replace: true })
+        nav(joinClub ? `/join/${joinClub.slug}` : returnTo ?? homeFor(profile.role), { replace: true })
       }
     } catch (err) {
       setError(authenticationErrorMessage(mode, err))
@@ -517,7 +521,13 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
                 Social links will be added when the official pages are confirmed.
               </p>
             </section>
-            <p className="mt-4 border-t border-slate-200 pt-3 text-center text-sm text-slate-600">
+            <p className="mt-4 border-t border-slate-200 pt-3 text-center text-sm text-slate-600 flex flex-wrap justify-center gap-x-6">
+              <Link
+                className="inline-flex min-h-12 items-center font-semibold text-brand-800 underline underline-offset-2"
+                to="/clubs"
+              >
+                Find a court near you
+              </Link>
               <Link
                 className="inline-flex min-h-12 items-center font-semibold text-brand-800 underline underline-offset-2"
                 to={privacyPath}

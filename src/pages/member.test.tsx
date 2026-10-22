@@ -216,6 +216,21 @@ describe('MemberHome renewal action', () => {
     expect(await screen.findByText('Renewal checkout')).toBeInTheDocument()
   })
 
+  it('offers a player with no membership a way to become a member, and a way to find courts', async () => {
+    vi.mocked(api.memberForUser).mockResolvedValue({ ...membership, membership_type: null, expiry_date: null })
+    render(
+      <MemoryRouter initialEntries={['/member']}>
+        <MemberHome />
+      </MemoryRouter>,
+    )
+
+    const card = (await screen.findByText('No membership yet')).closest('section')!
+    expect(within(card).getByText(/You can book courts here at the regular rate/)).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: /Become a member/ })).toHaveAttribute('href', '/member/pay')
+    expect(screen.queryByText(/Valid until/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Find a court/ })).toHaveAttribute('href', '/clubs')
+  })
+
   it('does not display redundant quick actions on member home', async () => {
     render(
       <MemoryRouter initialEntries={['/member']}>

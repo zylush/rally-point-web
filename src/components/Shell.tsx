@@ -77,7 +77,8 @@ const superadminTabs = [
   { to: '/superadmin/help', label: 'Help', icon: HelpCircle },
 ]
 
-const clubRoleLabel: Record<ClubRole, string> = { member: 'Member', staff: 'Staff', admin: 'Admin' }
+// "Player" covers everyone who books at a club, with or without a membership.
+const clubRoleLabel: Record<ClubRole, string> = { member: 'Player', staff: 'Staff', admin: 'Admin' }
 
 /**
  * Lets someone who belongs to several clubs move between them. Hidden for

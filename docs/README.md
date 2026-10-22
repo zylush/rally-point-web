@@ -18,7 +18,7 @@ Start with the repository [README](../README.md) for setup and product overview.
 
 ## Handoffs
 
-- [Multi-tenant SaaS and superadmin handoff](../RALLY-POINT-TENANCY-HANDOFF.pdf): PR #3's handoff (2026-10-14) for branches, the superadmin portal, and the commission ledger. It is history now: on 2026-10-17 its branches became clubs on the club and venue model, and its migration was replaced. The [Claude Code guide](../CLAUDE.md) has the current state. It is not release approval.
+- Multi-tenant SaaS and superadmin handoff (removed from the working tree; read it with `git show 1f21c92:RALLY-POINT-TENANCY-HANDOFF.pdf > handoff.pdf`): PR #3's handoff (2026-10-14) for branches, the superadmin portal, and the commission ledger. It is history now: on 2026-10-17 its branches became clubs on the club and venue model, and its migration was replaced. The [Claude Code guide](../CLAUDE.md) has the current state. It is not release approval.
 
 ## Local-only references and evidence
 

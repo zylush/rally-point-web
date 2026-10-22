@@ -15,6 +15,9 @@ const memberUser = {
   created_at: '2026-01-01T00:00:00.000Z',
 } satisfies Profile
 let currentMemberUser: Profile = memberUser
+const auth = vi.hoisted(() => ({
+  signOut: vi.fn(),
+}))
 
 const membership = {
   id: 'member-1',
@@ -39,7 +42,7 @@ vi.mock('../context/AuthContext', () => ({
     demo: true,
     signIn: vi.fn(),
     signUpMember: vi.fn(),
-    signOut: vi.fn(),
+    signOut: auth.signOut,
     refresh: vi.fn(),
   }),
 }))
@@ -270,6 +273,7 @@ describe('Member account details', () => {
   beforeEach(() => {
     vi.mocked(api.memberForUser).mockResolvedValue(membership)
     vi.mocked(api.transactions).mockResolvedValue([])
+    auth.signOut.mockReset()
   })
 
   it('shows a member profile with the membership fallback phone', async () => {
@@ -279,6 +283,37 @@ describe('Member account details', () => {
     expect(await screen.findByText('RP-001')).toBeInTheDocument()
     expect(screen.getByText('09171234567')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Renew membership/ })).toHaveAttribute('href', '/member/pay')
+  })
+
+  it('requires confirmation before signing out and lets the member cancel', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><MemberProfile /></MemoryRouter>)
+
+    await screen.findByText('RP-001')
+    const profile = screen.getByRole('main')
+    const trigger = within(profile).getByRole('button', { name: 'Log out' })
+    await user.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: 'Log out?' })
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(auth.signOut).not.toHaveBeenCalled()
+
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(within(dialog).getByRole('button', { name: 'Log out' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+    expect(auth.signOut).not.toHaveBeenCalled()
+
+    await user.click(trigger)
+    const reopenedDialog = screen.getByRole('dialog', { name: 'Log out?' })
+    await user.click(within(reopenedDialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(auth.signOut).not.toHaveBeenCalled()
+
+    await user.click(trigger)
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Log out' }))
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
   })
 
   it('renders transaction descriptions, types, and amounts', async () => {

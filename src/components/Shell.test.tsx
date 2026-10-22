@@ -1,14 +1,16 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MyClub, Role } from '../types'
-import { AppHeader, AppShell, BottomNav, ClubSwitcher } from './Shell'
+import { AppHeader, AppShell, BottomNav, ClubSwitcher, SideNav, SignOutButton } from './Shell'
 
 const auth = vi.hoisted(() => ({
   clubs: [] as MyClub[],
   activeClub: null as MyClub | null,
   switchClub: vi.fn(),
+  signOut: vi.fn(),
+  role: 'member' as Role,
 }))
 
 vi.mock('../context/AuthContext', () => ({
@@ -16,8 +18,9 @@ vi.mock('../context/AuthContext', () => ({
     user: {
       email: 'member@rallypoint.local',
       full_name: 'Demo Member',
+      role: auth.role,
     },
-    signOut: vi.fn(),
+    signOut: auth.signOut,
     clubs: auth.clubs,
     activeClub: auth.activeClub,
     switchClub: auth.switchClub,
@@ -31,6 +34,8 @@ beforeEach(() => {
   auth.clubs = []
   auth.activeClub = null
   auth.switchClub.mockClear()
+  auth.signOut.mockReset()
+  auth.role = 'member'
 })
 
 const roleLinks: Record<Role, Array<[label: string, href: string]>> = {
@@ -63,6 +68,7 @@ const roleLinks: Record<Role, Array<[label: string, href: string]>> = {
     ['Overview', '/superadmin'],
     ['Clubs', '/superadmin/clubs'],
     ['Ledger', '/superadmin/ledger'],
+    ['Help', '/superadmin/help'],
   ],
 }
 
@@ -160,6 +166,77 @@ describe('ClubSwitcher', () => {
 })
 
 describe('AppShell', () => {
+  it('keeps member logout out of the mobile header but confirms staff logout', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <div className="app-shell">
+        <div className="app-shell-desktop">
+          <MemoryRouter>
+            <AppHeader title="Member home" right={<SignOutButton />} />
+          </MemoryRouter>
+        </div>
+      </div>,
+    )
+    expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument()
+
+    auth.role = 'staff'
+    rerender(
+      <div className="app-shell">
+        <div className="app-shell-desktop">
+          <MemoryRouter>
+            <AppHeader title="Staff home" right={<SignOutButton />} />
+          </MemoryRouter>
+        </div>
+      </div>,
+    )
+    const logout = screen.getByRole('button', { name: 'Log out' })
+    await user.click(logout)
+    const dialog = screen.getByRole('dialog', { name: 'Log out?' })
+    expect(dialog).toBeInTheDocument()
+    expect(dialog.parentElement?.parentElement).toBe(document.body)
+    expect(document.querySelector('.app-shell')?.contains(dialog)).toBe(false)
+    expect(auth.signOut).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(logout).toHaveFocus()
+
+    await user.click(logout)
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Log out' }))
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('confirms logout from the desktop sidebar and supports Escape cancellation', async () => {
+    const user = userEvent.setup()
+    auth.role = 'admin'
+    render(
+      <div className="app-shell">
+        <MemoryRouter>
+          <SideNav role="admin" />
+        </MemoryRouter>
+      </div>,
+    )
+
+    const logout = screen.getByRole('button', { name: 'Log out' })
+    await user.click(logout)
+    const dialog = screen.getByRole('dialog', { name: 'Log out?' })
+    expect(dialog.parentElement?.parentElement).toBe(document.body)
+    expect(document.querySelector('.app-shell')?.contains(dialog)).toBe(false)
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(auth.signOut).not.toHaveBeenCalled()
+
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(within(dialog).getByRole('button', { name: 'Log out' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(logout).toHaveFocus()
+    expect(auth.signOut).not.toHaveBeenCalled()
+
+    await user.click(logout)
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Log out' }))
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
+  })
+
   it('shares a centered content rail while preserving both navigation variants', () => {
     const { container } = render(
       <MemoryRouter>
@@ -202,5 +279,60 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(screen.getByText('Rally Point Gensan')).toBeInTheDocument()
+  })
+})
+
+describe('Log out confirmation', () => {
+  function renderSideNavLogout() {
+    auth.role = 'admin'
+    render(
+      <div className="app-shell">
+        <MemoryRouter>
+          <SideNav role="admin" />
+        </MemoryRouter>
+      </div>,
+    )
+    return screen.getByRole('button', { name: 'Log out' })
+  }
+
+  it('shows a message when logging out fails and starts only one log out at a time', async () => {
+    const user = userEvent.setup()
+    let failSignOut: (error: Error) => void = () => {}
+    auth.signOut.mockImplementation(
+      () => new Promise<void>((_resolve, reject) => { failSignOut = reject }),
+    )
+    await user.click(renderSideNavLogout())
+    const dialog = screen.getByRole('dialog', { name: 'Log out?' })
+    const confirm = within(dialog).getByRole('button', { name: 'Log out' })
+
+    await user.click(confirm)
+    expect(within(dialog).getByRole('button', { name: 'Logging out…' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Logging out…' }))
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
+
+    await act(async () => failSignOut(new Error('Network down')))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('We could not log you out.')
+    expect(within(dialog).getByRole('button', { name: 'Log out' })).toBeEnabled()
+  })
+
+  it('cancels on a backdrop tap and keeps Tab inside the dialog', async () => {
+    const user = userEvent.setup()
+    const logout = renderSideNavLogout()
+    await user.click(logout)
+    const dialog = screen.getByRole('dialog', { name: 'Log out?' })
+
+    // Focus lands outside the dialog (as after a click on the page); Tab brings it back.
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    expect(dialog.contains(document.activeElement)).toBe(false)
+    await user.keyboard('{Tab}')
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+
+    const backdrop = dialog.parentElement
+    if (!backdrop) throw new Error('Expected the dialog backdrop')
+    await user.click(backdrop)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(logout).toHaveFocus()
+    expect(auth.signOut).not.toHaveBeenCalled()
   })
 })

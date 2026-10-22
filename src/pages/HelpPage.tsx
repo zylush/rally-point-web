@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { HelpCircle, Mail, Phone, RefreshCw, Send } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
 import { AppHeader, AppShell, SignOutButton, Toast } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { helpFaqs } from '../lib/helpContent'
+import { signedInHelpFaqs } from '../lib/helpContent'
+import type { PrivacyNoticeState } from '../lib/privacyNotice'
 import type { InquiryCategory, InquiryStatus, Notification, Role, SupportInquiry } from '../types'
 import { fmtDateTime } from '../types'
+
+type HelpToast = { message: string; type: 'success' | 'error' }
 
 const contacts: Record<Role, { title: string; body: string; email: string; phone: string }> = {
   member: {
@@ -44,9 +48,11 @@ export function HelpPage() {
   const { user } = useAuth()
   const role = user?.role ?? 'member'
   const contact = contacts[role]
+  const canUseInquiries = role === 'staff' || role === 'admin'
   const [inquiries, setInquiries] = useState<SupportInquiry[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [loadingInquiries, setLoadingInquiries] = useState(role !== 'member')
+  const [loadingInquiries, setLoadingInquiries] = useState(false)
+  const [hasLoadedInquiries, setHasLoadedInquiries] = useState(false)
   const [loadingError, setLoadingError] = useState<string | null>(null)
   const [category, setCategory] = useState<InquiryCategory>('booking')
   const [subject, setSubject] = useState('')
@@ -55,10 +61,50 @@ export function HelpPage() {
   const [savingInquiryId, setSavingInquiryId] = useState<string | null>(null)
   const [readingNotificationId, setReadingNotificationId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | InquiryStatus>('all')
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<HelpToast | null>(null)
+  const [toastFadingOut, setToastFadingOut] = useState(false)
+  const loadingInquiriesRef = useRef(false)
+  const hasLoadedInquiriesRef = useRef(false)
+  const inquiryRequestRef = useRef(0)
+  const location = useLocation()
 
-  const loadInquiries = useCallback(async () => {
-    if (!user || role === 'member') return
+  useEffect(() => {
+    setToastFadingOut(false)
+    if (!toast || toast.type === 'error') return
+
+    const fadeTimer = window.setTimeout(() => setToastFadingOut(true), 4000)
+    const dismissTimer = window.setTimeout(() => setToast(null), 4300)
+    return () => {
+      window.clearTimeout(fadeTimer)
+      window.clearTimeout(dismissTimer)
+    }
+  }, [toast])
+
+  // Staff see the unread-update count before opening "Your inquiries".
+  // A failure here only hides the count; opening the section loads and reports errors.
+  useEffect(() => {
+    if (!user || role !== 'staff') return
+    let cancelled = false
+    api
+      .notifications(user.id)
+      .then((updates) => {
+        if (!cancelled && !hasLoadedInquiriesRef.current) {
+          setNotifications(updates.filter((notification) => notification.title === 'Inquiry update'))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [role, user])
+
+  // A forced load (Refresh, or after a save) always runs; only the newest load's result is kept.
+  const loadInquiries = useCallback(async (force = false) => {
+    if (!user || !canUseInquiries) return
+    if (!force && (loadingInquiriesRef.current || hasLoadedInquiriesRef.current)) return
+    const request = ++inquiryRequestRef.current
+    const isLatest = () => request === inquiryRequestRef.current
+    loadingInquiriesRef.current = true
     setLoadingInquiries(true)
     setLoadingError(null)
     try {
@@ -66,22 +112,25 @@ export function HelpPage() {
         api.inquiries(user.id, role),
         role === 'staff' ? api.notifications(user.id) : Promise.resolve([]),
       ])
+      if (!isLatest()) return
       setInquiries(rows)
       setNotifications(updates.filter((notification) => notification.title === 'Inquiry update'))
+      hasLoadedInquiriesRef.current = true
+      setHasLoadedInquiries(true)
     } catch (error) {
+      if (!isLatest()) return
       setLoadingError(error instanceof Error ? error.message : 'Unable to load inquiries.')
     } finally {
-      setLoadingInquiries(false)
+      if (isLatest()) {
+        loadingInquiriesRef.current = false
+        setLoadingInquiries(false)
+      }
     }
-  }, [role, user])
-
-  useEffect(() => {
-    void loadInquiries()
-  }, [loadInquiries])
+  }, [canUseInquiries, role, user])
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!user || !subject.trim() || !message.trim()) return
+    if (!user || !canUseInquiries || !subject.trim() || !message.trim()) return
     setSaving(true)
     setToast(null)
     try {
@@ -93,10 +142,13 @@ export function HelpPage() {
       })
       setSubject('')
       setMessage('')
-      await loadInquiries()
-      setToast('Your inquiry was sent. The team will follow up.')
+      if (hasLoadedInquiriesRef.current || loadingInquiriesRef.current) await loadInquiries(true)
+      setToast({ message: 'Your inquiry was sent. The team will follow up.', type: 'success' })
     } catch (error) {
-      setToast(error instanceof Error ? error.message : 'Unable to send your inquiry.')
+      setToast({
+        message: error instanceof Error ? error.message : 'Unable to send your inquiry.',
+        type: 'error',
+      })
     } finally {
       setSaving(false)
     }
@@ -111,10 +163,13 @@ export function HelpPage() {
     setToast(null)
     try {
       await api.updateInquiry(input)
-      await loadInquiries()
-      setToast('Inquiry update saved. Staff will see the update in Help.')
+      await loadInquiries(true)
+      setToast({ message: 'Inquiry update saved. Staff will see the update in Help.', type: 'success' })
     } catch (error) {
-      setToast(error instanceof Error ? error.message : 'Unable to update this inquiry.')
+      setToast({
+        message: error instanceof Error ? error.message : 'Unable to update this inquiry.',
+        type: 'error',
+      })
     } finally {
       setSavingInquiryId(null)
     }
@@ -129,46 +184,50 @@ export function HelpPage() {
         current.map((row) => row.id === notification.id ? { ...row, read: true } : row),
       )
     } catch (error) {
-      setToast(error instanceof Error ? error.message : 'Unable to mark this update as read.')
+      setToast({
+        message: error instanceof Error ? error.message : 'Unable to mark this update as read.',
+        type: 'error',
+      })
     } finally {
       setReadingNotificationId(null)
     }
   }
 
+  const unreadUpdateCount = notifications.filter((notification) => !notification.read).length
+  const openInquiryCount = inquiries.filter((inquiry) => inquiry.status === 'open').length
+
   return (
     <AppShell role={role}>
       <AppHeader title="Help" subtitle="Answers and a direct line to the team" right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-4 space-y-4">
-        <section className="card p-4">
-          <div className="flex items-start gap-3">
-            <HelpCircle className="text-brand-700 shrink-0 mt-0.5" size={24} aria-hidden />
-            <div>
-              <h2 className="text-title font-bold text-slate-900">Frequently asked questions</h2>
-              <p className="text-body text-slate-600 mt-1">Quick answers for common club questions.</p>
-            </div>
-          </div>
+        <details className="card p-4">
+          <summary className="cursor-pointer min-h-12 flex items-center gap-3">
+            <HelpCircle className="text-brand-700 shrink-0" size={24} aria-hidden />
+            <span className="block">
+              <span role="heading" aria-level={2} className="block text-title font-bold text-slate-900">Quick answers</span>
+              <span className="block text-body text-slate-600 mt-1">Answers for {role === 'member' ? 'members' : role === 'staff' ? 'Staff' : role === 'admin' ? 'Admins' : 'platform operations'}.</span>
+            </span>
+          </summary>
           <div className="mt-3 divide-y divide-slate-200">
-            {helpFaqs.map(({ question, answer }) => (
+            {signedInHelpFaqs[role].map(({ question, answer, action }) => (
               <details key={question} className="py-3">
                 <summary className="cursor-pointer min-h-12 flex items-center text-subtitle font-semibold text-slate-800">{question}</summary>
                 <p className="text-body text-slate-600 pb-1">{answer}</p>
+                {action ? (
+                  <Link className="mt-2 inline-flex min-h-12 items-center font-semibold text-brand-800 underline" to={action.to}>
+                    {action.label}
+                  </Link>
+                ) : null}
               </details>
             ))}
           </div>
-        </section>
+        </details>
 
-        <section className="card p-4">
-          <h2 className="text-title font-bold text-slate-900">{contact.title}</h2>
-          <p className="text-body text-slate-600 mt-1">{contact.body}</p>
-          <div className="mt-3 grid gap-2">
-            <a className="btn-secondary justify-start" href={`mailto:${contact.email}`}><Mail size={18} aria-hidden /> {contact.email}</a>
-            <a className="btn-secondary justify-start" href={`tel:${contact.phone.replace(/\s/g, '')}`}><Phone size={18} aria-hidden /> {contact.phone}</a>
-          </div>
-        </section>
-
-        {role !== 'member' ? (
-          <section className="card p-4">
-            <h2 className="text-title font-bold text-slate-900">Ask a question or submit an inquiry</h2>
+        {canUseInquiries ? (
+          <details className="card p-4">
+            <summary className="cursor-pointer min-h-12 text-title font-bold text-slate-900">
+              <span role="heading" aria-level={2}>Ask a question or submit an inquiry</span>
+            </summary>
             <p className="text-body text-slate-600 mt-1">Send the details so the right admin team can follow up.</p>
             <form className="mt-4 space-y-3" onSubmit={(event) => void submit(event)}>
               <label className="label" htmlFor="inquiry-category">Category</label>
@@ -187,20 +246,29 @@ export function HelpPage() {
                 <Send size={18} aria-hidden /> {saving ? 'Sending…' : 'Send inquiry'}
               </button>
             </form>
-          </section>
+          </details>
         ) : null}
 
         {role === 'staff' ? (
-          <section className="card p-4">
+          <details className="card p-4" onToggle={(event) => {
+            if (event.currentTarget.open) void loadInquiries()
+          }}>
+            <summary className="cursor-pointer min-h-12">
+              <span role="heading" aria-level={2} className="text-title font-bold text-slate-900">Your inquiries</span>
+              {unreadUpdateCount > 0 ? (
+                <span className="ml-2 text-body font-semibold text-brand-800">
+                  {unreadUpdateCount} unread {unreadUpdateCount === 1 ? 'update' : 'updates'}
+                </span>
+              ) : null}
+            </summary>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-title font-bold text-slate-900">Your inquiries</h2>
                 <p className="text-body text-slate-600 mt-1">Track your questions and see replies from Admin.</p>
               </div>
               <button
                 type="button"
                 className="control-feedback inline-flex min-h-12 shrink-0 items-center gap-2 rounded-xl border border-slate-300 px-3 text-body font-semibold text-brand-800"
-                onClick={() => void loadInquiries()}
+                onClick={() => void loadInquiries(true)}
                 disabled={loadingInquiries}
               >
                 <RefreshCw size={16} aria-hidden />
@@ -240,20 +308,29 @@ export function HelpPage() {
                 <InquirySummary key={inquiry.id} inquiry={inquiry} />
               ))}
             </div>
-          </section>
+          </details>
         ) : null}
 
         {role === 'admin' ? (
-          <section className="card p-4">
+          <details className="card p-4" onToggle={(event) => {
+            if (event.currentTarget.open) void loadInquiries()
+          }}>
+            <summary className="cursor-pointer min-h-12">
+              <span role="heading" aria-level={2} className="text-title font-bold text-slate-900">Inquiry inbox</span>
+              {hasLoadedInquiries && openInquiryCount > 0 ? (
+                <span className="ml-2 text-body font-semibold text-brand-800">
+                  {openInquiryCount} open {openInquiryCount === 1 ? 'inquiry' : 'inquiries'}
+                </span>
+              ) : null}
+            </summary>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-title font-bold text-slate-900">Inquiry inbox</h2>
                 <p className="text-body text-slate-600 mt-1">Review submissions, update status, and send one reply for each inquiry.</p>
               </div>
               <button
                 type="button"
                 className="control-feedback inline-flex min-h-12 shrink-0 items-center gap-2 rounded-xl border border-slate-300 px-3 text-body font-semibold text-brand-800"
-                onClick={() => void loadInquiries()}
+                onClick={() => void loadInquiries(true)}
                 disabled={loadingInquiries}
               >
                 <RefreshCw size={16} aria-hidden />
@@ -301,9 +378,37 @@ export function HelpPage() {
                   />
                 ))}
             </div>
+          </details>
+        ) : null}
+
+        <details className="card p-4">
+          <summary className="cursor-pointer min-h-12 text-title font-bold text-slate-900">
+            <span role="heading" aria-level={2}>{contact.title}</span>
+          </summary>
+          <p className="text-body text-slate-600 mt-1">{contact.body}</p>
+          <div className="mt-3 grid gap-2">
+            <a className="btn-secondary justify-start" href={`mailto:${contact.email}`}><Mail size={18} aria-hidden /> {contact.email}</a>
+            <a className="btn-secondary justify-start" href={`tel:${contact.phone.replace(/\s/g, '')}`}><Phone size={18} aria-hidden /> {contact.phone}</a>
+          </div>
+        </details>
+        {role === 'member' ? (
+          <section className="card p-4" aria-labelledby="privacy-notice-help-title">
+            <h2 id="privacy-notice-help-title" className="text-title font-bold text-slate-900">
+              Privacy Notice
+            </h2>
+            <p className="mt-1 text-body text-slate-600">
+              Learn how we handle your personal information and understand your privacy rights.
+            </p>
+            <Link
+              className="mt-2 inline-flex min-h-12 items-center font-semibold text-brand-800 underline underline-offset-2"
+              to="/privacy"
+              state={{ from: location.pathname } satisfies PrivacyNoticeState}
+            >
+              Read the Privacy Notice
+            </Link>
           </section>
         ) : null}
-        <Toast message={toast} />
+        <Toast message={toast?.message ?? null} fadingOut={toastFadingOut} />
       </main>
     </AppShell>
   )

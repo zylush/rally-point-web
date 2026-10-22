@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   Camera,
@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext'
 import type { PublicClub, Role } from '../types'
 import { RallyPointLogo } from '../components/RallyPointLogo'
 import { helpFaqs } from '../lib/helpContent'
+import { privacyNoticePath, type PrivacyNoticeState } from '../lib/privacyNotice'
 import { homeFor } from '../lib/roleHome'
 import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
 
@@ -90,6 +91,9 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   const [error, setError] = useState<string | null>(null)
   const [resetSuccess, setResetSuccess] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Keep the join link's club, so returning from the notice still signs up into it.
+  const privacyPath = privacyNoticePath(joinClub?.slug)
+  const privacyState: PrivacyNoticeState = { from: joinClub ? `/join/${joinClub.slug}` : '/login' }
 
   if (!loading && user) return <Navigate to={homeFor(user.role)} replace />
 
@@ -370,6 +374,22 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
                 </p>
               ) : null}
 
+              {mode === 'join' ? (
+                <p className="text-sm leading-relaxed text-slate-600">
+                  By registering, you acknowledge that you have read our{' '}
+                  {/* A new tab keeps the details already typed into this form. */}
+                  <Link
+                    className="inline-flex min-h-12 items-center font-semibold text-brand-800 underline underline-offset-2"
+                    to={privacyPath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Privacy Notice
+                  </Link>{' '}
+                  (opens in a new tab).
+                </p>
+              ) : null}
+
               <button className="btn-primary gap-2" type="submit" disabled={busy} aria-busy={busy}>
                 {busy
                   ? 'Please wait…'
@@ -497,6 +517,15 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
                 Social links will be added when the official pages are confirmed.
               </p>
             </section>
+            <p className="mt-4 border-t border-slate-200 pt-3 text-center text-sm text-slate-600">
+              <Link
+                className="inline-flex min-h-12 items-center font-semibold text-brand-800 underline underline-offset-2"
+                to={privacyPath}
+                state={privacyState}
+              >
+                Privacy Notice
+              </Link>
+            </p>
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
   AppHeader,
   AppShell,
   LoadingBlock,
+  SignOutAction,
   SignOutButton,
 } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
@@ -374,6 +375,14 @@ export function MemberProfile() {
         <Link to="/member/pay" className="btn-secondary">
           Renew membership <ChevronRight size={16} />
         </Link>
+        <section className="border-t border-slate-200 pt-4">
+          <p className="text-body text-slate-600 mb-2">Finished for now?</p>
+          <SignOutAction
+            className="control-feedback min-h-14 w-full rounded-2xl border-2 border-red-200 bg-white px-4 text-body font-semibold text-red-800 inline-flex items-center justify-center gap-2"
+          >
+            Log out
+          </SignOutAction>
+        </section>
       </main>
     </AppShell>
   )

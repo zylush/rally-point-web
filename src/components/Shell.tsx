@@ -12,7 +12,8 @@ import {
   UserRound,
   Users,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { ClubRole, Role } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { homeFor } from '../lib/roleHome'
@@ -73,6 +74,7 @@ const superadminTabs = [
   { to: '/superadmin', end: true, label: 'Overview', icon: LayoutDashboard },
   { to: '/superadmin/clubs', label: 'Clubs', icon: Building2 },
   { to: '/superadmin/ledger', label: 'Ledger', icon: Coins },
+  { to: '/superadmin/help', label: 'Help', icon: HelpCircle },
 ]
 
 const clubRoleLabel: Record<ClubRole, string> = { member: 'Member', staff: 'Staff', admin: 'Admin' }
@@ -124,7 +126,7 @@ function tabsFor(role: Role) {
 }
 
 export function SideNav({ role }: { role: Role }) {
-  const { user, signOut, activeClub } = useAuth()
+  const { user, activeClub } = useAuth()
   const tabs = tabsFor(role)
   const placeName = activeClub?.name ?? (role === 'superadmin' ? 'Rally Point platform' : 'Rally Point')
   const roleLabel =
@@ -169,14 +171,12 @@ export function SideNav({ role }: { role: Role }) {
         ))}
       </nav>
 
-      <button
-        type="button"
-        onClick={() => void signOut()}
+      <SignOutAction
         className="side-nav-link control-feedback mt-4 w-full border-0 bg-transparent cursor-pointer text-left"
       >
         <LogOut size={22} aria-hidden />
         Log out
-      </button>
+      </SignOutAction>
     </aside>
   )
 }
@@ -274,17 +274,169 @@ export function AppHeader({
 }
 
 export function SignOutButton() {
-  const { signOut } = useAuth()
+  const { user } = useAuth()
+  if (user?.role === 'member') return null
+
   return (
-    <button
-      type="button"
-      onClick={() => void signOut()}
+    <SignOutAction
       className="control-feedback min-h-12 min-w-12 px-3 rounded-2xl border-2 border-slate-200 flex items-center justify-center gap-1.5 text-slate-700 text-body font-bold md:hidden"
-      aria-label="Log out"
+      iconOnly
     >
       <LogOut size={18} aria-hidden />
       <span className="sr-only">Log out</span>
-    </button>
+    </SignOutAction>
+  )
+}
+
+export function SignOutAction({
+  className,
+  children,
+  iconOnly = false,
+}: {
+  className: string
+  children: ReactNode
+  iconOnly?: boolean
+}) {
+  const { signOut } = useAuth()
+  const [confirming, setConfirming] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState<string | null>(null)
+  const opener = useRef<HTMLButtonElement>(null)
+  const cancelButton = useRef<HTMLButtonElement>(null)
+  const dialog = useRef<HTMLDivElement>(null)
+  const signingOutRef = useRef(false)
+
+  function closeDialog() {
+    if (signingOutRef.current) return
+    setSignOutError(null)
+    setConfirming(false)
+  }
+
+  async function confirmSignOut() {
+    if (signingOutRef.current) return
+    signingOutRef.current = true
+    setSigningOut(true)
+    setSignOutError(null)
+    try {
+      await signOut()
+    } catch {
+      setSignOutError('We could not log you out. Check your connection and try again.')
+    } finally {
+      signingOutRef.current = false
+      setSigningOut(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!confirming) return
+
+    const trigger = opener.current
+    // Keep the page behind the dialog out of reach while it is open.
+    const appRoot = document.getElementById('root')
+    const wasInert = appRoot?.inert ?? false
+    if (appRoot) appRoot.inert = true
+    cancelButton.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (signingOutRef.current) return
+        setSignOutError(null)
+        setConfirming(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const buttons = dialog.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
+      if (!buttons?.length) {
+        event.preventDefault()
+        return
+      }
+      const first = buttons[0]
+      const last = buttons[buttons.length - 1]
+      const active = document.activeElement
+      if (!dialog.current?.contains(active)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      if (appRoot) appRoot.inert = wasInert
+      if (trigger?.isConnected) trigger.focus()
+    }
+  }, [confirming])
+
+  return (
+    <>
+      <button
+        ref={opener}
+        type="button"
+        onClick={() => setConfirming(true)}
+        className={className}
+        aria-label={iconOnly ? 'Log out' : undefined}
+        aria-haspopup="dialog"
+        aria-expanded={confirming}
+      >
+        {children}
+      </button>
+      {confirming ? createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4"
+          onClick={(event) => {
+            // A tap on the dimmed backdrop cancels, like the Cancel button.
+            if (event.target === event.currentTarget) closeDialog()
+          }}
+        >
+          <div
+            ref={dialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sign-out-title"
+            aria-describedby="sign-out-description"
+            className="card w-full max-w-sm p-5"
+          >
+            <h2 id="sign-out-title" className="text-title font-bold text-slate-900">
+              Log out?
+            </h2>
+            <p id="sign-out-description" className="text-body text-slate-600 mt-2">
+              You can sign back in any time.
+            </p>
+            {signOutError ? (
+              <p role="alert" className="text-body font-semibold text-red-700 mt-3">
+                {signOutError}
+              </p>
+            ) : null}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                ref={cancelButton}
+                type="button"
+                onClick={closeDialog}
+                disabled={signingOut}
+                className="control-feedback min-h-14 rounded-xl border border-slate-300 px-3 text-body font-semibold text-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmSignOut()}
+                disabled={signingOut}
+                aria-busy={signingOut}
+                className="control-feedback min-h-14 rounded-xl bg-red-700 px-3 text-body font-semibold text-white"
+              >
+                {signingOut ? 'Logging out…' : 'Log out'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+    </>
   )
 }
 
@@ -312,10 +464,13 @@ export function LoadingBlock() {
   )
 }
 
-export function Toast({ message }: { message: string | null }) {
+export function Toast({ message, fadingOut = false }: { message: string | null; fadingOut?: boolean }) {
   if (!message) return null
   return (
-    <div className="toast" role="status">
+    <div
+      className={`toast transition-opacity duration-300 ease-out motion-reduce:transition-none${fadingOut ? ' pointer-events-none opacity-0' : ''}`}
+      role="status"
+    >
       {message}
     </div>
   )

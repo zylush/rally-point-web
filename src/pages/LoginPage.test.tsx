@@ -356,6 +356,16 @@ describe("LoginPage return to a club page", () => {
     expect(await screen.findByText("At /clubs/rally-point-davao")).toBeInTheDocument();
   });
 
+  it("opens the sign-up tab when Find a court asks for it", () => {
+    render(
+      <MemoryRouter initialEntries={[{ pathname: "/login", state: { mode: "join" } }]}>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+    expect(switchToJoin()).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Full name")).toBeInTheDocument();
+  });
+
   it("ignores a return path outside the club pages", async () => {
     const user = userEvent.setup();
     authState.signIn.mockResolvedValue({ id: "u1", email: "p@example.com", full_name: "Pia", role: "member", created_at: "2026-09-01" });

@@ -27,6 +27,7 @@ vi.mock('./lib/api', () => ({
     processDueReminders: vi.fn().mockResolvedValue(undefined),
     inquiries: vi.fn(),
     notifications: vi.fn(),
+    listPublicClubs: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -45,6 +46,17 @@ describe('public routes', () => {
     )
 
     expect(screen.getByRole('heading', { level: 1, name: 'Privacy Notice' })).toBeInTheDocument()
+  })
+
+  it('opens Find a court for visitors instead of the login page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Find a court' })).toBeInTheDocument()
+    expect(api.listPublicClubs).toHaveBeenCalled()
   })
 })
 

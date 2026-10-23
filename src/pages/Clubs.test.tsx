@@ -80,15 +80,24 @@ describe('Find a court', () => {
     const davaoLink = await screen.findByRole('link', { name: /Rally Point Davao/ })
     expect(davaoLink).toHaveAttribute('href', '/clubs/rally-point-davao')
     expect(davaoLink).toHaveTextContent('Davao City')
-    expect(davaoLink).toHaveTextContent('1 location · 2 courts')
-    expect(davaoLink).toHaveTextContent('From Php 450.00 per hour · Members from Php 400.00')
-    expect(screen.getByRole('link', { name: /Rally Point Gensan/ })).toHaveTextContent('From Php 500.00 per hour')
+    expect(davaoLink).toHaveTextContent('1 location')
+    expect(davaoLink).toHaveTextContent('2 courts')
+    expect(davaoLink).toHaveTextContent('From Php 450.00/hr')
+    expect(davaoLink).toHaveTextContent('Members from Php 400.00')
+    // Clubs have no photos yet, so each card shows a drawn court marked as a sample.
+    expect(within(davaoLink).getByText('Sample image')).toBeInTheDocument()
+    const gensanLink = screen.getByRole('link', { name: /Rally Point Gensan/ })
+    expect(gensanLink).toHaveTextContent('From Php 500.00/hr')
+    expect(gensanLink).not.toHaveTextContent('Members from')
+    expect(screen.getByText('2 clubs to book')).toBeInTheDocument()
 
     // A club appears under each of its locations' cities.
-    await user.selectOptions(screen.getByLabelText('City'), 'Koronadal City')
+    const cities = within(screen.getByRole('group', { name: 'City' }))
+    await user.click(cities.getByRole('button', { name: 'Koronadal City' }))
+    expect(cities.getByRole('button', { name: 'Koronadal City' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('link', { name: /Rally Point Gensan/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Rally Point Davao/ })).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText('City'), '')
+    await user.click(cities.getByRole('button', { name: 'All cities' }))
     await user.type(screen.getByLabelText('Search'), 'lanang')
     expect(screen.getByRole('link', { name: /Rally Point Davao/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Rally Point Gensan/ })).not.toBeInTheDocument()
@@ -106,8 +115,14 @@ describe('Find a court', () => {
     expect(venue.getByRole('link', { name: 'Get directions' }))
       .toHaveAttribute('href', 'https://www.google.com/maps/dir/?api=1&destination=7.103,125.631')
     expect(venue.getByTitle('Map of Davao Main').getAttribute('src')).toContain('openstreetmap.org/export/embed.html')
-    expect(venue.getByText(/Php 450.00 per hour · Members Php 400.00/)).toBeInTheDocument()
-    expect(venue.getByText('Out of service')).toBeInTheDocument()
+    const court1 = within(venue.getByText('Davao Court 1').closest('li')!)
+    expect(court1.getByText(/\/hr/)).toHaveTextContent('Php 450.00/hr')
+    expect(court1.getByText('Members Php 400.00')).toBeInTheDocument()
+    expect(court1.getByText('Open for booking')).toBeInTheDocument()
+    expect(court1.getByText('Sample')).toBeInTheDocument()
+    const court2 = within(venue.getByText('Davao Court 2').closest('li')!)
+    expect(court2.getByText('Out of service')).toBeInTheDocument()
+    expect(court2.queryByText(/\/hr/)).not.toBeInTheDocument()
     expect(api.publicClubDetail).toHaveBeenCalledWith('rally-point-davao')
   })
 
@@ -139,6 +154,15 @@ describe('Find a court', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Book a court at Davao Main' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('This club is not taking bookings')
+  })
+
+  it('gives visitors log in and sign up, with sign up opening the sign-up tab', async () => {
+    renderAt('/clubs')
+    await screen.findByRole('link', { name: /Rally Point Davao/ })
+    const account = within(screen.getByRole('navigation', { name: 'Account' }))
+    expect(account.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
+    await userEvent.setup().click(account.getByRole('link', { name: 'Sign up' }))
+    expect(await screen.findByText('At /login {"mode":"join"}')).toBeInTheDocument()
   })
 
   it('explains an unknown club', async () => {

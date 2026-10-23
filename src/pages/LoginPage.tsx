@@ -82,7 +82,11 @@ function authenticationErrorMessage(mode: Mode, error: unknown) {
 export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) {
   const { user, loading, signIn, signUpMember, resetPassword, demo } = useAuth()
   const nav = useNavigate()
-  const [mode, setMode] = useState<Mode>(joinClub ? 'join' : 'login')
+  // A club page sends visitors here to sign in, then expects them back to finish booking.
+  // The Find a court "Sign up" button opens the sign-up tab directly.
+  const location = useLocation()
+  const navState = location.state as { returnTo?: unknown; mode?: unknown } | null
+  const [mode, setMode] = useState<Mode>(joinClub || navState?.mode === 'join' ? 'join' : 'login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordVisible, setPasswordVisible] = useState(false)
@@ -94,9 +98,7 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   // Keep the join link's club, so returning from the notice still signs up into it.
   const privacyPath = privacyNoticePath(joinClub?.slug)
   const privacyState: PrivacyNoticeState = { from: joinClub ? `/join/${joinClub.slug}` : '/login' }
-  // A club page sends visitors here to sign in, then expects them back to finish booking.
-  const location = useLocation()
-  const requested = (location.state as { returnTo?: unknown } | null)?.returnTo
+  const requested = navState?.returnTo
   const returnTo = typeof requested === 'string' && requested.startsWith('/clubs/') ? requested : null
 
   if (!loading && user) return <Navigate to={returnTo ?? homeFor(user.role)} replace />

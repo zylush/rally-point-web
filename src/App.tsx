@@ -142,6 +142,7 @@ function RootRedirect() {
       </div>
     )
   }
-  if (!user) return <Navigate to="/login" replace />
+  // Visitors land on Find a court; signed-in people go to their own home.
+  if (!user) return <Navigate to="/clubs" replace />
   return <Navigate to={homeFor(user.role)} replace />
 }

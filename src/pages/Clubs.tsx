@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Clock, Images, MapPin, Navigation, Search } from 'lucide-react'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { ChevronLeft, ChevronRight, Clock, ImageOff, Images, MapPin, Navigation, Search } from 'lucide-react'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
 import { CourtArt } from '../components/CourtArt'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
@@ -10,6 +10,117 @@ import { openingHoursLabel, peso } from '../types'
 import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
 
 const textLink = 'control-feedback inline-flex min-h-12 items-center gap-1 text-body font-semibold text-brand-800'
+
+/** Delay for the `enter-rise` entrance, so a list settles in order. Capped so long lists never wait. */
+function stagger(index: number): CSSProperties {
+  return { '--stagger': Math.min(index, 8) } as CSSProperties
+}
+
+const clubGrid = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
+
+/** Announces loading to screen readers once; the placeholder shapes inside stay hidden from them. */
+function LoadingShapes({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="pointer-events-none select-none space-y-4">
+      <p role="status" className="sr-only">{label}</p>
+      {children}
+    </div>
+  )
+}
+
+/** Card-shaped placeholders in the same grid as the club list, so nothing jumps when clubs arrive. */
+function ClubCardsLoading() {
+  return (
+    <LoadingShapes label="Loading clubs…">
+      <div className="skeleton h-6 w-24" aria-hidden />
+      <ul className={clubGrid} aria-hidden>
+        {[0, 1, 2].map((key) => (
+          <li key={key} className="card overflow-hidden">
+            <div className="skeleton aspect-[16/9] rounded-none!" />
+            <div className="space-y-2 p-4">
+              <div className="skeleton h-6 w-3/4" />
+              <div className="skeleton h-5 w-1/2" />
+              <div className="skeleton h-5 w-2/3" />
+              <div className="skeleton h-5 w-3/5" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </LoadingShapes>
+  )
+}
+
+/** The club page's shape (photo, summary, one location with two courts) while it loads. */
+function ClubDetailLoading() {
+  return (
+    <LoadingShapes label="Loading club…">
+      <div className="space-y-4" aria-hidden>
+        <div className="skeleton aspect-[16/9] max-h-72 w-full rounded-[18px]!" />
+        <div className="skeleton h-5 w-3/5" />
+        <div className="skeleton h-5 w-full" />
+        <div className="card p-4 space-y-3">
+          <div className="space-y-2">
+            <div className="skeleton h-7 w-1/2" />
+            <div className="skeleton h-5 w-2/3" />
+            <div className="skeleton h-5 w-2/5" />
+          </div>
+          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            {[0, 1].map((key) => (
+              <li key={key} className="overflow-hidden rounded-xl border border-slate-200">
+                <div className="skeleton aspect-[16/10] rounded-none!" />
+                <div className="space-y-2 p-3">
+                  <div className="skeleton h-6 w-3/4" />
+                  <div className="skeleton h-5 w-1/2" />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="skeleton h-[48px] w-full rounded-[16px]!" />
+        </div>
+      </div>
+    </LoadingShapes>
+  )
+}
+
+type PhotoState = 'loading' | 'loaded' | 'error'
+
+/**
+ * A photo that waits on a grey placeholder while it downloads, then fades in.
+ * `className` sizes the frame (aspect, height, rounding), so the space is held either way.
+ * A photo that fails to load leaves the labelled placeholder, never a broken-image icon.
+ */
+function Photo({ src, alt, className = '', lazy = false }: { src: string; alt: string; className?: string; lazy?: boolean }) {
+  const [status, setStatus] = useState<{ src: string; state: PhotoState }>({ src, state: 'loading' })
+  const state = status.src === src ? status.state : 'loading'
+  // A cached photo can finish before React sees its load event; catch that on mount.
+  // Errors come only from the error event: jsdom and not-yet-started lazy images also
+  // report complete with no size, so that alone does not mean the photo is broken.
+  const checkLoaded = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete && img.naturalWidth > 0) setStatus({ src, state: 'loaded' })
+  }, [src])
+
+  if (state === 'error') {
+    return (
+      <div role="img" aria-label={alt} data-state="error" className={`photo relative ${className}`}>
+        <ImageOff size={28} className="absolute inset-0 m-auto text-slate-500" aria-hidden />
+      </div>
+    )
+  }
+  return (
+    <div data-state={state} className={`photo relative overflow-hidden ${className}`}>
+      <img
+        ref={checkLoaded}
+        src={src}
+        alt={alt}
+        className="photo-img absolute inset-0 h-full w-full object-cover"
+        loading={lazy ? 'lazy' : undefined}
+        decoding="async"
+        onLoad={() => setStatus({ src, state: 'loaded' })}
+        onError={() => setStatus({ src, state: 'error' })}
+      />
+    </div>
+  )
+}
 
 /**
  * Signed-in people get the usual app header and menu. Visitors get the same
@@ -83,13 +194,12 @@ function CourtPictures({ court }: { court: PublicCourt }) {
         {...(several ? { role: 'region', tabIndex: 0, 'aria-label': `Photos of ${court.name}. Swipe or use the arrow keys to see more.` } : {})}
       >
         {photos.map((url, index) => (
-          <img
+          <Photo
             key={url}
             src={url}
             alt={several ? `${court.name}, photo ${index + 1} of ${photos.length}` : `Photo of ${court.name}`}
-            className="h-full w-full shrink-0 snap-center object-cover"
-            loading="lazy"
-            decoding="async"
+            className="h-full w-full shrink-0 snap-center"
+            lazy
           />
         ))}
       </div>
@@ -128,7 +238,7 @@ export function ClubDirectory() {
 
   return (
     <Frame title="Find a court" subtitle="Pick a club to see its courts and book">
-      <section className="card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3" aria-label="Search clubs">
+      <section className="enter-rise card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3" aria-label="Search clubs">
         <div>
           <label className="label" htmlFor="club-search">Search</label>
           <div className="relative">
@@ -152,21 +262,22 @@ export function ClubDirectory() {
       </section>
 
       {error ? <p role="alert" className="text-body text-red-700">{error}</p> : null}
-      {!clubs && !error ? <LoadingBlock /> : null}
+      {!clubs && !error ? <ClubCardsLoading /> : null}
       {clubs ? (
-        <p className="text-body font-normal text-slate-600" aria-live="polite">
+        <p className="enter-rise text-body font-normal text-slate-600" aria-live="polite">
           {shown.length === 0 ? 'No clubs match. Try another name or city.' : plural(shown.length, 'club')}
         </p>
       ) : null}
 
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {shown.map((club) => (
-          <li key={club.slug}>
-            <Link to={`/clubs/${club.slug}`} className="control-feedback card flex h-full flex-col overflow-hidden">
+      {/* Keyed by city so picking a city replays the entrance; typing a search does not. */}
+      <ul key={city || 'all'} className={clubGrid}>
+        {shown.map((club, index) => (
+          <li key={club.slug} className="enter-rise" style={stagger(index)}>
+            <Link to={`/clubs/${club.slug}`} className="control-feedback club-card card flex h-full flex-col overflow-hidden">
               {club.cover_photo ? (
-                <img src={club.cover_photo} alt={`Photo of ${club.name}`} className="block aspect-[16/9] w-full object-cover" loading="lazy" decoding="async" />
+                <Photo src={club.cover_photo} alt={`Photo of ${club.name}`} className="club-card-media block aspect-[16/9] w-full" lazy />
               ) : (
-                <CourtArt seed={club.slug} className="aspect-[16/9]" />
+                <CourtArt seed={club.slug} className="club-card-media aspect-[16/9]" />
               )}
               <span className="flex flex-1 items-center gap-3 p-4">
                 <span className="flex-1 min-w-0">
@@ -226,7 +337,7 @@ export function ClubDetailPage() {
 
   const back = <Link to="/clubs" className={textLink}><ChevronLeft size={18} aria-hidden /> All clubs</Link>
 
-  if (club === undefined) return <Frame title="Find a court">{back}<LoadingBlock /></Frame>
+  if (club === undefined) return <Frame title="Find a court">{back}<ClubDetailLoading /></Frame>
   if (club === null) {
     return (
       <Frame title="This club is not taking bookings">
@@ -250,9 +361,9 @@ export function ClubDetailPage() {
       {back}
 
       {heroPhoto ? (
-        <img src={heroPhoto} alt={`Photo of ${club.name}`} className="block aspect-[16/9] max-h-72 w-full rounded-[18px] object-cover" decoding="async" />
+        <Photo src={heroPhoto} alt={`Photo of ${club.name}`} className="enter-rise block aspect-[16/9] max-h-72 w-full rounded-[18px]" />
       ) : (
-        <CourtArt seed={club.slug} className="aspect-[16/9] max-h-72 w-full rounded-[18px]" />
+        <CourtArt seed={club.slug} className="enter-rise aspect-[16/9] max-h-72 w-full rounded-[18px]" />
       )}
 
       <p className="text-body font-normal text-slate-600">
@@ -266,15 +377,15 @@ export function ClubDetailPage() {
       </p>
       {error ? <p role="alert" className="text-body text-red-700">{error}</p> : null}
 
-      {club.venues.map((venue) => {
+      {club.venues.map((venue, venueIndex) => {
         const bookable = venue.courts.some((court) => court.in_service)
         const venuePlace = placeLine(venue)
         const directions = directionsUrl(venue)
         const mapUrl = mapEmbedUrl(venue)
         return (
-          <section key={venue.id} className="card p-4 space-y-3" aria-labelledby={`venue-${venue.id}`}>
+          <section key={venue.id} className="enter-rise card p-4 space-y-3" style={stagger(venueIndex + 1)} aria-labelledby={`venue-${venue.id}`}>
             {venue.cover_photo ? (
-              <img src={venue.cover_photo} alt={`Cover photo of ${venue.name}`} className="block aspect-[16/9] max-h-64 w-full rounded-xl object-cover" loading="lazy" decoding="async" />
+              <Photo src={venue.cover_photo} alt={`Cover photo of ${venue.name}`} className="block aspect-[16/9] max-h-64 w-full rounded-xl" lazy />
             ) : null}
             <div>
               <h2 id={`venue-${venue.id}`} className="text-title font-semibold text-slate-900">{venue.name}</h2>

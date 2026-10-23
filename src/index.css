@@ -50,6 +50,11 @@
   --app-desktop-gutter: 1.5rem;
   --interaction-duration: 180ms;
   --interaction-easing: cubic-bezier(0.2, 0, 0, 1);
+  --entrance-duration: 340ms;
+  --entrance-distance: 8px;
+  --stagger-step: 55ms;
+  --media-zoom-duration: 260ms;
+  --photo-fade-duration: 240ms;
 }
 
 * {
@@ -521,6 +526,60 @@ button[aria-busy='true'],
   }
 }
 
+/* Content settling in after it loads. Set --stagger (0–8) on a list item to cascade a list. */
+.enter-rise {
+  animation: enter-rise var(--entrance-duration) var(--interaction-easing) backwards;
+  animation-delay: calc(var(--stagger, 0) * var(--stagger-step));
+}
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--entrance-distance));
+  }
+}
+
+/* Club cards on Find a court: a small lift and photo zoom for mouse users only. */
+.club-card-media {
+  transition: transform var(--media-zoom-duration) var(--interaction-easing);
+}
+@media (hover: hover) and (pointer: fine) {
+  .club-card:hover {
+    transform: translateY(-2px);
+  }
+  .club-card:hover .club-card-media {
+    transform: scale(1.03);
+  }
+}
+
+/* Photos wait on a placeholder while they download, then fade in. A failed photo keeps a still placeholder. */
+.photo {
+  background-color: #e2e8f0;
+}
+.photo[data-state='loading'] {
+  background-image: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite linear;
+}
+.photo-img {
+  opacity: 0;
+  transition: opacity var(--photo-fade-duration) var(--interaction-easing);
+}
+.photo[data-state='loaded'] .photo-img {
+  opacity: 1;
+}
+
+/* The sample court's white lines draw in once. */
+.court-lines > * {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: court-draw 650ms var(--interaction-easing) 120ms both;
+}
+@keyframes court-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 .toast {
   position: absolute;
   left: 1rem;
@@ -573,5 +632,28 @@ button[aria-busy='true'],
   .btn-secondary:active,
   .list-row:is(a, button):active {
     transform: none !important;
+  }
+
+  .enter-rise {
+    animation-delay: 0s !important;
+  }
+
+  :root {
+    --entrance-distance: 0px;
+  }
+
+  .skeleton,
+  .photo {
+    animation: none !important;
+  }
+
+  .club-card:hover,
+  .club-card:hover .club-card-media {
+    transform: none !important;
+  }
+
+  .court-lines > * {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
   }
 }

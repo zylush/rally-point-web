@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -16,7 +17,7 @@ import {
   setActiveClubId,
 } from '../lib/clubContext'
 import type { MyClub, Profile } from '../types'
-import { AuthContext } from './AuthContext'
+import { AuthContext, type SignUpResult } from './AuthContext'
 
 interface Access {
   profile: Profile
@@ -170,8 +171,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyAccess])
 
+  // The club a pending sign-up came from, so confirming the code opens that club.
+  // It only picks among the person's trusted clubs; it never grants access.
+  const pendingSignup = useRef<{ email: string; clubId?: string } | null>(null)
+
+  /** After a new account has a session: load trusted access and accept only a member. */
+  const finishMemberSignup = useCallback(
+    async (userId: string, preferredClubId?: string) => {
+      try {
+        const identity = await fetchIdentity(userId)
+        const access = identity ? await loadAccess(identity, preferredClubId) : null
+        if (!access || access.profile.role !== 'member') throw new Error(profileSetupError)
+        applyAccess(access)
+        return access.profile
+      } catch {
+        applyAccess(null)
+        await clearUnauthorizedSession()
+        throw new Error(profileSetupError)
+      }
+    },
+    [applyAccess],
+  )
+
   const signUpMember = useCallback(
-    async (input: { email: string; password: string; full_name: string; phone?: string; clubSlug?: string }) => {
+    async (input: {
+      email: string
+      password: string
+      full_name: string
+      phone?: string
+      clubSlug?: string
+    }): Promise<SignUpResult> => {
       const email = input.email.trim().toLowerCase()
       const full_name = input.full_name.trim()
       if (!full_name) throw new Error('Please enter your name')
@@ -193,7 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const access = await loadAccess(identity, joining?.id)
         if (!access) throw new Error(profileSetupError)
         applyAccess(access)
-        return access.profile
+        return { status: 'signed_in', profile: access.profile }
       }
       if (!supabase) throw new Error('Supabase not configured')
 
@@ -209,27 +238,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error
       if (!data.user) throw new Error('Sign-up failed')
 
-      // If email confirmation is ON, session may be null
+      // With email confirmation on there is no session yet: the person types
+      // the code from the email, then verifySignupCode signs them in.
       if (!data.session) {
-        throw new Error(
-          'Check your email to confirm your account, then log in. (Or turn off email confirm in Supabase Auth for instant join.)',
-        )
+        pendingSignup.current = { email, clubId: joining?.id }
+        return { status: 'needs_code', email }
       }
 
-      try {
-        const identity = await fetchIdentity(data.user.id)
-        const access = identity ? await loadAccess(identity, joining?.id) : null
-        if (!access || access.profile.role !== 'member') throw new Error(profileSetupError)
-        applyAccess(access)
-        return access.profile
-      } catch {
-        applyAccess(null)
-        await clearUnauthorizedSession()
-        throw new Error(profileSetupError)
-      }
+      pendingSignup.current = null
+      const profile = await finishMemberSignup(data.user.id, joining?.id)
+      return { status: 'signed_in', profile }
     },
-    [applyAccess],
+    [applyAccess, finishMemberSignup],
   )
+
+  const verifySignupCode = useCallback(
+    async (rawEmail: string, rawCode: string) => {
+      if (isDemoMode) throw new Error('Sign-up codes are not used in the demo')
+      if (!supabase) throw new Error('Supabase not configured')
+      const email = rawEmail.trim().toLowerCase()
+      const token = rawCode.replace(/\D/g, '')
+      const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'signup' })
+      if (error) throw error
+      const uid = data.user?.id ?? data.session?.user?.id
+      if (!uid) throw new Error('No user returned')
+      const pending = pendingSignup.current
+      const clubId = pending?.email === email ? pending.clubId : undefined
+      pendingSignup.current = null
+      return finishMemberSignup(uid, clubId)
+    },
+    [finishMemberSignup],
+  )
+
+  const resendSignupCode = useCallback(async (rawEmail: string) => {
+    if (isDemoMode) throw new Error('Sign-up codes are not used in the demo')
+    if (!supabase) throw new Error('Supabase not configured')
+    const { error } = await supabase.auth.resend({ type: 'signup', email: rawEmail.trim().toLowerCase() })
+    if (error) throw error
+  }, [])
 
   const joinClub = useCallback(
     async (slug: string, options?: { asPlayer?: boolean }) => {
@@ -291,11 +337,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       joinClub,
       signIn,
       signUpMember,
+      verifySignupCode,
+      resendSignupCode,
       resetPassword,
       signOut,
       refresh,
     }),
-    [user, loading, clubs, activeClub, switchClub, joinClub, signIn, signUpMember, resetPassword, signOut, refresh],
+    [user, loading, clubs, activeClub, switchClub, joinClub, signIn, signUpMember, verifySignupCode, resendSignupCode, resetPassword, signOut, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -6,6 +6,7 @@ import {
   Crown,
   Eye,
   EyeOff,
+  MailCheck,
   Shield,
   UserPlus,
   UserRound,
@@ -50,6 +51,43 @@ const HERO_POSTER = `${import.meta.env.BASE_URL}media/pickleball-poster.jpg`
 
 type Mode = 'login' | 'join' | 'reset'
 
+/** A new code can be asked for once a minute (matches the email service's limit). */
+const RESEND_COOLDOWN_SECONDS = 60
+
+function errorDetail(error: unknown, key: 'code' | 'status') {
+  if (!error || typeof error !== 'object' || !(key in error)) return undefined
+  const value = (error as Record<string, unknown>)[key]
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined
+}
+
+/** Plain-English messages for the "Check your email" code step. */
+function signupCodeErrorMessage(action: 'verify' | 'resend', error: unknown) {
+  const message = error instanceof Error ? error.message : ''
+  const code = errorDetail(error, 'code')
+  const status = errorDetail(error, 'status')
+
+  if (code === 'over_email_send_rate_limit' || /email rate limit|only request this after/i.test(message)) {
+    return 'Too many codes were sent. Please wait a few minutes, then send a new code.'
+  }
+  if (
+    code === 'over_request_rate_limit' ||
+    status === '429' ||
+    /too many attempts|rate limit|too many requests|\b429\b/i.test(message)
+  ) {
+    return 'Too many attempts. Please try again in about 5 minutes.'
+  }
+  if (action === 'resend') {
+    return 'Unable to send a new code. Please try again.'
+  }
+  if (
+    code === 'otp_expired' ||
+    /token has expired or is invalid|otp.*(expired|invalid)|invalid.*(otp|token)/i.test(message)
+  ) {
+    return 'That code is wrong or has expired. Check the newest email or send a new code.'
+  }
+  return 'Unable to confirm your code. Please try again.'
+}
+
 function authenticationErrorMessage(mode: Mode, error: unknown) {
   const message = error instanceof Error ? error.message : 'Unable to continue. Please try again.'
 
@@ -80,7 +118,8 @@ function authenticationErrorMessage(mode: Mode, error: unknown) {
 
 /** With `joinClub` (from a club's join link) the page signs up into that club. */
 export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) {
-  const { user, loading, signIn, signUpMember, resetPassword, demo } = useAuth()
+  const { user, loading, signIn, signUpMember, verifySignupCode, resendSignupCode, resetPassword, demo } =
+    useAuth()
   const nav = useNavigate()
   // A club page sends visitors here to sign in, then expects them back to finish booking.
   // The Find a court "Sign up" button opens the sign-up tab directly.
@@ -97,6 +136,16 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   const [busy, setBusy] = useState(false)
   // Counts mode changes so the form fades in on each change, not on first load or while typing.
   const [modeSwitches, setModeSwitches] = useState(0)
+  // Set once sign-up needs the 6-digit code from the confirmation email.
+  const [codeEmail, setCodeEmail] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [resendIn, setResendIn] = useState(0)
+  const [resending, setResending] = useState(false)
+  const [codeNotice, setCodeNotice] = useState<string | null>(null)
+  const codeInputRef = useRef<HTMLInputElement>(null)
+  const emailInputRef = useRef<HTMLInputElement>(null)
+  // Set when leaving the code step from inside it, so focus returns to the email box.
+  const focusEmailNext = useRef(false)
   const modeFade = modeSwitches === 0 ? undefined : modeSwitches % 2 ? 'enter-fade' : 'enter-fade-again'
   // Keep the join link's club, so returning from the notice still signs up into it.
   const privacyPath = privacyNoticePath(joinClub?.slug)
@@ -104,7 +153,99 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   const requested = navState?.returnTo
   const returnTo = typeof requested === 'string' && requested.startsWith('/clubs/') ? requested : null
 
+  // Count down to when a new code may be sent; each tick schedules the next one.
+  useEffect(() => {
+    if (!codeEmail || resendIn <= 0) return
+    const timer = window.setTimeout(() => setResendIn((seconds) => Math.max(0, seconds - 1)), 1000)
+    return () => window.clearTimeout(timer)
+  }, [codeEmail, resendIn])
+
+  // Put the cursor in the code box as soon as the step appears, and back in the
+  // email box when the person leaves it to use a different email.
+  useEffect(() => {
+    if (codeEmail) {
+      codeInputRef.current?.focus()
+    } else if (focusEmailNext.current) {
+      focusEmailNext.current = false
+      emailInputRef.current?.focus()
+    }
+  }, [codeEmail])
+
   if (!loading && user) return <Navigate to={returnTo ?? homeFor(user.role)} replace />
+
+  /** Where a new member goes once signed in: back to the club page, or their home. */
+  function finishSignup(role: Role) {
+    nav(returnTo ?? homeFor(role), { replace: true })
+  }
+
+  function openCodeStep(sentTo: string) {
+    setCodeEmail(sentTo)
+    setCode('')
+    setCodeNotice(null)
+    setResendIn(RESEND_COOLDOWN_SECONDS)
+  }
+
+  function leaveCodeStep(focusEmail = false) {
+    focusEmailNext.current = focusEmail
+    setCodeEmail(null)
+    setCode('')
+    setCodeNotice(null)
+    setResendIn(0)
+    setPassword('')
+    setPasswordVisible(false)
+    setError(null)
+  }
+
+  async function onSubmitCode(e: FormEvent) {
+    e.preventDefault()
+    if (!codeEmail) return
+    setError(null)
+    setCodeNotice(null)
+    if (code.length !== 6) {
+      setError('Enter the 6-digit code from the email.')
+      codeInputRef.current?.focus()
+      return
+    }
+    setBusy(true)
+    try {
+      const profile = await verifySignupCode(codeEmail, code)
+      finishSignup(profile.role)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : ''
+      if (/^Your club profile is not ready/i.test(message)) {
+        // The code worked and the email is confirmed, so the same code cannot be used
+        // again. Send the person to Log in instead of asking for the code once more.
+        leaveCodeStep(true)
+        setModeSwitches((count) => count + 1)
+        setMode('login')
+        setError('Your email is confirmed, but your account could not be opened. Please log in. If that fails, ask staff for help.')
+      } else {
+        setError(signupCodeErrorMessage('verify', err))
+        codeInputRef.current?.focus()
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onResendCode() {
+    if (!codeEmail || resendIn > 0 || resending) return
+    setResending(true)
+    setError(null)
+    setCodeNotice(null)
+    try {
+      await resendSignupCode(codeEmail)
+      setCode('')
+      setResendIn(RESEND_COOLDOWN_SECONDS)
+      setCodeNotice(`We sent a new code to ${codeEmail}.`)
+      codeInputRef.current?.focus()
+    } catch (err) {
+      setError(signupCodeErrorMessage('resend', err))
+      codeInputRef.current?.focus()
+    } finally {
+      setResending(false)
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -113,14 +254,21 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
     setResetSuccess(false)
     try {
       if (mode === 'join') {
-        const profile = await signUpMember({
+        const result = await signUpMember({
           email,
           password,
           full_name: fullName,
           phone: phone || undefined,
           clubSlug: joinClub?.slug,
         })
-        nav(returnTo ?? homeFor(profile.role), { replace: true })
+        if (result.status === 'needs_code') {
+          // The password has done its job; never keep it around on the code step.
+          setPassword('')
+          setPasswordVisible(false)
+          openCodeStep(result.email)
+        } else {
+          finishSignup(result.profile.role)
+        }
       } else if (mode === 'reset') {
         await resetPassword(email)
         setResetSuccess(true)
@@ -137,7 +285,8 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   }
 
   function switchMode(next: Mode) {
-    if (next !== mode) setModeSwitches((count) => count + 1)
+    if (next !== mode || codeEmail) setModeSwitches((count) => count + 1)
+    if (codeEmail) leaveCodeStep()
     setMode(next)
     setPassword('')
     setPasswordVisible(false)
@@ -239,6 +388,112 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
               </button>
             </div>
 
+            {codeEmail ? (
+              <div className="enter-fade">
+                <div className="mb-4">
+                  <span
+                    aria-hidden
+                    className="mb-3 inline-flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-700"
+                  >
+                    <MailCheck size={24} />
+                  </span>
+                  <p className="text-sm font-bold text-slate-500">
+                    {joinClub ? `Joining ${joinClub.name}` : 'One more step'}
+                  </p>
+                  <h2 id="signup-code-title" className="mt-1 text-2xl font-extrabold text-slate-900">
+                    Check your email
+                  </h2>
+                  <p className="mt-1.5 text-base text-slate-600">
+                    We sent a 6-digit code to{' '}
+                    <strong className="break-all font-extrabold text-slate-900">{codeEmail}</strong>. Type it
+                    below to finish creating your account.
+                  </p>
+                </div>
+
+                <form onSubmit={onSubmitCode} className="space-y-3.5" aria-labelledby="signup-code-title" noValidate>
+                  <div>
+                    <label className="label" htmlFor="signup_code">
+                      6-digit code
+                    </label>
+                    <input
+                      ref={codeInputRef}
+                      id="signup_code"
+                      name="signup_code"
+                      className="input text-center indent-[0.4em] text-2xl font-extrabold tracking-[0.4em] tabular-nums"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]{6}"
+                      value={code}
+                      // Pasted or typed codes often carry spaces or text; keep only the digits.
+                      // No maxLength: it would cut "12 34 56" before the spaces are removed.
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      onPaste={(e) => {
+                        const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+                        if (!digits) return
+                        e.preventDefault()
+                        setCode(digits)
+                      }}
+                      required
+                      aria-invalid={error ? true : undefined}
+                      aria-describedby={error ? 'signup-code-hint authentication-error' : 'signup-code-hint'}
+                    />
+                    <p id="signup-code-hint" className="mt-1.5 text-sm text-slate-600">
+                      Can’t find it? Check your spam or promotions folder.
+                    </p>
+                  </div>
+
+                  {error ? (
+                    <p
+                      id="authentication-error"
+                      role="alert"
+                      aria-live="assertive"
+                      className="text-sm font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2"
+                    >
+                      {error}
+                    </p>
+                  ) : null}
+
+                  {codeNotice ? (
+                    <p
+                      role="status"
+                      className="text-sm font-semibold text-teal-700 bg-teal-50 border border-teal-100 rounded-xl px-3 py-2"
+                    >
+                      {codeNotice}
+                    </p>
+                  ) : null}
+
+                  <button className="btn-primary gap-2" type="submit" disabled={busy} aria-busy={busy}>
+                    {busy ? 'Checking code…' : 'Confirm and continue'}
+                    {!busy ? <ArrowRight size={18} aria-hidden /> : null}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    type="button"
+                    onClick={() => void onResendCode()}
+                    disabled={resendIn > 0 || resending || busy}
+                    aria-busy={resending}
+                  >
+                    {resending
+                      ? 'Sending…'
+                      : resendIn > 0
+                      ? `Send a new code in ${resendIn}s`
+                      : 'Send a new code'}
+                  </button>
+                </form>
+
+                <p className="mt-4 text-center text-base text-slate-600">
+                  Wrong email?{' '}
+                  <button
+                    type="button"
+                    className="inline-flex min-h-12 items-center font-extrabold text-brand-800 underline-offset-2 hover:underline"
+                    onClick={() => leaveCodeStep(true)}
+                  >
+                    Use a different email
+                  </button>
+                </p>
+              </div>
+            ) : (
             <div className={modeFade}>
             <div className="mb-4">
               <p className="text-sm font-bold text-slate-500">
@@ -307,6 +562,7 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
                   Email
                 </label>
                 <input
+                  ref={emailInputRef}
                   id="email"
                   className="input"
                   type="email"
@@ -448,6 +704,7 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
               </p>
             )}
             </div>
+            )}
 
             {demo ? (
               <div className="mt-6 pt-5 border-t border-slate-100">

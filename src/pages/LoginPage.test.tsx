@@ -1,7 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Profile } from "../types";
 import LoginPage from "./LoginPage";
 
@@ -11,6 +11,8 @@ const authState = vi.hoisted(() => ({
   user: null as Profile | null,
   signIn: vi.fn(),
   signUpMember: vi.fn(),
+  verifySignupCode: vi.fn(),
+  resendSignupCode: vi.fn(),
   resetPassword: vi.fn(),
   signOut: vi.fn(),
   refresh: vi.fn(),
@@ -375,5 +377,256 @@ describe("LoginPage return to a club page", () => {
     await user.type(screen.getByLabelText("Password"), "secret123");
     await user.click(loginSubmitButton());
     expect(await screen.findByText("At /member")).toBeInTheDocument();
+  });
+});
+
+describe("LoginPage sign-up code step", () => {
+  const newMember: Profile = {
+    id: "u2",
+    email: "new@example.com",
+    full_name: "Nina New",
+    role: "member",
+    created_at: "2026-10-23",
+  };
+
+  beforeEach(() => {
+    authState.demo = false;
+    authState.loading = false;
+    authState.user = null;
+    authState.signUpMember.mockReset();
+    authState.verifySignupCode.mockReset();
+    authState.resendSignupCode.mockReset();
+    authState.signUpMember.mockResolvedValue({ status: "needs_code", email: "new@example.com" });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The countdown schedules one tick per second after each render, so step a second at a time.
+  function advanceSeconds(seconds: number) {
+    for (let i = 0; i < seconds; i += 1) {
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+    }
+  }
+
+  function renderJoin(options: { returnTo?: string; joinClub?: { id: string; slug: string; name: string } } = {}) {
+    return render(
+      <MemoryRouter initialEntries={[{ pathname: "/login", state: { mode: "join", returnTo: options.returnTo } }]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage joinClub={options.joinClub} />} />
+          <Route path="*" element={<Where />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  async function fillAndJoin(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText("Full name"), "Nina New");
+    await user.type(screen.getByLabelText("Mobile (optional)"), "09171234567");
+    await user.type(screen.getByLabelText("Email"), "New@Example.com");
+    await user.type(screen.getByLabelText("Password"), "secret-pass");
+    await user.click(screen.getByRole("button", { name: "Join Rally Point" }));
+  }
+
+  it("asks for the emailed code instead of showing an error", async () => {
+    const user = userEvent.setup();
+    renderJoin();
+    await fillAndJoin(user);
+
+    expect(await screen.findByRole("heading", { name: "Check your email" })).toBeInTheDocument();
+    expect(screen.getByText("new@example.com")).toBeInTheDocument();
+    const codeInput = screen.getByLabelText("6-digit code");
+    expect(codeInput).toHaveAttribute("inputmode", "numeric");
+    expect(codeInput).toHaveAttribute("autocomplete", "one-time-code");
+    expect(codeInput).toHaveFocus();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  });
+
+  it("keeps only digits from a pasted or typed code", async () => {
+    const user = userEvent.setup();
+    renderJoin();
+    await fillAndJoin(user);
+
+    const codeInput = await screen.findByLabelText("6-digit code");
+    fireEvent.change(codeInput, { target: { value: "12 34-56" } });
+    expect(codeInput).toHaveValue("123456");
+    await user.clear(codeInput);
+    await user.paste("Your code: 654 321");
+    expect(codeInput).toHaveValue("654321");
+    await user.clear(codeInput);
+    await user.type(codeInput, "12 34 56 7");
+    expect(codeInput).toHaveValue("123456");
+  });
+
+  it("confirms the code and goes where sign-up would have gone", async () => {
+    const user = userEvent.setup();
+    authState.verifySignupCode.mockResolvedValue(newMember);
+    renderJoin({ returnTo: "/clubs/rally-point-davao" });
+    await fillAndJoin(user);
+
+    await user.type(await screen.findByLabelText("6-digit code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Confirm and continue" }));
+
+    expect(authState.verifySignupCode).toHaveBeenCalledWith("new@example.com", "123456");
+    expect(await screen.findByText("At /clubs/rally-point-davao")).toBeInTheDocument();
+  });
+
+  it("goes to the member home after confirming without a return path", async () => {
+    const user = userEvent.setup();
+    authState.verifySignupCode.mockResolvedValue(newMember);
+    renderJoin({ joinClub: { id: "club-davao", slug: "rally-point-davao", name: "Rally Point Davao" } });
+    await fillAndJoin(user);
+
+    expect(await screen.findByText("Joining Rally Point Davao")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("6-digit code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Confirm and continue" }));
+    expect(await screen.findByText("At /member")).toBeInTheDocument();
+  });
+
+  it("explains a wrong or expired code and stays on the code step", async () => {
+    const user = userEvent.setup();
+    authState.verifySignupCode.mockRejectedValue(
+      Object.assign(new Error("Token has expired or is invalid"), { code: "otp_expired", status: 403 }),
+    );
+    renderJoin();
+    await fillAndJoin(user);
+
+    await user.type(await screen.findByLabelText("6-digit code"), "000000");
+    await user.click(screen.getByRole("button", { name: "Confirm and continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That code is wrong or has expired. Check the newest email or send a new code.",
+    );
+    expect(screen.getByRole("heading", { name: "Check your email" })).toBeInTheDocument();
+    expect(screen.getByLabelText("6-digit code")).toHaveFocus();
+    expect(screen.queryByText(/^At \//)).not.toBeInTheDocument();
+  });
+
+  it("asks for all six digits before checking the code", async () => {
+    const user = userEvent.setup();
+    renderJoin();
+    await fillAndJoin(user);
+
+    await user.type(await screen.findByLabelText("6-digit code"), "123");
+    await user.click(screen.getByRole("button", { name: "Confirm and continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter the 6-digit code from the email.");
+    expect(authState.verifySignupCode).not.toHaveBeenCalled();
+  });
+
+  it("maps too many attempts to a plain message", async () => {
+    const user = userEvent.setup();
+    authState.verifySignupCode.mockRejectedValue(
+      Object.assign(new Error("Request rate limit reached"), { code: "over_request_rate_limit", status: 429 }),
+    );
+    renderJoin();
+    await fillAndJoin(user);
+
+    await user.type(await screen.findByLabelText("6-digit code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Confirm and continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Too many attempts. Please try again in about 5 minutes.",
+    );
+  });
+
+  it("waits 60 seconds before a new code can be sent, and again after each resend", async () => {
+    vi.useFakeTimers();
+    authState.resendSignupCode.mockResolvedValue(undefined);
+    renderJoin();
+
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Nina New" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "secret-pass" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Join Rally Point" }));
+    });
+
+    expect(screen.getByRole("heading", { name: "Check your email" })).toBeInTheDocument();
+    const waiting = screen.getByRole("button", { name: "Send a new code in 60s" });
+    expect(waiting).toBeDisabled();
+
+    advanceSeconds(30);
+    expect(screen.getByRole("button", { name: "Send a new code in 30s" })).toBeDisabled();
+
+    advanceSeconds(30);
+    const ready = screen.getByRole("button", { name: "Send a new code" });
+    expect(ready).toBeEnabled();
+
+    await act(async () => {
+      fireEvent.click(ready);
+    });
+    expect(authState.resendSignupCode).toHaveBeenCalledWith("new@example.com");
+    expect(screen.getByRole("status")).toHaveTextContent("We sent a new code to new@example.com.");
+    expect(screen.getByRole("button", { name: "Send a new code in 60s" })).toBeDisabled();
+  });
+
+  it("explains when too many codes have been sent", async () => {
+    vi.useFakeTimers();
+    authState.resendSignupCode.mockRejectedValue(
+      Object.assign(new Error("email rate limit exceeded"), { code: "over_email_send_rate_limit", status: 429 }),
+    );
+    renderJoin();
+    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Nina New" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "secret-pass" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Join Rally Point" }));
+    });
+    advanceSeconds(60);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send a new code" }));
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Too many codes were sent. Please wait a few minutes, then send a new code.",
+    );
+  });
+
+  it("goes back to the form with the details kept and the password cleared", async () => {
+    const user = userEvent.setup();
+    renderJoin();
+    await fillAndJoin(user);
+
+    await user.click(await screen.findByRole("button", { name: "Use a different email" }));
+
+    expect(screen.getByLabelText("Full name")).toHaveValue("Nina New");
+    expect(screen.getByLabelText("Mobile (optional)")).toHaveValue("09171234567");
+    expect(screen.getByLabelText("Email")).toHaveValue("New@Example.com");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.queryByLabelText("6-digit code")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveFocus();
+  });
+
+  it("sends the person to Log in when the code worked but the account could not be opened", async () => {
+    const user = userEvent.setup();
+    authState.verifySignupCode.mockRejectedValue(
+      new Error("Your club profile is not ready. Please try again or contact staff."),
+    );
+    renderJoin();
+    await fillAndJoin(user);
+
+    await user.type(await screen.findByLabelText("6-digit code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Confirm and continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your email is confirmed, but your account could not be opened. Please log in.",
+    );
+    expect(screen.queryByLabelText("6-digit code")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Full name")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveValue("New@Example.com");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.getByLabelText("Email")).toHaveFocus();
+  });
+
+  it("signs straight in when the account needs no code", async () => {
+    const user = userEvent.setup();
+    authState.signUpMember.mockResolvedValue({ status: "signed_in", profile: newMember });
+    renderJoin();
+    await fillAndJoin(user);
+
+    expect(await screen.findByText("At /member")).toBeInTheDocument();
+    expect(authState.verifySignupCode).not.toHaveBeenCalled();
   });
 });

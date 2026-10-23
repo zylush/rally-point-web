@@ -1,6 +1,14 @@
 import { createContext, useContext } from 'react'
 import type { MyClub, Profile } from '../types'
 
+/**
+ * What happened after a public sign-up. With email confirmation on, the new
+ * account has no session until the person types the code from the email.
+ */
+export type SignUpResult =
+  | { status: 'signed_in'; profile: Profile }
+  | { status: 'needs_code'; email: string }
+
 interface AuthState {
   user: Profile | null
   loading: boolean
@@ -25,7 +33,11 @@ interface AuthState {
     phone?: string
     /** Set only by a club join link. */
     clubSlug?: string
-  }) => Promise<Profile>
+  }) => Promise<SignUpResult>
+  /** Confirms a new account with the 6-digit code from the sign-up email, then signs in. */
+  verifySignupCode: (email: string, code: string) => Promise<Profile>
+  /** Sends a fresh sign-up code to the email. */
+  resendSignupCode: (email: string) => Promise<void>
   resetPassword: (email: string) => Promise<void>
   signOut: () => Promise<void>
   refresh: () => Promise<void>

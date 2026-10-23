@@ -61,6 +61,8 @@ const supabaseMock = vi.hoisted(() => ({
     })),
     signInWithPassword: vi.fn(),
     signUp: vi.fn(),
+    verifyOtp: vi.fn(),
+    resend: vi.fn(),
     signOut: vi.fn(),
     resetPasswordForEmail: vi.fn(),
   },
@@ -105,15 +107,50 @@ function AuthActionProbe() {
             email: 'new@example.com',
             password: testPassphrase,
             full_name: 'New Member',
-          }).catch((error: Error) => {
-            setMessage(error.message)
           })
+            .then((result) => {
+              if (result.status === 'needs_code') setMessage(`Code needed for ${result.email}`)
+            })
+            .catch((error: Error) => {
+              setMessage(error.message)
+            })
         }}
       >
         Join
       </button>
       <button type="button" onClick={() => void resetPassword('  NEW@EXAMPLE.COM  ').catch((error: Error) => setMessage(error.message))}>Reset password</button>
       <button type="button" onClick={() => void signOut()}>Sign out</button>
+      <p>{user ? `Signed in: ${user.role}` : 'Signed out'}</p>
+      <p>{message}</p>
+    </>
+  )
+}
+
+function SignupCodeProbe() {
+  const { verifySignupCode, resendSignupCode, user } = useAuth()
+  const [message, setMessage] = useState('')
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          void verifySignupCode(' New@Example.com ', '123 456')
+            .then((profile) => setMessage(`Confirmed: ${profile.role}`))
+            .catch((error: Error) => setMessage(error.message))
+        }}
+      >
+        Confirm code
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void resendSignupCode('New@Example.com')
+            .then(() => setMessage('Code sent'))
+            .catch((error: Error) => setMessage(error.message))
+        }}
+      >
+        Resend code
+      </button>
       <p>{user ? `Signed in: ${user.role}` : 'Signed out'}</p>
       <p>{message}</p>
     </>
@@ -278,7 +315,7 @@ describe('AuthProvider trusted role boundary', () => {
     expect(signupInput.options.data).not.toHaveProperty('role')
   })
 
-  it('explains when email confirmation delays a public signup', async () => {
+  it('asks for the emailed code when email confirmation delays a public signup', async () => {
     supabaseMock.auth.signUp.mockResolvedValueOnce({
       data: { user: authState.sessionUser, session: null },
       error: null,
@@ -289,12 +326,93 @@ describe('AuthProvider trusted role boundary', () => {
         <AuthActionProbe />
       </AuthProvider>,
     )
+    await screen.findByText('Signed out')
+    vi.mocked(supabaseMock.from).mockClear()
+    vi.mocked(supabaseMock.auth.signOut).mockClear()
 
     await user.click(screen.getByRole('button', { name: 'Join' }))
 
-    expect(
-      await screen.findByText(/Check your email to confirm your account/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Code needed for new@example.com')).toBeInTheDocument()
+    // No session yet: nothing is loaded, nobody is signed in, and nothing is signed out.
+    expect(screen.getByText('Signed out')).toBeInTheDocument()
+    expect(supabaseMock.from).not.toHaveBeenCalled()
+    expect(supabaseMock.auth.signOut).not.toHaveBeenCalled()
+  })
+
+  it('confirms a sign-up code, then signs in only through trusted member access', async () => {
+    authState.profileResult = { data: {
+      id: authState.sessionUser.id, email: authState.sessionUser.email, full_name: 'New Member',
+      role: 'member', created_at: '2026-08-03T00:00:00.000Z',
+    }, error: null }
+    supabaseMock.auth.getSession.mockResolvedValue({ data: { session: null } })
+    supabaseMock.auth.verifyOtp.mockResolvedValueOnce({
+      data: { user: authState.sessionUser, session: { user: authState.sessionUser } },
+      error: null,
+    })
+    const user = userEvent.setup()
+    render(<AuthProvider><SignupCodeProbe /></AuthProvider>)
+    await screen.findByText('Signed out')
+
+    await user.click(screen.getByRole('button', { name: 'Confirm code' }))
+
+    expect(await screen.findByText('Confirmed: member')).toBeInTheDocument()
+    expect(screen.getByText('Signed in: member')).toBeInTheDocument()
+    expect(supabaseMock.auth.verifyOtp).toHaveBeenCalledWith({
+      email: 'new@example.com',
+      token: '123456',
+      type: 'signup',
+    })
+  })
+
+  it('rejects a confirmed sign-up whose trusted records give a staff role, and signs out', async () => {
+    authState.profileResult = { data: {
+      id: authState.sessionUser.id, email: authState.sessionUser.email, full_name: 'Not a Member',
+      role: 'member', created_at: '2026-08-03T00:00:00.000Z',
+    }, error: null }
+    authState.clubs = [{ ...gensanMember, role: 'admin' }]
+    supabaseMock.auth.getSession.mockResolvedValue({ data: { session: null } })
+    supabaseMock.auth.verifyOtp.mockResolvedValueOnce({
+      data: { user: authState.sessionUser, session: { user: authState.sessionUser } },
+      error: null,
+    })
+    const user = userEvent.setup()
+    render(<AuthProvider><SignupCodeProbe /></AuthProvider>)
+    await screen.findByText('Signed out')
+
+    await user.click(screen.getByRole('button', { name: 'Confirm code' }))
+
+    expect(await screen.findByText('Your club profile is not ready. Please try again or contact staff.')).toBeInTheDocument()
+    expect(screen.getByText('Signed out')).toBeInTheDocument()
+    expect(supabaseMock.auth.signOut).toHaveBeenCalled()
+  })
+
+  it('passes a wrong or expired code error through without signing in', async () => {
+    supabaseMock.auth.getSession.mockResolvedValue({ data: { session: null } })
+    supabaseMock.auth.verifyOtp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: Object.assign(new Error('Token has expired or is invalid'), { code: 'otp_expired', status: 403 }),
+    })
+    const user = userEvent.setup()
+    render(<AuthProvider><SignupCodeProbe /></AuthProvider>)
+    await screen.findByText('Signed out')
+
+    await user.click(screen.getByRole('button', { name: 'Confirm code' }))
+
+    expect(await screen.findByText('Token has expired or is invalid')).toBeInTheDocument()
+    expect(screen.getByText('Signed out')).toBeInTheDocument()
+    expect(supabaseMock.from).not.toHaveBeenCalled()
+  })
+
+  it('sends a new sign-up code for the email', async () => {
+    supabaseMock.auth.getSession.mockResolvedValue({ data: { session: null } })
+    supabaseMock.auth.resend.mockResolvedValueOnce({ data: {}, error: null })
+    const user = userEvent.setup()
+    render(<AuthProvider><SignupCodeProbe /></AuthProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Resend code' }))
+
+    expect(await screen.findByText('Code sent')).toBeInTheDocument()
+    expect(supabaseMock.auth.resend).toHaveBeenCalledWith({ type: 'signup', email: 'new@example.com' })
   })
 
   it('rejects invalid member signup input before contacting Supabase', async () => {

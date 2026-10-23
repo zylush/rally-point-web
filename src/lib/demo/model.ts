@@ -29,6 +29,18 @@ export interface DemoAuditEntry {
   created_at: string
 }
 
+/** A court photo (court_id set) or a location cover (court_id null); mirrors public.court_photos. */
+export interface DemoPhoto {
+  id: string
+  club_id: string
+  venue_id: string
+  court_id: string | null
+  /** The photo itself, as a data link. */
+  url: string
+  position: number
+  created_at: string
+}
+
 /** A superadmin's support session, as stored; mirrors platform_support_sessions. */
 export interface DemoSupportSession {
   id: string
@@ -65,5 +77,7 @@ export interface DemoDB {
   walkins: WalkIn[]
   /** Optional so browser data saved before support sessions existed still loads. */
   supportSessions?: DemoSupportSession[]
+  /** Optional so browser data saved before court photos existed still loads. */
+  photos?: DemoPhoto[]
   sessionUserId: string | null
 }

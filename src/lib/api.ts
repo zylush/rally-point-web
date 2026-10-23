@@ -7,6 +7,7 @@ import type {
   Club,
   Court,
   CourtInput,
+  CourtPhoto,
   PublicClubDetail,
   PublicClubListing,
   VenueLocationInput,
@@ -44,6 +45,26 @@ import type {
 } from '../types'
 import { CLUB_CLOSE_HOUR, CLUB_OPEN_HOUR, hourLabel, localRangeISO } from '../types'
 import { CLUB_HEADER, getActiveClubId, notifyClubUnavailable, requireActiveClubId } from './clubContext'
+import { PHOTO_BUCKET, photoUrl, shrinkPhoto, shrinkPhotoToDataUrl } from './photos'
+
+/** Deletes a stored photo file. A file left behind is never shown, so a failure here is not fatal. */
+async function deletePhotoFile(path: string | null | undefined) {
+  if (!path) return
+  await supabase!.storage.from(PHOTO_BUCKET).remove([path]).catch(() => undefined)
+}
+
+/** Shrinks and uploads a photo into a court's or location's folder; returns its stored path. */
+async function uploadPhoto(kind: 'courts' | 'venues', ownerId: string, file: File) {
+  const prepared = await shrinkPhoto(file)
+  const path = `${requireActiveClubId()}/${kind}/${ownerId}/${crypto.randomUUID()}.${prepared.ext}`
+  const { error } = await supabase!.storage.from(PHOTO_BUCKET).upload(path, prepared.blob, {
+    contentType: prepared.type,
+    cacheControl: '31536000',
+    upsert: false,
+  })
+  if (error) throw new Error(`The photo could not be uploaded: ${error.message}`)
+  return path
+}
 
 function startOfToday() {
   const d = new Date()
@@ -595,6 +616,60 @@ export const api = {
     return data as Court
   },
 
+  // ---- Court and location photos (admins only; public as soon as saved) ----
+
+  /** Every photo of the active club, main photos first. */
+  async listCourtPhotos(): Promise<CourtPhoto[]> {
+    if (isDemoMode) return demoStore.listCourtPhotos()
+    const { data, error } = await supabase!
+      .from('court_photos')
+      .select('id, club_id, venue_id, court_id, path, position, created_at')
+      .eq('club_id', requireActiveClubId())
+      .order('position')
+      .order('created_at')
+    if (error) throw error
+    return ((data ?? []) as Omit<CourtPhoto, 'url'>[]).map((row) => ({ ...row, url: photoUrl(row.path) }))
+  },
+
+  /** Adds a photo to a court. The photo is shrunk in the browser first. */
+  async addCourtPhoto(courtId: string, file: File): Promise<CourtPhoto> {
+    if (isDemoMode) return demoStore.addCourtPhoto(courtId, await shrinkPhotoToDataUrl(file))
+    const path = await uploadPhoto('courts', courtId, file)
+    const { data, error } = await supabase!.rpc('admin_add_court_photo', { p_court_id: courtId, p_path: path })
+    if (error) {
+      await deletePhotoFile(path)
+      throw error
+    }
+    const row = data as Omit<CourtPhoto, 'url'>
+    return { ...row, url: photoUrl(row.path) }
+  },
+
+  /** Shows this photo first on the court's card. */
+  async makeMainCourtPhoto(photoId: string): Promise<void> {
+    if (isDemoMode) return demoStore.makeMainCourtPhoto(photoId)
+    const { error } = await supabase!.rpc('admin_make_main_court_photo', { p_photo_id: photoId })
+    if (error) throw error
+  },
+
+  async removeCourtPhoto(photoId: string): Promise<void> {
+    if (isDemoMode) return demoStore.removeCourtPhoto(photoId)
+    const { data, error } = await supabase!.rpc('admin_remove_court_photo', { p_photo_id: photoId })
+    if (error) throw error
+    await deletePhotoFile(data as string | null)
+  },
+
+  /** Sets a location's cover photo, or removes it when `file` is null. */
+  async setVenueCover(venueId: string, file: File | null): Promise<void> {
+    if (isDemoMode) return demoStore.setVenueCover(venueId, file ? await shrinkPhotoToDataUrl(file) : null)
+    const path = file ? await uploadPhoto('venues', venueId, file) : null
+    const { data, error } = await supabase!.rpc('admin_set_venue_cover', { p_venue_id: venueId, p_path: path })
+    if (error) {
+      await deletePhotoFile(path)
+      throw error
+    }
+    await deletePhotoFile(data as string | null)
+  },
+
   async setStaffVenueGrant(userId: string, venueId: string, isActive: boolean): Promise<void> {
     if (isDemoMode) {
       demoStore.setStaffVenueGrant(userId, venueId, isActive)
@@ -851,10 +926,19 @@ export const api = {
     /** Every club taking bookings, for the public "Find a court" list. */
     async listPublicClubs(): Promise<PublicClubListing[]> {
       if (isDemoMode) return demoStore.publicClubs()
-      const { data, error } = await supabase!.rpc('list_public_clubs')
+      const [{ data, error }, covers] = await Promise.all([
+        supabase!.rpc('list_public_clubs'),
+        // Photos are extra: the list still shows, with sample pictures, if they cannot load.
+        Promise.resolve(supabase!.rpc('list_public_club_covers')).then(
+          ({ data: rows, error: coverError }) => coverError ? [] : (rows ?? []) as { slug: string; cover_photo: string | null }[],
+          () => [],
+        ),
+      ])
       if (error) throw error
+      const coverBySlug = new Map(covers.map((row) => [row.slug, row.cover_photo]))
       return ((data ?? []) as PublicClubListing[]).map((row) => ({
         ...row,
+        cover_photo: coverBySlug.get(row.slug) ? photoUrl(coverBySlug.get(row.slug)!) : null,
         venue_count: Number(row.venue_count),
         court_count: Number(row.court_count),
         min_rate: row.min_rate == null ? null : Number(row.min_rate),
@@ -873,8 +957,10 @@ export const api = {
         ...detail,
         venues: detail.venues.map((venue) => ({
           ...venue,
+          cover_photo: venue.cover_photo ? photoUrl(venue.cover_photo) : null,
           courts: venue.courts.map((court) => ({
             ...court,
+            photos: (court.photos ?? []).map(photoUrl),
             hourly_rate: Number(court.hourly_rate),
             member_rate: court.member_rate == null ? null : Number(court.member_rate),
           })),

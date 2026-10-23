@@ -118,7 +118,7 @@ describe('Find a court', () => {
     const court1 = within(venue.getByText('Davao Court 1').closest('li')!)
     expect(court1.getByText(/\/hr/)).toHaveTextContent('Php 450.00/hr')
     expect(court1.getByText('Members Php 400.00')).toBeInTheDocument()
-    expect(court1.getByText('Open for booking')).toBeInTheDocument()
+    expect(court1.getByText('Available')).toBeInTheDocument()
     expect(court1.getByText('Sample')).toBeInTheDocument()
     const court2 = within(venue.getByText('Davao Court 2').closest('li')!)
     expect(court2.getByText('Out of service')).toBeInTheDocument()
@@ -163,6 +163,38 @@ describe('Find a court', () => {
     expect(account.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
     await userEvent.setup().click(account.getByRole('link', { name: 'Sign up' }))
     expect(await screen.findByText('At /login {"mode":"join"}')).toBeInTheDocument()
+  })
+
+  it('shows real photos instead of the sample drawing once a club adds them', async () => {
+    vi.mocked(api.listPublicClubs).mockResolvedValue([{ ...clubs[0], cover_photo: 'https://example.test/cover.webp' }])
+    vi.mocked(api.publicClubDetail).mockResolvedValue({
+      ...davao,
+      venues: [{
+        ...davao.venues[0],
+        cover_photo: 'https://example.test/cover.webp',
+        courts: [
+          { ...davao.venues[0].courts[0], photos: ['https://example.test/c1-a.webp', 'https://example.test/c1-b.webp'] },
+          davao.venues[0].courts[1],
+        ],
+      }],
+    })
+    const { unmount } = renderAt('/clubs')
+    const card = await screen.findByRole('link', { name: /Rally Point Davao/ })
+    expect(within(card).getByRole('img', { name: 'Photo of Rally Point Davao' })).toHaveAttribute('src', 'https://example.test/cover.webp')
+    expect(within(card).queryByText('Sample image')).not.toBeInTheDocument()
+    unmount()
+
+    renderAt('/clubs/rally-point-davao')
+    const venue = within((await screen.findByRole('heading', { name: 'Davao Main' })).closest('section')!)
+    expect(venue.getByRole('img', { name: 'Cover photo of Davao Main' })).toBeInTheDocument()
+    const court1 = within(venue.getByText('Davao Court 1').closest('li')!)
+    expect(court1.getByRole('region', { name: /Photos of Davao Court 1/ })).toHaveAttribute('tabindex', '0')
+    expect(court1.getByRole('img', { name: 'Davao Court 1, photo 2 of 2' })).toHaveAttribute('src', 'https://example.test/c1-b.webp')
+    expect(court1.getByText('2 photos')).toBeInTheDocument()
+    expect(court1.queryByText('Sample')).not.toBeInTheDocument()
+    // A court without photos keeps the labelled sample drawing.
+    expect(within(venue.getByText('Davao Court 2').closest('li')!).getByText('Sample')).toBeInTheDocument()
+    expect(screen.queryByText('Sample image')).not.toBeInTheDocument()
   })
 
   it('explains an unknown club', async () => {

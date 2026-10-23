@@ -17,6 +17,7 @@ import { staffOperations } from './demo/staff'
 import { chooseVenueId, demoClub } from './tenant'
 import { inquiryOperations } from './demo/inquiries'
 import { platformOperations } from './demo/platform'
+import { demoCourtPhotos, demoVenueCover, photoOperations } from './demo/photos'
 
 export type { DemoDB } from './demo/model'
 
@@ -205,6 +206,22 @@ export const demoStore = {
           court_count: courts.length,
           min_rate: min(courts.map((court) => court.hourly_rate)),
           min_member_rate: min(courts.map((court) => court.member_rate ?? court.hourly_rate)),
+          // Mirrors list_public_club_covers: first location cover, else the first court's main photo.
+          cover_photo: (() => {
+            const venues = db.venues.filter((v) => v.club_id === club.id && v.is_active).sort((a, b) => a.name.localeCompare(b.name))
+            for (const venue of venues) {
+              const cover = demoVenueCover(db, venue.id)
+              if (cover) return cover
+            }
+            for (const venue of venues) {
+              const courtsHere = db.courts.filter((c) => c.club_id === club.id && c.venue_id === venue.id).sort((a, b) => a.name.localeCompare(b.name))
+              for (const court of courtsHere) {
+                const first = demoCourtPhotos(db, court.id)[0]
+                if (first) return first
+              }
+            }
+            return null
+          })(),
         }
       })
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -232,6 +249,7 @@ export const demoStore = {
           city: venue.city ?? null,
           latitude: venue.latitude ?? null,
           longitude: venue.longitude ?? null,
+          cover_photo: demoVenueCover(db, venue.id),
           courts: db.courts
             .filter((court) => court.club_id === club.id && court.venue_id === venue.id)
             .sort((a, b) => a.name.localeCompare(b.name))
@@ -241,6 +259,7 @@ export const demoStore = {
               hourly_rate: court.hourly_rate,
               member_rate: court.member_rate ?? null,
               in_service: court.status !== 'maintenance',
+              photos: demoCourtPhotos(db, court.id),
             })),
         })),
     }
@@ -417,4 +436,5 @@ export const demoStore = {
   ...ledgerOperations,
   ...inquiryOperations,
   ...platformOperations,
+  ...photoOperations,
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Clock, LayoutGrid, MapPin, Navigation, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Images, LayoutGrid, MapPin, Navigation, Search } from 'lucide-react'
 import { AppShell, LoadingBlock } from '../components/Shell'
 import { CourtArt } from '../components/CourtArt'
 import { useAuth } from '../context/AuthContext'
@@ -52,6 +52,41 @@ function Frame({ children }: { children: ReactNode }) {
 
 function plural(count: number, one: string, many = `${one}s`) {
   return `${count} ${count === 1 ? one : many}`
+}
+
+type PublicCourt = PublicClubDetail['venues'][number]['courts'][number]
+
+/** A court's photos, swipeable when there are several; a sample drawing when there are none. */
+function CourtPictures({ court }: { court: PublicCourt }) {
+  const photos = court.photos ?? []
+  if (photos.length === 0) {
+    return <CourtArt seed={court.id} muted={!court.in_service} label="Sample" className="aspect-[16/10]" />
+  }
+  const several = photos.length > 1
+  return (
+    <div className={`relative ${court.in_service ? '' : 'grayscale opacity-70'}`}>
+      <div
+        className="flex aspect-[16/10] snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] focus-visible:outline focus-visible:outline-3 focus-visible:outline-brand-600"
+        {...(several ? { role: 'region', tabIndex: 0, 'aria-label': `Photos of ${court.name}. Swipe or use the arrow keys to see more.` } : {})}
+      >
+        {photos.map((url, index) => (
+          <img
+            key={url}
+            src={url}
+            alt={several ? `${court.name}, photo ${index + 1} of ${photos.length}` : `Photo of ${court.name}`}
+            className="h-full w-full shrink-0 snap-center object-cover"
+            loading="lazy"
+            decoding="async"
+          />
+        ))}
+      </div>
+      {several ? (
+        <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-slate-950/70 px-2 py-0.5 text-caption font-semibold text-white">
+          <Images size={14} aria-hidden /> {photos.length} photos
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 export function ClubDirectory() {
@@ -146,7 +181,11 @@ export function ClubDirectory() {
               className="control-feedback card group flex h-full flex-col overflow-hidden hover:border-brand-500 hover:shadow-lg"
             >
               <span className="relative block">
-                <CourtArt seed={club.slug} className="aspect-[16/9]" />
+                {club.cover_photo ? (
+                  <img src={club.cover_photo} alt={`Photo of ${club.name}`} className="block aspect-[16/9] w-full object-cover" loading="lazy" decoding="async" />
+                ) : (
+                  <CourtArt seed={club.slug} className="aspect-[16/9]" />
+                )}
                 {club.min_rate != null ? (
                   <span className="absolute right-2 top-2 rounded-lg bg-white px-2 py-1 text-body font-bold text-slate-950 shadow">
                     From {peso(club.min_rate)}/hr
@@ -257,14 +296,24 @@ export function ClubDetailPage() {
   const courts = club.venues.flatMap((venue) => venue.courts)
   const openRates = courts.filter((court) => court.in_service).map((court) => court.hourly_rate)
   const fromRate = openRates.length ? Math.min(...openRates) : null
+  // Same order as the club card: a location cover first, else a court's main photo.
+  const heroPhoto = club.venues.map((venue) => venue.cover_photo).find(Boolean)
+    ?? courts.map((court) => court.photos?.[0]).find(Boolean)
+    ?? null
 
   return (
     <Frame>
       <Link to="/clubs" className={textLink}><ChevronLeft size={20} aria-hidden /> All clubs</Link>
 
       <header className="relative overflow-hidden rounded-3xl bg-slate-900 text-white">
-        <CourtArt seed={club.slug} label={null} className="aspect-[16/9] max-h-72 w-full sm:aspect-[21/9]" />
-        <span className="absolute right-3 top-3 rounded-md bg-slate-950/70 px-2 py-0.5 text-caption font-semibold">Sample image</span>
+        {heroPhoto ? (
+          <img src={heroPhoto} alt={`Photo of ${club.name}`} className="block aspect-[16/9] max-h-72 w-full object-cover sm:aspect-[21/9]" decoding="async" />
+        ) : (
+          <>
+            <CourtArt seed={club.slug} label={null} className="aspect-[16/9] max-h-72 w-full sm:aspect-[21/9]" />
+            <span className="absolute right-3 top-3 rounded-md bg-slate-950/70 px-2 py-0.5 text-caption font-semibold">Sample image</span>
+          </>
+        )}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/60 to-transparent p-4 pt-12">
           <h1 className="text-heading-1 font-extrabold tracking-tight">{club.name}</h1>
           {place ? <p className="mt-1 flex items-center gap-1 text-body text-slate-100"><MapPin size={16} aria-hidden /> {place}</p> : null}
@@ -291,6 +340,9 @@ export function ClubDetailPage() {
         const mapUrl = mapEmbedUrl(venue)
         return (
           <section key={venue.id} className="card overflow-hidden" aria-labelledby={`venue-${venue.id}`}>
+            {venue.cover_photo ? (
+              <img src={venue.cover_photo} alt={`Cover photo of ${venue.name}`} className="block aspect-[16/9] max-h-64 w-full object-cover" loading="lazy" decoding="async" />
+            ) : null}
             <div className="space-y-2 p-4">
               <h2 id={`venue-${venue.id}`} className="text-heading-3 font-bold text-slate-950">{venue.name}</h2>
               {venuePlace ? (
@@ -314,14 +366,14 @@ export function ClubDetailPage() {
                     const memberDeal = court.member_rate != null && court.member_rate < court.hourly_rate
                     return (
                       <li key={court.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                        <CourtArt seed={court.id} muted={!court.in_service} label="Sample" className="aspect-[16/10]" />
+                        <CourtPictures court={court} />
                         <div className="space-y-1 p-3">
                           <p className="font-bold text-slate-950">{court.name}</p>
                           {court.in_service ? (
                             <>
                               <p className="text-body text-slate-800"><span className="font-bold">{peso(court.hourly_rate)}</span>/hr</p>
                               {memberDeal ? <p className="text-body text-brand-800">Members {peso(court.member_rate!)}</p> : null}
-                              <span className={tagOk}>Open for booking</span>
+                              <span className={`${tagOk} whitespace-nowrap`}>Available</span>
                             </>
                           ) : (
                             <span className={`${tagWarn} whitespace-nowrap`}>Out of service</span>

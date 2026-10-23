@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Court, Venue } from '../types'
+import type { Court, CourtPhoto, Venue } from '../types'
 import { AdminVenues } from './AdminVenues'
 
 vi.mock('../context/AuthContext', () => ({
@@ -24,6 +24,11 @@ vi.mock('../lib/api', () => ({
     upsertCourt: vi.fn(),
     updateVenueLocation: vi.fn(),
     setStaffVenueGrant: vi.fn(),
+    listCourtPhotos: vi.fn(),
+    addCourtPhoto: vi.fn(),
+    makeMainCourtPhoto: vi.fn(),
+    removeCourtPhoto: vi.fn(),
+    setVenueCover: vi.fn(),
   },
 }))
 
@@ -57,6 +62,7 @@ describe('AdminVenues courts', () => {
     vi.mocked(api.listCourts).mockReset().mockResolvedValue([courtA, courtB])
     vi.mocked(api.staffAccounts).mockReset().mockResolvedValue([])
     vi.mocked(api.upsertCourt).mockReset()
+    vi.mocked(api.listCourtPhotos).mockReset().mockResolvedValue([])
   })
 
   it("lists each venue's courts with rate and status, and warns when a venue has none", async () => {
@@ -161,5 +167,84 @@ describe('AdminVenues courts', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('This venue already has a court with that name')
     expect(screen.getByRole('form', { name: 'Add a court to Main Venue' })).toBeInTheDocument()
+  })
+})
+
+const photoOf = (id: string, courtId: string | null, position = 0): CourtPhoto => ({
+  id, club_id: 'club-1', venue_id: 'venue-main', court_id: courtId, path: `p/${id}.webp`,
+  url: `https://example.test/${id}.webp`, position, created_at: '2026-10-23T00:00:00.000Z',
+})
+
+describe('AdminVenues photos', () => {
+  beforeEach(() => {
+    vi.mocked(api.listAllVenues).mockReset().mockResolvedValue([mainVenue, eastVenue])
+    vi.mocked(api.listCourts).mockReset().mockResolvedValue([courtA, courtB])
+    vi.mocked(api.staffAccounts).mockReset().mockResolvedValue([])
+    vi.mocked(api.listCourtPhotos).mockReset().mockResolvedValue([])
+    vi.mocked(api.addCourtPhoto).mockReset()
+    vi.mocked(api.removeCourtPhoto).mockReset().mockResolvedValue()
+    vi.mocked(api.makeMainCourtPhoto).mockReset().mockResolvedValue()
+    vi.mocked(api.setVenueCover).mockReset().mockResolvedValue()
+  })
+
+  it('uploads several photos to a court, one at a time', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.addCourtPhoto).mockImplementation(async (courtId) => photoOf('new', courtId))
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Photos of Court A (0)' }))
+    const editor = within(screen.getByRole('group', { name: 'Photos of Court A' }))
+    expect(editor.getByText('No photos yet. Players see a sample picture until you add one.')).toBeInTheDocument()
+    const files = [new File(['a'], 'a.jpg', { type: 'image/jpeg' }), new File(['b'], 'b.png', { type: 'image/png' })]
+    await user.upload(editor.getByLabelText('Add photos'), files)
+
+    await waitFor(() => expect(api.addCourtPhoto).toHaveBeenCalledTimes(2))
+    expect(api.addCourtPhoto).toHaveBeenNthCalledWith(1, 'court-a', files[0])
+    expect(api.addCourtPhoto).toHaveBeenNthCalledWith(2, 'court-a', files[1])
+    expect(await screen.findByText('2 photos added to Court A')).toBeInTheDocument()
+  })
+
+  it('marks the main photo, changes it, and removes a photo only after confirming', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.listCourtPhotos).mockResolvedValue([photoOf('one', 'court-a', 0), photoOf('two', 'court-a', 1)])
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Photos of Court A (2)' }))
+    const editor = within(screen.getByRole('group', { name: 'Photos of Court A' }))
+    expect(editor.getByRole('img', { name: 'Court A photo 1' })).toHaveAttribute('src', 'https://example.test/one.webp')
+    expect(editor.getByText('Main photo')).toBeInTheDocument()
+    expect(editor.queryByRole('button', { name: 'Make photo 1 the main photo of Court A' })).not.toBeInTheDocument()
+
+    await user.click(editor.getByRole('button', { name: 'Make photo 2 the main photo of Court A' }))
+    expect(api.makeMainCourtPhoto).toHaveBeenCalledWith('two')
+
+    await user.click(await screen.findByRole('button', { name: 'Remove photo 2 of Court A' }))
+    expect(api.removeCourtPhoto).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Remove photo 2 of Court A' }))
+    expect(api.removeCourtPhoto).toHaveBeenCalledWith('two')
+    expect(confirm).toHaveBeenCalledTimes(2)
+    confirm.mockRestore()
+  })
+
+  it("sets a location's cover photo", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByRole('heading', { name: 'East Venue' })
+
+    const file = new File(['c'], 'cover.jpg', { type: 'image/jpeg' })
+    await user.upload(venueCard('East Venue').getByLabelText('Add cover photo'), file)
+    expect(api.setVenueCover).toHaveBeenCalledWith('venue-east', file)
+    expect(await screen.findByText('Cover photo saved')).toBeInTheDocument()
+  })
+
+  it('still manages courts when photos cannot load', async () => {
+    vi.mocked(api.listCourtPhotos).mockRejectedValue(new Error('relation "court_photos" does not exist'))
+    renderPage()
+    await screen.findByRole('heading', { name: 'Main Venue' })
+
+    expect(venueCard('Main Venue').getByText('Court A')).toBeInTheDocument()
+    expect(venueCard('Main Venue').getByText('Photos are not available yet on this system.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Photos of Court A/ })).not.toBeInTheDocument()
   })
 })

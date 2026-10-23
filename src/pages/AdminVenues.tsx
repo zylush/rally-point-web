@@ -3,9 +3,10 @@ import { BackButton } from '../components/BackButton'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import type { Court, CourtInput, Profile, Venue, VenueLocationInput } from '../types'
+import type { Court, CourtInput, CourtPhoto, Profile, Venue, VenueLocationInput } from '../types'
 import { openingHoursLabel, peso } from '../types'
 import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
+import { CourtPhotosEditor, VenueCoverEditor } from './AdminPhotos'
 
 const DEFAULT_COURT_RATE = 500
 
@@ -13,11 +14,24 @@ const DEFAULT_COURT_RATE = 500
 type SaveCourt = (input: CourtInput, busyKey: string) => Promise<boolean>
 type SaveLocation = (input: VenueLocationInput) => Promise<boolean>
 
+/** Photo actions for venue covers and courts. */
+interface PhotoActions {
+  /** Null when photos cannot be loaded (for example before the photo update reaches this database). */
+  photos: CourtPhoto[] | null
+  progress: Record<string, string>
+  addCourtPhotos: (court: Court, files: File[]) => void
+  makeMain: (photo: CourtPhoto) => void
+  removeCourtPhoto: (photo: CourtPhoto, courtName: string) => void
+  setCover: (venue: Venue, file: File | null) => void
+}
+
 export function AdminVenues() {
   const { activeClub } = useAuth()
   const [venues, setVenues] = useState<Venue[]>([])
   const [courts, setCourts] = useState<Court[]>([])
   const [staff, setStaff] = useState<Profile[]>([])
+  const [photos, setPhotos] = useState<CourtPhoto[] | null>(null)
+  const [progress, setProgress] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -27,13 +41,16 @@ export function AdminVenues() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [nextVenues, nextCourts, nextStaff] = await Promise.all([
+      const [nextVenues, nextCourts, nextStaff, nextPhotos] = await Promise.all([
         api.listAllVenues(),
         api.listCourts(),
         api.staffAccounts(),
+        // Photos are optional here: the rest of the page works without them.
+        api.listCourtPhotos().catch(() => null),
       ])
       setVenues(nextVenues)
       setCourts(nextCourts)
+      setPhotos(nextPhotos)
       setStaff(nextStaff.filter((account) => account.role === 'staff'))
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load venue settings')
@@ -112,6 +129,63 @@ export function AdminVenues() {
     }
   }
 
+  const reloadPhotos = useCallback(async () => {
+    setPhotos(await api.listCourtPhotos().catch(() => null))
+  }, [])
+
+  async function addCourtPhotos(court: Court, files: File[]) {
+    const key = `photo:${court.id}`
+    setBusy(key)
+    let added = 0
+    try {
+      for (const [index, file] of files.entries()) {
+        setProgress((now) => ({ ...now, [key]: files.length > 1 ? `Uploading ${index + 1} of ${files.length}…` : 'Uploading…' }))
+        await api.addCourtPhoto(court.id, file)
+        added += 1
+      }
+      setMessage(added === 1 ? `Photo added to ${court.name}` : `${added} photos added to ${court.name}`)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Could not add the photo'
+      setMessage(added ? `${added} added, then: ${reason}` : reason)
+    } finally {
+      setProgress((now) => {
+        const rest = { ...now }
+        delete rest[key]
+        return rest
+      })
+      setBusy(null)
+      await reloadPhotos()
+    }
+  }
+
+  async function runPhotoAction(key: string, action: () => Promise<void>, done: string) {
+    setBusy(key)
+    try {
+      await action()
+      setMessage(done)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update the photo')
+    } finally {
+      setBusy(null)
+      await reloadPhotos()
+    }
+  }
+
+  const photoActions: PhotoActions = {
+    photos,
+    progress,
+    addCourtPhotos: (court, files) => void addCourtPhotos(court, files),
+    makeMain: (photo) => void runPhotoAction(`photo:${photo.court_id}`, () => api.makeMainCourtPhoto(photo.id), 'Main photo changed'),
+    removeCourtPhoto: (photo, courtName) => {
+      if (!window.confirm(`Remove this photo of ${courtName}? Players will no longer see it.`)) return
+      void runPhotoAction(`photo:${photo.court_id}`, () => api.removeCourtPhoto(photo.id), 'Photo removed')
+    },
+    setCover: (venue, file) => {
+      if (!file && !window.confirm(`Remove the cover photo of ${venue.name}?`)) return
+      void runPhotoAction(`cover:${venue.id}`, () => api.setVenueCover(venue.id, file), file ? 'Cover photo saved' : 'Cover photo removed')
+    },
+  }
+
   async function toggleGrant(account: Profile, venue: Venue) {
     const assigned = account.venue_ids?.includes(venue.id) ?? false
     setBusy(`${account.id}:${venue.id}`)
@@ -166,6 +240,7 @@ export function AdminVenues() {
                 onToggleVenue={() => void toggleVenue(venue)}
                 onSaveCourt={saveCourt}
                 onSaveLocation={saveLocation}
+                photoActions={photoActions}
               />
             ))}
 
@@ -214,6 +289,7 @@ function VenueCard({
   onToggleVenue,
   onSaveCourt,
   onSaveLocation,
+  photoActions,
 }: {
   venue: Venue
   courts: Court[]
@@ -221,8 +297,12 @@ function VenueCard({
   onToggleVenue: () => void
   onSaveCourt: SaveCourt
   onSaveLocation: SaveLocation
+  photoActions: PhotoActions
 }) {
   const [adding, setAdding] = useState(false)
+  const [photosOpenId, setPhotosOpenId] = useState<string | null>(null)
+  const { photos } = photoActions
+  const cover = photos?.find((photo) => photo.venue_id === venue.id && !photo.court_id) ?? null
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingLocation, setEditingLocation] = useState(false)
   const place = placeLine(venue)
@@ -276,6 +356,18 @@ function VenueCard({
         )}
       </div>
 
+      {photos ? (
+        <VenueCoverEditor
+          venueName={venue.name}
+          cover={cover}
+          busy={busy === `cover:${venue.id}`}
+          onSet={(file) => photoActions.setCover(venue, file)}
+          onRemove={() => photoActions.setCover(venue, null)}
+        />
+      ) : (
+        <p className="text-xs text-slate-500">Photos are not available yet on this system.</p>
+      )}
+
       <div>
         <h3 className="text-sm font-bold text-slate-700">Courts</h3>
         {inService === 0 ? (
@@ -320,6 +412,16 @@ function VenueCard({
                   </div>
                 </div>
               )}
+              {photos && editingId !== court.id ? (
+                <CourtPhotosToggle
+                  court={court}
+                  photos={photos.filter((photo) => photo.court_id === court.id)}
+                  open={photosOpenId === court.id}
+                  onToggle={() => setPhotosOpenId(photosOpenId === court.id ? null : court.id)}
+                  busy={busy === `photo:${court.id}`}
+                  photoActions={photoActions}
+                />
+              ) : null}
             </li>
           ))}
         </ul>
@@ -405,6 +507,46 @@ function LocationForm({
         </button>
       </div>
     </form>
+  )
+}
+
+function CourtPhotosToggle({
+  court,
+  photos,
+  open,
+  onToggle,
+  busy,
+  photoActions,
+}: {
+  court: Court
+  photos: CourtPhoto[]
+  open: boolean
+  onToggle: () => void
+  busy: boolean
+  photoActions: PhotoActions
+}) {
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-800 underline"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        {open ? `Hide photos of ${court.name}` : `Photos of ${court.name} (${photos.length})`}
+      </button>
+      {open ? (
+        <CourtPhotosEditor
+          courtName={court.name}
+          photos={photos}
+          busy={busy}
+          progress={photoActions.progress[`photo:${court.id}`]}
+          onAdd={(files) => photoActions.addCourtPhotos(court, files)}
+          onMakeMain={photoActions.makeMain}
+          onRemove={(photo) => photoActions.removeCourtPhoto(photo, court.name)}
+        />
+      ) : null}
+    </div>
   )
 }
 

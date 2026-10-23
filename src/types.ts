@@ -257,6 +257,8 @@ export interface PublicClubListing {
   court_count: number
   min_rate: number | null
   min_member_rate: number | null
+  /** Photo for the club card (a location cover or a court photo); null shows a sample picture. */
+  cover_photo?: string | null
 }
 
 /** A club's public page: its active venues and their courts. */
@@ -274,9 +276,37 @@ export interface PublicClubDetail {
     city: string | null
     latitude: number | null
     longitude: number | null
-    courts: { id: string; name: string; hourly_rate: number; member_rate: number | null; in_service: boolean }[]
+    /** The location's cover photo, if it has one. */
+    cover_photo?: string | null
+    courts: {
+      id: string
+      name: string
+      hourly_rate: number
+      member_rate: number | null
+      in_service: boolean
+      /** Photo links, main photo first. Empty means a sample picture is shown. */
+      photos?: string[]
+    }[]
   }[]
 }
+
+/**
+ * A photo an admin added. court_id null means the location's cover photo.
+ * `url` is ready to show; `path` is where the file is stored.
+ */
+export interface CourtPhoto {
+  id: string
+  club_id: string
+  venue_id: string
+  court_id: string | null
+  path: string
+  url: string
+  position: number
+  created_at: string
+}
+
+/** Up to this many photos per court, as the database enforces. */
+export const MAX_COURT_PHOTOS = 8
 
 /** A membership counts when it has a plan, is active, and has not expired. Players have no plan. */
 export function hasActiveMembership(member: Pick<Member, 'membership_type' | 'status' | 'expiry_date'> | null | undefined, today = new Date()) {

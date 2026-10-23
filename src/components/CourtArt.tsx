@@ -30,12 +30,12 @@ export function CourtArt({
         <rect width="320" height="180" fill="#115e59" />
         <rect x={LEFT} y={TOP} width={RIGHT - LEFT} height={BOTTOM - TOP} fill="#0f766e" />
         <rect x={160 - KITCHEN} y={TOP} width={KITCHEN * 2} height={BOTTOM - TOP} fill="#0d9488" />
-        <g stroke="#ffffff" strokeWidth="2" fill="none">
-          <rect x={LEFT} y={TOP} width={RIGHT - LEFT} height={BOTTOM - TOP} />
-          <line x1={160 - KITCHEN} y1={TOP} x2={160 - KITCHEN} y2={BOTTOM} />
-          <line x1={160 + KITCHEN} y1={TOP} x2={160 + KITCHEN} y2={BOTTOM} />
-          <line x1={LEFT} y1={90} x2={160 - KITCHEN} y2={90} />
-          <line x1={160 + KITCHEN} y1={90} x2={RIGHT} y2={90} />
+        <g className="court-lines" stroke="#ffffff" strokeWidth="2" fill="none">
+          <rect x={LEFT} y={TOP} width={RIGHT - LEFT} height={BOTTOM - TOP} pathLength="1" />
+          <line x1={160 - KITCHEN} y1={TOP} x2={160 - KITCHEN} y2={BOTTOM} pathLength="1" />
+          <line x1={160 + KITCHEN} y1={TOP} x2={160 + KITCHEN} y2={BOTTOM} pathLength="1" />
+          <line x1={LEFT} y1={90} x2={160 - KITCHEN} y2={90} pathLength="1" />
+          <line x1={160 + KITCHEN} y1={90} x2={RIGHT} y2={90} pathLength="1" />
         </g>
         <line x1="160" y1={TOP - 6} x2="160" y2={BOTTOM + 6} stroke="#0f172a" strokeWidth="3" />
       </svg>

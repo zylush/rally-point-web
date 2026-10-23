@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -193,6 +193,56 @@ describe('Find a court', () => {
     expect(within(venue.getByText('Davao Court 2').closest('li')!).getByText('Sample')).toBeInTheDocument()
     // The club picture at the top uses the cover photo, not the drawing.
     expect(screen.getByRole('img', { name: 'Photo of Rally Point Davao' })).toHaveAttribute('src', 'https://example.test/cover.webp')
+  })
+
+  it('holds the club grid with card-shaped placeholders while clubs load', async () => {
+    let finish: (rows: PublicClubListing[]) => void = () => {}
+    vi.mocked(api.listPublicClubs).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    renderAt('/clubs')
+
+    const status = screen.getByText('Loading clubs…')
+    expect(status).toHaveAttribute('role', 'status')
+
+    finish(clubs)
+    expect(await screen.findByRole('link', { name: /Rally Point Davao/ })).toBeInTheDocument()
+    expect(screen.queryByText('Loading clubs…')).not.toBeInTheDocument()
+  })
+
+  it('holds the club page with page-shaped placeholders while it loads', async () => {
+    let finish: (detail: PublicClubDetail) => void = () => {}
+    vi.mocked(api.publicClubDetail).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    renderAt('/clubs/rally-point-davao')
+
+    expect(screen.getByRole('link', { name: 'All clubs' })).toHaveAttribute('href', '/clubs')
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('Loading club…')
+
+    finish(davao)
+    expect(await screen.findByRole('heading', { name: 'Davao Main' })).toBeInTheDocument()
+    expect(screen.queryByText('Loading club…')).not.toBeInTheDocument()
+  })
+
+  it('fades a photo in once it loads, and keeps a labelled placeholder if it fails', async () => {
+    vi.mocked(api.listPublicClubs).mockResolvedValue([
+      { ...clubs[0], cover_photo: 'https://example.test/cover.webp' },
+      { ...clubs[1], cover_photo: 'https://example.test/broken.webp' },
+    ])
+    renderAt('/clubs')
+
+    const davaoPhoto = within(await screen.findByRole('link', { name: /Rally Point Davao/ }))
+      .getByRole('img', { name: 'Photo of Rally Point Davao' })
+    expect(davaoPhoto.parentElement).toHaveAttribute('data-state', 'loading')
+    fireEvent.load(davaoPhoto)
+    expect(davaoPhoto.parentElement).toHaveAttribute('data-state', 'loaded')
+
+    const gensanCard = within(screen.getByRole('link', { name: /Rally Point Gensan/ }))
+    const gensanPhoto = gensanCard.getByRole('img', { name: 'Photo of Rally Point Gensan' })
+    expect(gensanPhoto.tagName).toBe('IMG')
+    fireEvent.error(gensanPhoto)
+    const placeholder = gensanCard.getByRole('img', { name: 'Photo of Rally Point Gensan' })
+    expect(placeholder.tagName).not.toBe('IMG')
+    expect(placeholder).toHaveAttribute('data-state', 'error')
+    expect(document.querySelector('img[src="https://example.test/broken.webp"]')).toBeNull()
   })
 
   it('explains an unknown club', async () => {

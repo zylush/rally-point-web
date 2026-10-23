@@ -56,6 +56,31 @@ describe('staging build target', () => {
     await expect(settings()).rejects.toThrow('Staging requires')
   })
 
+  it('serves the Vercel staging build from the domain root into dist with the same checks', async () => {
+    env.VITE_SUPABASE_ANON_KEY = 'sb_publishable_test-key-not-a-real-credential'
+    const result = await settings('staging-vercel')
+    expect(result.base).toBe('/')
+    expect(result.build?.outDir).toBe('dist')
+    env.VITE_BASE = '/'
+    expect((await settings('staging-vercel')).base).toBe('/')
+  })
+
+  it.each([
+    ['VITE_SUPABASE_URL', 'https://ausgoiwwhevrplfetccm.supabase.co'],
+    ['VITE_SUPABASE_ANON_KEY', ''],
+    ['VITE_SUPABASE_ANON_KEY', 'sb_secret_never-ship'],
+    ['VITE_SUPABASE_ANON_KEY', token('service_role')],
+    ['VITE_BASE', '/rally-point-web/'],
+  ])('rejects a Vercel staging build with a bad %s', async (name, value) => {
+    env[name] = value
+    await expect(settings('staging-vercel')).rejects.toThrow('Staging requires')
+  })
+
+  it('keeps the Pages staging build off the domain root', async () => {
+    env.VITE_BASE = '/'
+    await expect(settings()).rejects.toThrow('Staging requires')
+  })
+
   it.each(['development', 'production'])('preserves blank-env demo configuration in %s mode', async (mode) => {
     env.VITE_SUPABASE_URL = ''
     env.VITE_SUPABASE_ANON_KEY = ''

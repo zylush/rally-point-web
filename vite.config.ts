@@ -5,17 +5,15 @@ import { fileURLToPath, URL } from 'node:url'
 
 const stagingProject = 'iclrvvsiwypxlwrwgqia'
 const pagesBase = '/rally-point-web/'
-// Staging builds: GitHub Pages serves under /rally-point-web/, Vercel at the domain root.
-const stagingBases = new Map([['staging', pagesBase], ['staging-vercel', '/']])
 
 // Build-time mistake prevention, not authorization or JWT signature validation.
 // Opaque publishable keys need a separate read-only project association check.
-function validateStaging(env: Record<string, string>, base: string) {
+function validateStaging(env: Record<string, string>) {
   if (env.VITE_SUPABASE_URL !== `https://${stagingProject}.supabase.co`) {
     throw new Error('Staging requires the approved Rally-Point-Database URL.')
   }
-  if (env.VITE_BASE && env.VITE_BASE !== base) {
-    throw new Error(`Staging requires the ${base} base path.`)
+  if (env.VITE_BASE && env.VITE_BASE !== pagesBase) {
+    throw new Error('Staging requires the /rally-point-web/ base path.')
   }
   const key = env.VITE_SUPABASE_ANON_KEY ?? ''
   if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) return
@@ -31,10 +29,9 @@ function validateStaging(env: Record<string, string>, base: string) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_')
-  const stagingBase = stagingBases.get(mode)
-  if (stagingBase) validateStaging(env, stagingBase)
+  if (mode === 'staging') validateStaging(env)
   return {
-    base: stagingBase ?? (process.env.VITE_BASE || pagesBase),
+    base: mode === 'staging' ? pagesBase : process.env.VITE_BASE || pagesBase,
     // Keep the reviewed staging artifact separate from the legacy deploy script.
     build: { outDir: mode === 'staging' ? 'staging-artifact.local' : 'dist' },
     plugins: [react(), tailwindcss()],

@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:staging": "tsc -b && vite build --mode staging",
-    "build:staging-vercel": "tsc -b && vite build --mode staging-vercel",
     "preview:staging": "vite preview --outDir staging-artifact.local --host 127.0.0.1",
     "lint": "oxlint",
     "test": "vitest run --config vitest.harness.config.ts",

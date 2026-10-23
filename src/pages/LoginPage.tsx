@@ -95,6 +95,9 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   const [error, setError] = useState<string | null>(null)
   const [resetSuccess, setResetSuccess] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Counts mode changes so the form fades in on each change, not on first load or while typing.
+  const [modeSwitches, setModeSwitches] = useState(0)
+  const modeFade = modeSwitches === 0 ? undefined : modeSwitches % 2 ? 'enter-fade' : 'enter-fade-again'
   // Keep the join link's club, so returning from the notice still signs up into it.
   const privacyPath = privacyNoticePath(joinClub?.slug)
   const privacyState: PrivacyNoticeState = { from: joinClub ? `/join/${joinClub.slug}` : '/login' }
@@ -134,6 +137,7 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
   }
 
   function switchMode(next: Mode) {
+    if (next !== mode) setModeSwitches((count) => count + 1)
     setMode(next)
     setPassword('')
     setPasswordVisible(false)
@@ -210,7 +214,7 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
 
         {/* Access card — glass over video */}
         <div className="flex items-center justify-center lg:justify-end pb-8 lg:pb-0">
-          <div className="w-full max-w-md rounded-3xl border border-white/25 bg-white/95 backdrop-blur-xl p-5 sm:p-7 text-slate-900 shadow-2xl shadow-black/50">
+          <div className="enter-rise w-full max-w-md rounded-3xl border border-white/25 bg-white/95 backdrop-blur-xl p-5 sm:p-7 text-slate-900 shadow-2xl shadow-black/50">
             <div className="mb-5 grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
               <button
                 type="button"
@@ -235,6 +239,7 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
               </button>
             </div>
 
+            <div className={modeFade}>
             <div className="mb-4">
               <p className="text-sm font-bold text-slate-500">
                 {mode === 'join'
@@ -442,6 +447,7 @@ export default function LoginPage({ joinClub }: { joinClub?: PublicClub } = {}) 
                 </button>
               </p>
             )}
+            </div>
 
             {demo ? (
               <div className="mt-6 pt-5 border-t border-slate-100">

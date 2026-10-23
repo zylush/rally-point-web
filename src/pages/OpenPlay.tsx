@@ -1,11 +1,57 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Users } from 'lucide-react'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { LoadingShapes, SkeletonBlock, SkeletonCard, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { stagger } from '../lib/motion'
 import { isDemoMode } from '../lib/supabase'
 import type { Court, Member, OpenPlaySession, Role, SkillLevel, Venue } from '../types'
 import { fmtDateTime, peso, ymdLocal } from '../types'
+
+/** Two open play cards as members see them: title, time, details, fee and the join button. */
+function MemberOpenPlayLoading() {
+  return (
+    <LoadingShapes label="Loading open play games…">
+      <div className="space-y-3" aria-hidden>
+        {[0, 1].map((key) => (
+          <SkeletonCard key={key} className="space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <SkeletonLine size="title" className="w-3/5" />
+                <SkeletonLine className="w-2/5" />
+                <SkeletonLine size="caption" className="w-1/2 mt-1" />
+              </div>
+              <SkeletonBlock className="h-7 w-16 rounded-full!" />
+            </div>
+            <SkeletonLine className="w-20" />
+            <SkeletonBlock className="h-[54px] w-full rounded-[16px]!" />
+          </SkeletonCard>
+        ))}
+      </div>
+    </LoadingShapes>
+  )
+}
+
+/** Session cards on the staff and admin list: title and status, time, seats and fee. */
+function ManageOpenPlayLoading() {
+  return (
+    <LoadingShapes label="Loading open play sessions…">
+      <div className="space-y-3" aria-hidden>
+        {[0, 1, 2].map((key) => (
+          <SkeletonCard key={key}>
+            <div className="flex items-center justify-between gap-2">
+              <SkeletonLine size="subtitle" className="w-1/2" />
+              <SkeletonLine size="caption" className="w-12" />
+            </div>
+            <SkeletonLine className="w-2/5 mt-1" />
+            <SkeletonLine size="caption" className="w-3/5 mt-1" />
+          </SkeletonCard>
+        ))}
+      </div>
+    </LoadingShapes>
+  )
+}
 
 export function MemberOpenPlay() {
   const { user } = useAuth()
@@ -17,21 +63,37 @@ export function MemberOpenPlay() {
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  // Only the newest reload may change the list, so a slow one for an old venue can't overwrite it.
+  const latestRequest = useRef(0)
 
-  const reload = useCallback(async () => {
+  // A quiet reload (after joining or leaving) keeps the list on screen, so the cards
+  // don't swap back to the placeholder or play their entrance again. Reload never throws:
+  // a failure keeps the last list, so it can't replace a join or leave message.
+  const reload = useCallback(async (quiet = false) => {
     if (!userId) return
-    setLoading(true)
-    const accessibleVenues = typeof api.listVenues === 'function' ? await api.listVenues(userId, 'member') : []
-    setVenues(accessibleVenues)
-    const nextVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId) ? venueId : accessibleVenues[0]?.id ?? ''
-    if (nextVenueId !== venueId) setVenueId(nextVenueId)
-    const [ops, m] = await Promise.all([
-      api.listOpenPlays(false, nextVenueId || undefined),
-      api.memberForUser(userId),
-    ])
-    setList(ops)
-    setMember(m)
-    setLoading(false)
+    const request = ++latestRequest.current
+    const isLatest = () => request === latestRequest.current
+    if (!quiet) setLoading(true)
+    try {
+      const accessibleVenues = typeof api.listVenues === 'function' ? await api.listVenues(userId, 'member') : []
+      if (!isLatest()) return
+      setVenues(accessibleVenues)
+      const nextVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId) ? venueId : accessibleVenues[0]?.id ?? ''
+      if (nextVenueId !== venueId) setVenueId(nextVenueId)
+      const [ops, m] = await Promise.all([
+        api.listOpenPlays(false, nextVenueId || undefined),
+        api.memberForUser(userId),
+      ])
+      if (!isLatest()) return
+      setList(ops)
+      setMember(m)
+      setLoadFailed(false)
+    } catch {
+      if (isLatest()) setLoadFailed(true)
+    } finally {
+      if (isLatest()) setLoading(false)
+    }
   }, [userId, venueId])
 
   useEffect(() => {
@@ -47,7 +109,7 @@ export function MemberOpenPlay() {
     try {
       const r = await api.joinOpenPlay(id, member.id, user.id)
       setMsg(r.signup.status === 'joined' ? 'Joined open play!' : 'Added to waitlist')
-      await reload()
+      await reload(true)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Failed')
     } finally {
@@ -62,7 +124,7 @@ export function MemberOpenPlay() {
     try {
       await api.leaveOpenPlay(id, member.id)
       setMsg('Left session')
-      await reload()
+      await reload(true)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Failed')
     } finally {
@@ -84,15 +146,17 @@ export function MemberOpenPlay() {
           </section>
         ) : null}
         {loading ? (
-          <LoadingBlock />
+          <MemberOpenPlayLoading />
         ) : list.length === 0 ? (
-          <section className="card p-4 text-sm text-slate-500">No open play sessions right now.</section>
+          <section className="enter-rise card p-4 text-sm text-slate-500">
+            {loadFailed ? "Couldn't load open play games. Please try again later." : 'No open play sessions right now.'}
+          </section>
         ) : (
-          list.map((op) => {
+          list.map((op, index) => {
             const mine = op.signups?.find((s) => s.member_id === member?.id && s.status !== 'cancelled')
             const seats = op.seats_taken ?? 0
             return (
-              <section key={op.id} className="card p-4 space-y-2">
+              <section key={op.id} className="enter-rise card p-4 space-y-2" style={stagger(index)}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-extrabold text-lg">{op.title}</p>
@@ -160,21 +224,36 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
   const [fee, setFee] = useState(250)
   const [skill, setSkill] = useState<SkillLevel>('all')
   const [msg, setMsg] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  // Only the newest reload may change the list, so a slow one for an old venue can't overwrite it.
+  const latestRequest = useRef(0)
 
-  const reload = useCallback(async () => {
-    setLoading(true)
-    const accessibleVenues = typeof api.listVenues === 'function' ? await api.listVenues(user?.id, role) : []
-    setVenues(accessibleVenues)
-    const nextVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId) ? venueId : accessibleVenues[0]?.id ?? ''
-    if (nextVenueId !== venueId) setVenueId(nextVenueId)
-    const [ops, c] = await Promise.all([
-      nextVenueId ? api.listOpenPlays(true, nextVenueId) : api.listOpenPlays(true),
-      nextVenueId ? api.listCourts(nextVenueId) : api.listCourts(),
-    ])
-    setList(ops)
-    setCourts(c)
-    if (c[0]) setCourtId((current) => current || c[0].id)
-    setLoading(false)
+  // A quiet reload (after publishing) keeps the list on screen instead of the placeholder.
+  // Reload never throws: a failure keeps the last list and the success message.
+  const reload = useCallback(async (quiet = false) => {
+    const request = ++latestRequest.current
+    const isLatest = () => request === latestRequest.current
+    if (!quiet) setLoading(true)
+    try {
+      const accessibleVenues = typeof api.listVenues === 'function' ? await api.listVenues(user?.id, role) : []
+      if (!isLatest()) return
+      setVenues(accessibleVenues)
+      const nextVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId) ? venueId : accessibleVenues[0]?.id ?? ''
+      if (nextVenueId !== venueId) setVenueId(nextVenueId)
+      const [ops, c] = await Promise.all([
+        nextVenueId ? api.listOpenPlays(true, nextVenueId) : api.listOpenPlays(true),
+        nextVenueId ? api.listCourts(nextVenueId) : api.listCourts(),
+      ])
+      if (!isLatest()) return
+      setList(ops)
+      setCourts(c)
+      if (c[0]) setCourtId((current) => current || c[0].id)
+      setLoadFailed(false)
+    } catch {
+      if (isLatest()) setLoadFailed(true)
+    } finally {
+      if (isLatest()) setLoading(false)
+    }
   }, [role, user?.id, venueId])
 
   useEffect(() => {
@@ -200,7 +279,7 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
       })
       setMsg('Open play created')
       setShowForm(false)
-      await reload()
+      await reload(true)
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Failed')
     }
@@ -310,10 +389,12 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
         ) : null}
 
         {loading ? (
-          <LoadingBlock />
+          <ManageOpenPlayLoading />
+        ) : loadFailed && list.length === 0 ? (
+          <section className="enter-rise card p-4 text-sm text-slate-500">Couldn't load open play sessions. Please try again later.</section>
         ) : (
-          list.map((op) => (
-            <section key={op.id} className="card p-4">
+          list.map((op, index) => (
+            <section key={op.id} className="enter-rise card p-4" style={stagger(index)}>
               <div className="flex items-center justify-between gap-2">
                 <p className="font-extrabold">{op.title}</p>
                 <span className="text-xs font-bold capitalize text-slate-500">{op.status}</span>

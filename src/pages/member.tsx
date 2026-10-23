@@ -10,15 +10,61 @@ import {
 import {
   AppHeader,
   AppShell,
-  LoadingBlock,
   SignOutAction,
   SignOutButton,
 } from '../components/Shell'
+import {
+  LoadingShapes,
+  SkeletonBlock,
+  SkeletonCard,
+  SkeletonLine,
+  SkeletonRows,
+} from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { stagger } from '../lib/motion'
 import { isDemoMode } from '../lib/supabase'
 import type { Member, Notification, Transaction } from '../types'
 import { fmtDate, peso, friendlyStatus } from '../types'
+
+/** Member home's first layout: the membership card, the two action rows and recent charges. */
+function MemberHomeLoading() {
+  return (
+    <LoadingShapes label="Loading your home screen…">
+      <div className="space-y-4" aria-hidden>
+        <SkeletonBlock className="h-[198px] w-full rounded-[18px]!" />
+        {[0, 1].map((key) => (
+          <div key={key} className="card p-4 flex items-center gap-3 min-h-[72px]">
+            <SkeletonBlock className="h-11 w-11 shrink-0 rounded-[14px]!" />
+            <div className="flex-1 min-w-0">
+              <SkeletonLine size="subtitle" className="w-2/5" />
+              <SkeletonLine className="w-3/4" />
+            </div>
+          </div>
+        ))}
+        <SkeletonCard>
+          <div className="flex min-h-12 items-center mb-2">
+            <SkeletonLine size="subtitle" className="w-2/5" />
+          </div>
+          <SkeletonRows count={3} />
+        </SkeletonCard>
+      </div>
+    </LoadingShapes>
+  )
+}
+
+/** The transactions list: one card of rows. */
+function TransactionsLoading() {
+  return (
+    <LoadingShapes label="Loading your transactions…">
+      <div aria-hidden>
+        <SkeletonCard>
+          <SkeletonRows count={4} />
+        </SkeletonCard>
+      </div>
+    </LoadingShapes>
+  )
+}
 
 export function MemberHome() {
   const { user } = useAuth()
@@ -55,11 +101,11 @@ export function MemberHome() {
       />
       <main className="safe-bottom px-4 pt-4 space-y-4">
         {loading ? (
-          <LoadingBlock />
+          <MemberHomeLoading />
         ) : (
           <>
             {member && !member.membership_type ? (
-              <section className="stat-card">
+              <section className="enter-rise stat-card">
                 <p className="text-body font-normal text-teal-100">Your membership</p>
                 <p className="text-heading-2 font-semibold mt-1">No membership yet</p>
                 <p className="text-body font-normal text-teal-50 mt-2">
@@ -77,7 +123,7 @@ export function MemberHome() {
                 </div>
               </section>
             ) : (
-            <section className="stat-card">
+            <section className="enter-rise stat-card">
               <p className="text-body font-normal text-teal-100">
                 Your membership
               </p>
@@ -113,7 +159,8 @@ export function MemberHome() {
 
             <Link
               to="/clubs"
-              className="control-feedback card p-4 flex items-center gap-3 min-h-[72px]"
+              className="enter-rise control-feedback card p-4 flex items-center gap-3 min-h-[72px]"
+              style={stagger(1)}
             >
               <span className="action-tile-icon shrink-0" aria-hidden>
                 <MapPin size={22} />
@@ -129,7 +176,8 @@ export function MemberHome() {
 
             <Link
               to="/member/notifications"
-              className="control-feedback card p-4 flex items-center gap-3 min-h-[72px]"
+              className="enter-rise control-feedback card p-4 flex items-center gap-3 min-h-[72px]"
+              style={stagger(2)}
             >
               <span className="action-tile-icon shrink-0" aria-hidden>
                 <Bell size={22} />
@@ -153,7 +201,7 @@ export function MemberHome() {
               )}
             </Link>
 
-            <section className="card p-4">
+            <section className="enter-rise card p-4" style={stagger(3)}>
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-subtitle font-semibold">{isDemoMode ? 'Recent payments' : 'Recent charges'}</h2>
                 <Link
@@ -307,9 +355,9 @@ export function MemberTransactions() {
       />
       <main className="safe-bottom px-4 pt-4">
         {loading ? (
-          <LoadingBlock />
+          <TransactionsLoading />
         ) : (
-          <section className="card p-4">
+          <section className="enter-rise card p-4">
             {rows.map((t) => (
               <div key={t.id} className="list-row">
                 <div className="flex-1 min-w-0">
@@ -346,11 +394,12 @@ export function MemberNotifications() {
     <AppShell role="member">
       <AppHeader title="Notifications" right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-4 space-y-2">
-        {rows.map((n) => (
+        {rows.map((n, index) => (
           <button
             key={n.id}
             type="button"
-            className={`control-feedback card p-4 w-full text-left ${n.read ? 'opacity-70' : 'ring-1 ring-brand-200'}`}
+            className={`enter-rise control-feedback card p-4 w-full text-left ${n.read ? 'opacity-70' : 'ring-1 ring-brand-200'}`}
+            style={stagger(index)}
             onClick={() => void api.markNotifRead(n.id).then(load)}
           >
             <div className="flex items-start justify-between gap-2">

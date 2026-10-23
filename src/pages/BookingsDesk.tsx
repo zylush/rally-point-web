@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { LoadingShapes, SkeletonLine } from '../components/Skeleton'
 import { api } from '../lib/api'
 import { isDemoMode } from '../lib/supabase'
 import type { Booking, Role, Venue } from '../types'
@@ -8,6 +9,25 @@ import { fmtDateTime, peso } from '../types'
 type DeskRole = 'staff' | 'admin'
 type VenueSelection = { role: DeskRole; venues: Venue[]; venueId: string; requestId: number }
 type BookingResult = { role: DeskRole; venueId: string; requestId: number; rows: Booking[]; error: string | null }
+
+/** Shaped like the booking list: a `p-2` card of rows with court and member, time and amount. */
+function BookingsLoading() {
+  return (
+    <LoadingShapes label="Loading bookings…">
+      <div className="card p-2" aria-hidden>
+        {[0, 1, 2, 3].map((key) => (
+          <div key={key} className="list-row px-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex h-5 w-3/5 items-center"><div className="skeleton h-3.5 w-full" /></div>
+              <SkeletonLine size="caption" className="w-4/5" />
+            </div>
+            <div className="flex h-5 w-20 items-center"><div className="skeleton h-3.5 w-full" /></div>
+          </div>
+        ))}
+      </div>
+    </LoadingShapes>
+  )
+}
 
 export function BookingsDesk({ role }: { role: 'staff' | 'admin' }) {
   const [selection, setSelection] = useState<VenueSelection | null>(null)
@@ -61,7 +81,7 @@ export function BookingsDesk({ role }: { role: 'staff' | 'admin' }) {
       />
       <main className="safe-bottom px-4 pt-4 space-y-3">
         {currentSelection && currentSelection.venues.length > 1 ? (
-          <section className="card p-3">
+          <section className="enter-rise card p-3">
             <label className="label" htmlFor="bookings-venue">Venue</label>
             <select id="bookings-venue" className="input" value={venueId} onChange={(event) => {
               const nextVenueId = event.target.value
@@ -73,13 +93,13 @@ export function BookingsDesk({ role }: { role: 'staff' | 'admin' }) {
           </section>
         ) : null}
         {loading ? (
-          <LoadingBlock />
+          <BookingsLoading />
         ) : error ? (
-          <section className="card p-4 text-sm text-red-600">{error}</section>
+          <section className="enter-rise card p-4 text-sm text-red-600">{error}</section>
         ) : rows.length === 0 ? (
-          <section className="card p-4 text-sm text-slate-500">No online bookings yet.</section>
+          <section className="enter-rise card p-4 text-sm text-slate-500">No online bookings yet.</section>
         ) : (
-          <section className="card p-2">
+          <section className="enter-rise card p-2">
             {rows.map((b) => (
               <div key={b.id} className="list-row px-2">
                 <div className="min-w-0 flex-1">

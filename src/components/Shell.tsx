@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext'
 import { homeFor } from '../lib/roleHome'
 import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
 import { RallyPointLogo } from './RallyPointLogo'
+import { LoadingShapes, SkeletonBlock, SkeletonCard, SkeletonRows } from './Skeleton'
 
 /** Plain-language nav — short words players of any age recognize */
 const memberTabs = [
@@ -452,16 +453,17 @@ export function EmptyState({ title, body }: { title: string; body?: string }) {
   )
 }
 
-export function LoadingBlock() {
+/** A general loading placeholder: a summary card and a short list. Screens with a known shape should build their own. */
+export function LoadingBlock({ label = 'Loading…' }: { label?: string } = {}) {
   return (
-    <div className="space-y-3 p-4" aria-busy="true" aria-label="Loading">
-      <div className="skeleton h-24" />
-      <div className="skeleton h-16" />
-      <div className="skeleton h-16" />
-      <p className="text-center text-body font-semibold text-slate-500 pt-1">
-        Loading…
-      </p>
-    </div>
+    <LoadingShapes label={label} caption="always">
+      <div className="space-y-3 p-4" aria-hidden>
+        <SkeletonBlock className="h-24 w-full rounded-[18px]!" />
+        <SkeletonCard>
+          <SkeletonRows count={2} />
+        </SkeletonCard>
+      </div>
+    </LoadingShapes>
   )
 }
 

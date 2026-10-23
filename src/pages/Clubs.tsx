@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Clock, ImageOff, Images, MapPin, Navigation, Search } from 'lucide-react'
 import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
 import { CourtArt } from '../components/CourtArt'
+import { LoadingShapes } from '../components/Skeleton'
+import { stagger } from '../lib/motion'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import type { PublicClubDetail, PublicClubListing } from '../types'
@@ -11,22 +13,7 @@ import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
 
 const textLink = 'control-feedback inline-flex min-h-12 items-center gap-1 text-body font-semibold text-brand-800'
 
-/** Delay for the `enter-rise` entrance, so a list settles in order. Capped so long lists never wait. */
-function stagger(index: number): CSSProperties {
-  return { '--stagger': Math.min(index, 8) } as CSSProperties
-}
-
 const clubGrid = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
-
-/** Announces loading to screen readers once; the placeholder shapes inside stay hidden from them. */
-function LoadingShapes({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="pointer-events-none select-none space-y-4">
-      <p role="status" className="sr-only">{label}</p>
-      {children}
-    </div>
-  )
-}
 
 /** Card-shaped placeholders in the same grid as the club list, so nothing jumps when clubs arrive. */
 function ClubCardsLoading() {

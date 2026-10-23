@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock3, Search, UserPlus } from 'lucide-react'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { stagger } from '../lib/motion'
 import { isDemoMode } from '../lib/supabase'
 import type { CheckIn, Court, CourtSession, Member, Venue } from '../types'
 import { fmtDateTime, fmtTime, peso } from '../types'
@@ -43,6 +45,75 @@ function VenueControl({ venues, venueId, onChange }: { venues: Venue[]; venueId:
         {venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
       </select>
     </div>
+  )
+}
+
+/** A `.list-row`: a name, a detail line and a pill or short code on the right. */
+function StaffRowShapes({ count, pill }: { count: number; pill: boolean }) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, key) => (
+        <div key={key} className="list-row">
+          <div className="min-w-0 flex-1">
+            <SkeletonLine size="small" className="w-2/5" />
+            <SkeletonLine size="caption" className="w-3/5" />
+          </div>
+          {pill ? <SkeletonBlock className="h-[23px] w-12 rounded-full!" /> : <SkeletonLine size="caption" className="w-14" />}
+        </div>
+      ))}
+    </>
+  )
+}
+
+/** Shaped like the live floor: two counts, the two big buttons, then the playing and check-in cards. */
+function StaffHomeLoading() {
+  return (
+    <LoadingShapes label="Loading the live floor…">
+      <div className="space-y-4" aria-hidden>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="skeleton h-full min-h-[93px] rounded-[18px]!" />
+          <div className="card p-4">
+            <SkeletonLine size="caption" className="w-16" />
+            <div className="mt-1 flex h-9 items-center">
+              <div className="skeleton h-7 w-10" />
+            </div>
+            <SkeletonLine size="caption" className="w-12" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <SkeletonBlock className="h-12 w-full rounded-[16px]!" />
+          <SkeletonBlock className="h-12 w-full rounded-[16px]!" />
+        </div>
+        <div className="card p-4">
+          <SkeletonLine size="subtitle" className="mb-1 w-40" />
+          <StaffRowShapes count={2} pill />
+        </div>
+        <div className="card p-4">
+          <SkeletonLine size="subtitle" className="mb-1 w-36" />
+          <StaffRowShapes count={3} pill={false} />
+        </div>
+      </div>
+    </LoadingShapes>
+  )
+}
+
+/** Shaped like the member list: initials tile, name and code, status pill. */
+function StaffMembersLoading() {
+  return (
+    <LoadingShapes label="Loading members…">
+      <div className="card p-2" aria-hidden>
+        {Array.from({ length: 6 }, (_, key) => (
+          <div key={key} className="list-row px-2">
+            <SkeletonBlock className="h-10 w-10 shrink-0 rounded-xl!" />
+            <div className="min-w-0 flex-1">
+              <SkeletonLine size="small" className="w-3/5" />
+              <SkeletonLine size="caption" className="w-2/5" />
+            </div>
+            <SkeletonBlock className="h-[23px] w-14 rounded-full!" />
+          </div>
+        ))}
+      </div>
+    </LoadingShapes>
   )
 }
 
@@ -96,16 +167,17 @@ export function StaffHome() {
         {venueError ? (
           <section className="card p-4 text-sm text-red-600">{venueError}</section>
         ) : venueLoading ? (
-          <LoadingBlock />
+          // The same placeholder stays up while the venue and then its floor load.
+          <StaffHomeLoading />
         ) : !venueId ? (
           <section className="card p-4 text-sm text-slate-500">No assigned venue.</section>
         ) : loadError ? (
           <section className="card p-4 text-sm text-red-600" role="alert">{loadError}</section>
         ) : loading ? (
-          <LoadingBlock />
+          <StaffHomeLoading />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="enter-rise grid grid-cols-2 gap-3">
               <div className="stat-card">
                 <p className="text-teal-100 text-xs font-bold uppercase">Playing now</p>
                 <p className="text-3xl font-extrabold mt-1">{sessions.filter((s) => s.status === 'playing').length}</p>
@@ -117,7 +189,7 @@ export function StaffHome() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="enter-rise grid grid-cols-2 gap-3" style={stagger(1)}>
               <Link to="/staff/checkin" className="btn-primary">
                 Check in
               </Link>
@@ -126,7 +198,7 @@ export function StaffHome() {
               </Link>
             </div>
 
-            <section className="card p-4">
+            <section className="enter-rise card p-4" style={stagger(2)}>
               <h2 className="font-extrabold mb-1">Currently playing</h2>
               {sessions.length === 0 ? (
                 <p className="text-sm text-slate-500 py-3">No active sessions.</p>
@@ -145,7 +217,7 @@ export function StaffHome() {
               )}
             </section>
 
-            <section className="card p-4">
+            <section className="enter-rise card p-4" style={stagger(3)}>
               <h2 className="font-extrabold mb-1">Latest check-ins</h2>
               {checkins.map((c) => (
                 <div key={c.id} className="list-row">
@@ -212,9 +284,9 @@ export function StaffMembers() {
         {error ? (
           <section className="card p-4 text-sm text-red-600" role="alert">{error}</section>
         ) : loading ? (
-          <LoadingBlock />
+          <StaffMembersLoading />
         ) : (
-          <section className="card p-2">
+          <section className="enter-rise card p-2">
             {filtered.slice(0, 50).map((m) => (
               <div key={m.id} className="list-row px-2">
                 <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-600">

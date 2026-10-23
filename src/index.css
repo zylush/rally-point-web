@@ -526,6 +526,21 @@ button[aria-busy='true'],
   }
 }
 
+/*
+ * Visible words under loading shapes (see LoadingShapes). Hidden by default because the
+ * shimmer already says "loading"; shown under reduced motion, where the shapes stand still,
+ * and always with `.loading-caption-always`. The text comes from `data-label`.
+ */
+.loading-caption {
+  display: none;
+}
+.loading-caption::before {
+  content: attr(data-label);
+}
+.loading-caption-always {
+  display: block;
+}
+
 /* Content settling in after it loads. Set --stagger (0–8) on a list item to cascade a list. */
 .enter-rise {
   animation: enter-rise var(--entrance-duration) var(--interaction-easing) backwards;
@@ -535,6 +550,29 @@ button[aria-busy='true'],
   from {
     opacity: 0;
     transform: translateY(var(--entrance-distance));
+  }
+}
+
+/*
+ * Content swapped in place (a form changing mode): a short fade, no movement.
+ * Alternate the two classes on each swap; a new animation name replays the fade
+ * without remounting the content, so focus and typed text stay put.
+ */
+.enter-fade,
+.enter-fade-again {
+  animation: enter-fade var(--interaction-duration) var(--interaction-easing) backwards;
+}
+.enter-fade-again {
+  animation-name: enter-fade-again;
+}
+@keyframes enter-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes enter-fade-again {
+  from {
+    opacity: 0;
   }
 }
 
@@ -620,6 +658,8 @@ button[aria-busy='true'],
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* Stops infinite animations (a spinning icon) instead of letting them whirl. */
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 
@@ -634,8 +674,10 @@ button[aria-busy='true'],
     transform: none !important;
   }
 
-  .enter-rise {
-    animation-delay: 0s !important;
+  .enter-rise,
+  .enter-fade,
+  .enter-fade-again {
+    animation: none !important;
   }
 
   :root {
@@ -645,6 +687,10 @@ button[aria-busy='true'],
   .skeleton,
   .photo {
     animation: none !important;
+  }
+
+  .loading-caption {
+    display: block;
   }
 
   .club-card:hover,

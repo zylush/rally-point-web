@@ -44,7 +44,7 @@ function Protected({ roles }: { roles?: Role[] }) {
   if (loading) {
     return (
       <div className="app-shell">
-        <LoadingBlock />
+        <LoadingBlock label="Checking your sign-in…" />
       </div>
     )
   }
@@ -138,7 +138,7 @@ function RootRedirect() {
   if (loading) {
     return (
       <div className="app-shell">
-        <LoadingBlock />
+        <LoadingBlock label="Checking your sign-in…" />
       </div>
     )
   }

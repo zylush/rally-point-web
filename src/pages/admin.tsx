@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Clock3, Pencil, Plus, Search, UserPlus, Users } from 'lucide-react'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
 import { BackButton } from '../components/BackButton'
+import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { stagger } from '../lib/motion'
 import { isDemoMode } from '../lib/supabase'
 import type {
   Court,
@@ -18,6 +20,102 @@ import type {
   Venue,
 } from '../types'
 import { fmtDate, fmtTime, peso } from '../types'
+
+/*
+ * Loading shapes for the admin screens, drawn to the size of what replaces them
+ * (`text-sm` and `text-xs` lines, 54px buttons, `.list-row` rows) so nothing jumps.
+ */
+
+/** A `.list-row` with a name, a detail line and a short value or status pill on the right. */
+function RowShapes({ count, pill = false }: { count: number; pill?: boolean }) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, key) => (
+        <div key={key} className="list-row">
+          <div className="min-w-0 flex-1">
+            <SkeletonLine size="small" className="w-3/5" />
+            <SkeletonLine size="caption" className="w-2/5" />
+          </div>
+          {pill ? <SkeletonBlock className="h-[23px] w-16 rounded-full!" /> : <SkeletonLine size="small" className="w-16" />}
+        </div>
+      ))}
+    </>
+  )
+}
+
+/** A big number with its small label above, as in the admin home stat cards. */
+function StatShape() {
+  return (
+    <>
+      <SkeletonLine size="caption" className="w-20" />
+      <div className="mt-1 flex h-9 items-center">
+        <div className="skeleton h-7 w-16" />
+      </div>
+    </>
+  )
+}
+
+function AdminHomeLoading() {
+  return (
+    <LoadingShapes label="Loading admin home…">
+      <div className="space-y-4" aria-hidden>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="skeleton col-span-2 h-[93px] rounded-[18px]!" />
+          <div className="card p-4"><StatShape /></div>
+          <div className="card p-4"><StatShape /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({ length: 7 }, (_, key) => (
+            <SkeletonBlock key={key} className="h-12 w-full rounded-[16px]!" />
+          ))}
+        </div>
+        <div className="card p-4">
+          <div className="mb-1 flex h-12 items-center">
+            <SkeletonLine size="subtitle" className="w-40" />
+          </div>
+          <RowShapes count={5} />
+        </div>
+      </div>
+    </LoadingShapes>
+  )
+}
+
+/** A card of list rows: transactions, members or users. */
+function AdminListLoading({ label, count, pill = false, compact = false }: { label: string; count: number; pill?: boolean; compact?: boolean }) {
+  return (
+    <LoadingShapes label={label}>
+      {/* The member list is a `p-2` card whose rows add their own `px-2`. */}
+      <div className={`card ${compact ? 'p-2 *:px-2' : 'p-4'}`} aria-hidden>
+        <RowShapes count={count} pill={pill} />
+      </div>
+    </LoadingShapes>
+  )
+}
+
+/** The member form: labelled fields, the notes box and the save button. */
+function MemberFormLoading() {
+  return (
+    <LoadingShapes label="Loading member…">
+      <div className="card p-4 space-y-3" aria-hidden>
+        {['w-24', 'w-14', 'w-14', 'w-36', 'w-14', 'w-24'].map((width, key) => (
+          <div key={key}>
+            <div className="mb-[0.4rem] flex h-[22px] items-center">
+              <div className={`skeleton h-3.5 ${width}`} />
+            </div>
+            <SkeletonBlock className="h-[54px] w-full rounded-[14px]!" />
+          </div>
+        ))}
+        <div>
+          <div className="mb-[0.4rem] flex h-[22px] items-center">
+            <div className="skeleton h-3.5 w-12" />
+          </div>
+          <SkeletonBlock className="h-24 w-full rounded-[14px]!" />
+        </div>
+        <SkeletonBlock className="h-[54px] w-full rounded-[16px]!" />
+      </div>
+    </LoadingShapes>
+  )
+}
 
 export function AdminHome() {
   const { user } = useAuth()
@@ -39,10 +137,10 @@ export function AdminHome() {
       <AppHeader title="Admin home" subtitle={user?.full_name} right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-4 space-y-4">
         {loading || !stats ? (
-          <LoadingBlock />
+          <AdminHomeLoading />
         ) : (
           <>
-            <section className="grid grid-cols-2 gap-3">
+            <section className="enter-rise grid grid-cols-2 gap-3">
               <div className="stat-card col-span-2">
                 <p className="text-teal-100 text-xs font-bold uppercase">{isDemoMode ? 'Revenue today' : 'Recorded charges today'}</p>
                 <p className="text-3xl font-extrabold mt-1">{peso(stats.revenue_today)}</p>
@@ -57,7 +155,7 @@ export function AdminHome() {
               </div>
             </section>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="enter-rise grid grid-cols-2 gap-3" style={stagger(1)}>
                           <Link to="/admin/members" className="btn-secondary text-sm">
                             <Users size={16} /> Members
                           </Link>
@@ -81,7 +179,7 @@ export function AdminHome() {
                           </Link>
                         </div>
 
-            <section className="card p-4">
+            <section className="enter-rise card p-4" style={stagger(2)}>
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-extrabold">Latest transactions</h2>
                 <Link
@@ -166,9 +264,9 @@ export function AdminMembers() {
                   />
                 </div>
         {loading ? (
-          <LoadingBlock />
+          <AdminListLoading label="Loading members…" count={6} pill compact />
         ) : (
-          <section className="card p-2">
+          <section className="enter-rise card p-2">
             {filtered.map((m) => (
               <button
                 key={m.id}
@@ -261,9 +359,9 @@ export function AdminMemberForm() {
       />
       <main className="safe-bottom px-4 pt-4">
         {loading ? (
-          <LoadingBlock />
+          <MemberFormLoading />
         ) : (
-          <form className="card p-4 space-y-3" onSubmit={submit}>
+          <form className="enter-rise card p-4 space-y-3" onSubmit={submit}>
             <div>
               <label className="label">Full name</label>
               <input className="input" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
@@ -604,9 +702,9 @@ export function AdminTransactions() {
       <AppHeader title="Transactions" subtitle={isDemoMode ? 'All revenue' : 'Recorded charges'} right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-4">
         {loading ? (
-          <LoadingBlock />
+          <AdminListLoading label="Loading transactions…" count={6} />
         ) : (
-          <section className="card p-4">
+          <section className="enter-rise card p-4">
             {rows.map((t) => (
               <div key={t.id} className="list-row">
                 <div className="flex-1 min-w-0">
@@ -645,9 +743,9 @@ export function AdminUsers() {
       />
       <main className="safe-bottom px-4 pt-4">
         {loading ? (
-          <LoadingBlock />
+          <AdminListLoading label="Loading users…" count={5} pill />
         ) : (
-          <section className="card p-4">
+          <section className="enter-rise card p-4">
             {users.map((u) => (
               <div key={u.id} className="list-row">
                 <div className="flex-1 min-w-0">

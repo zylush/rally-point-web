@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Maximize2, RefreshCw } from 'lucide-react'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
@@ -17,6 +18,65 @@ function kindColor(kind: ScheduleBlock['kind']) {
   if (kind === 'open_play') return 'bg-violet-500/90 border-violet-300'
   if (kind === 'booking') return 'bg-sky-500/90 border-sky-300'
   return 'bg-brand-600/95 border-brand-300'
+}
+
+/**
+ * The board's shape while the day loads: the time grid on wide screens, court or booking
+ * cards on narrow ones. The TV board uses still, dark shapes (no shimmer) so a wall
+ * screen never shows a moving loop or a bright flash.
+ */
+function BoardLoading({ tv }: { tv: boolean }) {
+  const shape = tv ? 'rounded-lg bg-slate-800' : ''
+  const bar = (className: string) =>
+    tv ? <div className={`${shape} ${className}`} /> : <SkeletonBlock className={className} />
+  const columns = [0, 1, 2]
+  return (
+    <LoadingShapes label={tv ? 'Loading the court board…' : 'Loading the schedule…'} tone={tv ? 'dark' : 'light'}>
+      <div aria-hidden className="space-y-2">
+        <div className={`${tv ? 'hidden md:block border-slate-800' : 'hidden lg:block border-slate-200 bg-white'} overflow-hidden rounded-2xl border`}>
+          <div className="grid" style={{ gridTemplateColumns: '72px repeat(3, minmax(140px, 1fr))' }}>
+            <div className="p-2">{bar('h-4 w-10')}</div>
+            {columns.map((key) => (
+              <div key={key} className={`p-2 border-l ${tv ? 'border-slate-800' : 'border-slate-100'}`}>
+                {bar('h-5 w-20')}
+              </div>
+            ))}
+            {[0, 1, 2, 3].map((row) => (
+              <div key={row} className="contents">
+                <div className={`p-2 border-t h-16 ${tv ? 'border-slate-800' : 'border-slate-100'}`}>{bar('h-4 w-12')}</div>
+                {columns.map((key) => (
+                  <div key={key} className={`border-t border-l h-16 ${tv ? 'border-slate-800' : 'border-slate-100'}`} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className={`${tv ? 'md:hidden' : 'lg:hidden'} space-y-2`}>
+          {columns.map((key) => (
+            <div
+              key={key}
+              className={`rounded-2xl p-4 border ${tv ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100 shadow-sm'}`}
+            >
+              {tv ? (
+                <div className="flex items-center justify-between gap-2">
+                  <div className={`${shape} h-5 w-24`} />
+                  <div className="h-5 w-14 rounded-full bg-slate-800" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <SkeletonLine size="subtitle" className="w-2/5" />
+                    <SkeletonBlock className="h-5 w-16 rounded-full!" />
+                  </div>
+                  <SkeletonLine className="w-3/5 mt-1" />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </LoadingShapes>
+  )
 }
 
 export function ScheduleBoard({
@@ -41,19 +101,33 @@ export function ScheduleBoard({
   const [searchParams, setSearchParams] = useSearchParams()
   const tvVenueId = tv ? searchParams.get('venue') ?? '' : ''
 
-  async function reload() {
-    setLoading(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [updateFailed, setUpdateFailed] = useState(false)
+  // Each reload takes a number; only the newest one may change the board, so a slow,
+  // older request can't overwrite a newer date or location or end its loading early.
+  const latestRequest = useRef(0)
+
+  // The 30-second poll and the Refresh button reload quietly: the board stays on screen and
+  // updates in place, instead of flashing back to the placeholder and fading in again.
+  // A failed reload keeps the last board and shows a short note until the next success.
+  async function reload(quiet = false) {
+    const request = ++latestRequest.current
+    const isLatest = () => request === latestRequest.current
+    if (!quiet) setLoading(true)
     try {
       if (tv) {
         // Every court of the club comes from its public page, so free courts show too.
         const detail = club && typeof api.publicClubDetail === 'function' ? await api.publicClubDetail(club.slug) : null
+        if (!isLatest()) return
         const allVenues = detail?.venues ?? []
         setVenues(allVenues.map((venue) => ({ id: venue.id, name: venue.name })))
         const shownVenues = tvVenueId ? allVenues.filter((venue) => venue.id === tvVenueId) : allVenues
         const b = typeof api.publicDaySchedule === 'function'
           ? await api.publicDaySchedule(dateYmd, tvVenueId || undefined, club?.id)
           : []
+        if (!isLatest()) return
         setBlocks(b)
+        setUpdateFailed(false)
         setCourts(shownVenues.flatMap((venue) => venue.courts.map((court) => ({
           id: court.id,
           venue_id: venue.id,
@@ -67,6 +141,7 @@ export function ScheduleBoard({
       let selectedVenueId = venueId
       if (role && typeof api.listVenues === 'function') {
         const accessibleVenues = await api.listVenues(undefined, role)
+        if (!isLatest()) return
         setVenues(accessibleVenues)
         selectedVenueId = venueId && accessibleVenues.some((venue) => venue.id === venueId)
           ? venueId
@@ -77,16 +152,30 @@ export function ScheduleBoard({
         selectedVenueId ? api.daySchedule(dateYmd, selectedVenueId) : api.daySchedule(dateYmd),
         selectedVenueId ? api.listCourts(selectedVenueId) : api.listCourts(),
       ])
+      if (!isLatest()) return
       setBlocks(b)
       setCourts(c)
+      setUpdateFailed(false)
+    } catch {
+      if (isLatest()) setUpdateFailed(true)
     } finally {
-      setLoading(false)
+      if (isLatest()) setLoading(false)
+    }
+  }
+
+  async function refresh() {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      await reload(true)
+    } finally {
+      setRefreshing(false)
     }
   }
 
   useEffect(() => {
     void reload()
-    const t = setInterval(() => void reload(), 30000)
+    const t = setInterval(() => void reload(true), 30000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateYmd, venueId, tvVenueId, role, tv, club?.id, club?.slug])
@@ -166,9 +255,9 @@ export function ScheduleBoard({
           <button
             type="button"
             className="btn-secondary text-sm"
-            disabled={loading}
-            aria-busy={loading}
-            onClick={() => void reload()}
+            aria-disabled={refreshing}
+            aria-busy={refreshing}
+            onClick={() => void refresh()}
           >
             <RefreshCw size={14} /> Refresh
           </button>
@@ -178,12 +267,18 @@ export function ScheduleBoard({
         </section>
       )}
 
+      {updateFailed ? (
+        <p role="status" className={tv ? 'text-base text-slate-300 mb-3' : 'text-body text-slate-600 px-1'}>
+          Couldn't update. Trying again.
+        </p>
+      ) : null}
+
       {loading ? (
-        <LoadingBlock />
+        <BoardLoading tv={tv} />
       ) : (
         <>
-          {/* Desktop grid */}
-          <div className={`${tv ? 'hidden md:block' : 'hidden lg:block'} overflow-x-auto rounded-2xl border ${tv ? 'border-slate-800' : 'border-slate-200 bg-white'}`}>
+          {/* Desktop grid. Each part fades in once when the day first loads; the poll updates it in place. */}
+          <div className={`enter-fade ${tv ? 'hidden md:block' : 'hidden lg:block'} overflow-x-auto rounded-2xl border ${tv ? 'border-slate-800' : 'border-slate-200 bg-white'}`}>
             <div
               className="grid min-w-[720px]"
               style={{ gridTemplateColumns: `72px repeat(${Math.max(courts.length, 1)}, minmax(140px, 1fr))` }}
@@ -237,7 +332,7 @@ export function ScheduleBoard({
           </div>
 
           {/* Mobile / list */}
-          <div className={`${tv ? 'md:hidden' : 'lg:hidden'} space-y-2`}>
+          <div className={`enter-fade ${tv ? 'md:hidden' : 'lg:hidden'} space-y-2`}>
             {tv ? courts.map((c) => {
               const courtBlocks = blocks.filter((b) => b.court_id === c.id)
               return (
@@ -291,7 +386,7 @@ export function ScheduleBoard({
             )}
           </div>
 
-          <div className={`flex flex-wrap gap-3 text-xs ${tv ? 'text-slate-400 mt-4' : 'text-slate-500 pb-4'}`}>
+          <div className={`enter-fade flex flex-wrap gap-3 text-xs ${tv ? 'text-slate-400 mt-4' : 'text-slate-500 pb-4'}`}>
             <span className="inline-flex items-center gap-1">
               <i className="w-2.5 h-2.5 rounded-sm bg-brand-600 inline-block" /> Rental / session
             </span>
@@ -349,7 +444,13 @@ export function TvBoard() {
   }, [slug, canLookUp])
 
   if (!canLookUp) return <ScheduleBoard tv />
-  if (club === undefined) return <div className="min-h-screen bg-slate-950" aria-busy="true" />
+  if (club === undefined) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <p role="status" className="sr-only">Loading the court board…</p>
+      </div>
+    )
+  }
   if (club === null) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-950 p-6 text-center text-white">

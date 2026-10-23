@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Building2, Coins, LifeBuoy, Plus, RefreshCw, TrendingUp, Users } from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { api, summarizePlatform } from '../lib/api'
+import { stagger } from '../lib/motion'
 import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
 import type {
   ClubStatus,
@@ -141,7 +143,11 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
         ) : null}
 
         {loading ? (
-          <LoadingBlock />
+          section === 'overview' ? (
+            <OverviewLoading />
+          ) : (
+            <LoadingBlock label={section === 'clubs' ? 'Loading clubs…' : 'Loading the commission ledger…'} />
+          )
         ) : section === 'overview' ? (
           <Overview clubs={clubs} actions={actions} />
         ) : section === 'clubs' ? (
@@ -182,6 +188,59 @@ function RecordedNote() {
   )
 }
 
+/** Shaped like the overview: four totals, the note, then the clubs and recent-actions cards. */
+function OverviewLoading() {
+  return (
+    <LoadingShapes label="Loading platform overview…">
+      <div className="space-y-4" aria-hidden>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((key) => (
+            <div key={key} className="card p-4">
+              <SkeletonBlock className="h-[22px] w-[22px] rounded-md!" />
+              <SkeletonLine className="mt-2 w-4/5" />
+              <div className="flex h-8 items-center">
+                <div className="skeleton h-6 w-3/5" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div>
+          <SkeletonLine className="w-full" />
+          <SkeletonLine className="w-2/3" />
+        </div>
+        <div className="card p-4">
+          <SkeletonLine size="subtitle" className="w-40" />
+          <div className="mt-3 divide-y divide-slate-100">
+            {[0, 1].map((key) => (
+              <div key={key} className="flex items-center justify-between gap-2 py-3">
+                <div className="w-2/5 space-y-1">
+                  <SkeletonLine size="subtitle" className="w-full" />
+                  <SkeletonBlock className="h-5 w-16 rounded-full!" />
+                </div>
+                <div className="flex w-2/5 flex-col items-end">
+                  <SkeletonLine className="w-full" />
+                  <SkeletonLine className="w-4/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card p-4">
+          <SkeletonLine size="subtitle" className="w-52" />
+          <div className="mt-3 divide-y divide-slate-100">
+            {[0, 1, 2].map((key) => (
+              <div key={key} className="py-2.5">
+                <SkeletonLine className="w-3/5" />
+                <SkeletonLine size="caption" className="w-2/5" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </LoadingShapes>
+  )
+}
+
 function Overview({ clubs, actions }: { clubs: PlatformClub[]; actions: PlatformAction[] }) {
   const stats = summarizePlatform(clubs)
   const cards: { label: string; value: string; icon: typeof Coins }[] = [
@@ -192,7 +251,7 @@ function Overview({ clubs, actions }: { clubs: PlatformClub[]; actions: Platform
   ]
   return (
     <div className="space-y-4">
-      <section aria-label="Platform totals" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section aria-label="Platform totals" className="enter-rise grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map(({ label, value, icon: Icon }) => (
           <div key={label} className="card p-4">
             <Icon size={22} className="text-brand-700" aria-hidden />
@@ -203,7 +262,7 @@ function Overview({ clubs, actions }: { clubs: PlatformClub[]; actions: Platform
       </section>
       <RecordedNote />
 
-      <section className="card p-4" aria-labelledby="club-figures">
+      <section className="enter-rise card p-4" style={stagger(1)} aria-labelledby="club-figures">
         <h2 id="club-figures" className="text-subtitle font-bold text-slate-900">
           Clubs at a glance
         </h2>
@@ -223,7 +282,7 @@ function Overview({ clubs, actions }: { clubs: PlatformClub[]; actions: Platform
         </ul>
       </section>
 
-      <section className="card p-4" aria-labelledby="recent-actions">
+      <section className="enter-rise card p-4" style={stagger(2)} aria-labelledby="recent-actions">
         <h2 id="recent-actions" className="text-subtitle font-bold text-slate-900">
           Recent platform actions
         </h2>
@@ -297,7 +356,7 @@ function ClubDirectory({
   run: Run
 }) {
   return (
-    <div className="space-y-4">
+    <div className="enter-rise space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-body text-slate-600">
           New clubs start in setup and stay hidden from players until you activate them.
@@ -743,7 +802,7 @@ function Ledger({
   onFilter: (clubId: string) => void
 }) {
   return (
-    <div className="space-y-4">
+    <div className="enter-rise space-y-4">
       <RecordedNote />
       <label className="block max-w-xs">
         <span className="label">Club</span>

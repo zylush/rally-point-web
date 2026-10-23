@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { CheckCircle2, ChevronLeft, Loader2 } from 'lucide-react'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { paymentConfig } from '../lib/payments'
@@ -16,6 +17,7 @@ import type {
 import {
   APP_TIME_ZONE,
   CLUB_CLOSE_HOUR,
+  CLUB_OPEN_HOUR,
   courtRateFor,
   fmtDate,
   hasActiveMembership,
@@ -26,6 +28,36 @@ import {
 } from '../types'
 
 type Step = 'pick' | 'pay' | 'done'
+
+/** The court picker, the time grid and the continue button, while a day's availability loads. */
+function AvailabilityLoading() {
+  return (
+    <LoadingShapes label="Loading available courts and times…">
+      <div className="space-y-4" aria-hidden>
+        <div className="card p-3 space-y-3">
+          <SkeletonLine className="w-14 px-1" />
+          <div className="grid grid-cols-2 gap-2">
+            {[0, 1, 2, 3].map((key) => (
+              <SkeletonBlock key={key} className="h-16 rounded-xl!" />
+            ))}
+          </div>
+        </div>
+        <div className="card p-3">
+          <div className="flex items-center justify-between px-1 mb-2">
+            <SkeletonLine className="w-1/2" />
+            <SkeletonLine size="caption" className="w-12" />
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {Array.from({ length: CLUB_CLOSE_HOUR - CLUB_OPEN_HOUR }, (_, key) => (
+              <SkeletonBlock key={key} className="h-12 rounded-xl!" />
+            ))}
+          </div>
+        </div>
+        <SkeletonBlock className="h-[54px] w-full rounded-[16px]!" />
+      </div>
+    </LoadingShapes>
+  )
+}
 
 function nextDays(n: number) {
   // Days are counted in Philippine time, so "Today" matches the club's calendar on any phone.
@@ -193,7 +225,7 @@ export function MemberBook() {
         ) : null}
 
         {step === 'done' && confirmed ? (
-          <section className="card p-5 space-y-3">
+          <section className="enter-rise card p-5 space-y-3">
             <div className="flex items-center gap-2 text-brand-700">
               <CheckCircle2 size={22} />
               <p className="font-extrabold text-lg">Booking confirmed</p>
@@ -220,7 +252,7 @@ export function MemberBook() {
         ) : null}
 
         {step === 'pay' && pending ? (
-          <section className="card p-4 space-y-4">
+          <section className="enter-rise card p-4 space-y-4">
             <button
               type="button"
               className="text-sm font-bold text-brand-700 inline-flex items-center gap-1"
@@ -369,10 +401,10 @@ export function MemberBook() {
             </section>
 
             {loading ? (
-              <LoadingBlock />
+              <AvailabilityLoading />
             ) : (
               <>
-                <section className="card p-3 space-y-3">
+                <section className="enter-fade card p-3 space-y-3">
                   <p className="label px-1">Court</p>
                   <div className="grid grid-cols-2 gap-2">
                     {avail.map(({ court }) => {
@@ -407,7 +439,7 @@ export function MemberBook() {
                   </div>
                 </section>
 
-                <section className="card p-3">
+                <section className="enter-fade card p-3">
                   <div className="flex items-center justify-between px-1 mb-2">
                     <p className="label mb-0">Available times · {fmtDate(dateYmd + 'T12:00:00+08:00')}</p>
                     <p className="text-xs font-bold text-brand-700">{peso(total)}</p>

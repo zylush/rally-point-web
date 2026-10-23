@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LoadingBlock } from '../components/Shell'
+import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { api } from '../lib/api'
 import { homeFor } from '../lib/roleHome'
 import type { PublicClub } from '../types'
@@ -37,13 +37,7 @@ export function JoinClubPage() {
     }
   }, [slug])
 
-  if (loading || lookup.status === 'loading') {
-    return (
-      <div className="app-shell">
-        <LoadingBlock />
-      </div>
-    )
-  }
+  if (loading || lookup.status === 'loading') return <JoinCardLoading />
 
   if (lookup.status === 'missing') {
     return (
@@ -127,10 +121,31 @@ export function JoinClubPage() {
 function JoinCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="app-shell flex min-h-screen items-center justify-center px-4">
-      <main className="card w-full max-w-md space-y-4 p-6 text-base text-slate-700">
+      <main className="card enter-rise w-full max-w-md space-y-4 p-6 text-base text-slate-700">
         <h1 className="text-2xl font-extrabold text-slate-900">{title}</h1>
         {children}
       </main>
+    </div>
+  )
+}
+
+/** The join card's shape (title, a line of text, two buttons) while the club link is checked. */
+function JoinCardLoading() {
+  return (
+    <div className="app-shell flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <LoadingShapes label="Loading club…">
+          <div className="card space-y-4 p-6" aria-hidden>
+            <SkeletonLine size="heading" className="w-3/4" />
+            <div>
+              <SkeletonLine size="subtitle" />
+              <SkeletonLine size="subtitle" className="w-2/3" />
+            </div>
+            <SkeletonBlock className="h-[54px] w-full rounded-[16px]!" />
+            <SkeletonBlock className="h-[54px] w-full rounded-[16px]!" />
+          </div>
+        </LoadingShapes>
+      </div>
     </div>
   )
 }

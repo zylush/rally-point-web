@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { BackButton } from '../components/BackButton'
-import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
+import { stagger } from '../lib/motion'
 import type { Court, CourtInput, CourtPhoto, Profile, Venue, VenueLocationInput } from '../types'
 import { openingHoursLabel, peso } from '../types'
 import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
@@ -38,8 +40,9 @@ export function AdminVenues() {
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
 
+  // Only the first load shows placeholders. Later reloads (after each save) keep the
+  // cards on screen, so open forms, focus and scroll position stay where they were.
   const reload = useCallback(async () => {
-    setLoading(true)
     try {
       const [nextVenues, nextCourts, nextStaff, nextPhotos] = await Promise.all([
         api.listAllVenues(),
@@ -229,11 +232,12 @@ export function AdminVenues() {
           </button>
         </form>
 
-        {loading ? <LoadingBlock /> : (
+        {loading ? <VenuesLoading /> : (
           <>
-            {venues.map((venue) => (
+            {venues.map((venue, index) => (
               <VenueCard
                 key={venue.id}
+                index={index}
                 venue={venue}
                 courts={courts.filter((court) => court.venue_id === venue.id)}
                 busy={busy}
@@ -244,7 +248,7 @@ export function AdminVenues() {
               />
             ))}
 
-            <section className="card p-4 space-y-3">
+            <section className="enter-rise card p-4 space-y-3" style={stagger(venues.length)}>
               <div>
                 <h2 className="font-extrabold">Staff venue assignments</h2>
                 <p className="text-xs text-slate-500 mt-1">Only already-provisioned staff appear here. Admin access remains club-wide.</p>
@@ -282,8 +286,66 @@ export function AdminVenues() {
   )
 }
 
+/** Shaped like the first venue card (name, active toggle, location, cover, courts) and the staff card. */
+function VenuesLoading() {
+  return (
+    <LoadingShapes label="Loading venues and courts…">
+      <div className="space-y-4" aria-hidden>
+        <div className="card p-4 space-y-3">
+          <div className="space-y-2">
+            <div>
+              <SkeletonLine size="subtitle" className="w-1/2" />
+              <SkeletonLine size="caption" className="w-3/4" />
+            </div>
+            <SkeletonBlock className="h-[54px] w-full rounded-[16px]!" />
+          </div>
+          <div>
+            <SkeletonLine size="small" className="w-20" />
+            <div className="mt-1 space-y-2">
+              <SkeletonLine size="small" className="w-4/5" />
+              <div className="flex h-12 items-center">
+                <SkeletonLine size="small" className="w-40" />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <SkeletonLine size="small" className="w-28" />
+            <SkeletonBlock className="aspect-[16/9] w-full rounded-xl!" />
+          </div>
+          <div>
+            <SkeletonLine size="small" className="w-16" />
+            <div className="mt-2 space-y-2">
+              {[0, 1].map((key) => (
+                <div key={key} className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <SkeletonLine size="subtitle" className="w-24" />
+                      <SkeletonLine size="small" className="w-28" />
+                    </div>
+                    <SkeletonBlock className="h-[54px] w-[4.5rem] shrink-0 rounded-[16px]!" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <SkeletonBlock className="h-[54px] w-full rounded-[16px]!" />
+        </div>
+        <div className="card p-4 space-y-3">
+          <div>
+            <SkeletonLine size="subtitle" className="w-1/2" />
+            <SkeletonLine size="caption" className="mt-1 w-4/5" />
+          </div>
+          <SkeletonLine size="small" className="w-32" />
+          <SkeletonBlock className="h-12 w-full rounded-xl!" />
+        </div>
+      </div>
+    </LoadingShapes>
+  )
+}
+
 function VenueCard({
   venue,
+  index,
   courts,
   busy,
   onToggleVenue,
@@ -292,6 +354,8 @@ function VenueCard({
   photoActions,
 }: {
   venue: Venue
+  /** Position in the list, for the entrance cascade. */
+  index: number
   courts: Court[]
   busy: string | null
   onToggleVenue: () => void
@@ -312,7 +376,7 @@ function VenueCard({
   const headingId = `venue-${venue.id}-title`
 
   return (
-    <section className="card p-4 space-y-3" aria-labelledby={headingId}>
+    <section className="enter-rise card p-4 space-y-3" style={stagger(index)} aria-labelledby={headingId}>
       <div className="space-y-2">
         <div>
           <h2 id={headingId} className="font-extrabold">{venue.name}</h2>

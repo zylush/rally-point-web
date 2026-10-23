@@ -10,6 +10,7 @@ export const releaseApprovals = Object.freeze({
   // Owner, 2026-10-22: "do the staging release and publish the staging site". Recorded after the
   // dry run on a restored copy of staging passed (all checks, isolation 55/55, schema matches the build).
   'court-marketplace-20261022': '4e319844304d280c91fdda969c4e2c06285b0e4f4c3b80513ebe0d33f1c454d3',
-  // Not approved yet: set after the dry run on a restored copy of staging passes.
-  'court-photos-20261023': null,
+  // Owner, 2026-10-23, after the dry run on a restored copy of staging passed (all checks,
+  // isolation 55/55, schema matches the build): "approve and reply" (meaning approve and apply).
+  'court-photos-20261023': 'eaa57596f08f0cbade1b094ce43b9cb1e61c9240db3756eec7bd86aa6e0a0dab',
 })

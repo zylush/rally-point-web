@@ -82,22 +82,19 @@ describe('Find a court', () => {
     expect(davaoLink).toHaveTextContent('Davao City')
     expect(davaoLink).toHaveTextContent('1 location')
     expect(davaoLink).toHaveTextContent('2 courts')
-    expect(davaoLink).toHaveTextContent('From Php 450.00/hr')
-    expect(davaoLink).toHaveTextContent('Members from Php 400.00')
+    expect(davaoLink).toHaveTextContent('From Php 450.00 per hour · Members from Php 400.00')
     // Clubs have no photos yet, so each card shows a drawn court marked as a sample.
-    expect(within(davaoLink).getByText('Sample image')).toBeInTheDocument()
+    expect(within(davaoLink).getByText('Sample')).toBeInTheDocument()
     const gensanLink = screen.getByRole('link', { name: /Rally Point Gensan/ })
-    expect(gensanLink).toHaveTextContent('From Php 500.00/hr')
+    expect(gensanLink).toHaveTextContent('From Php 500.00 per hour')
     expect(gensanLink).not.toHaveTextContent('Members from')
-    expect(screen.getByText('2 clubs to book')).toBeInTheDocument()
+    expect(screen.getByText('2 clubs')).toBeInTheDocument()
 
     // A club appears under each of its locations' cities.
-    const cities = within(screen.getByRole('group', { name: 'City' }))
-    await user.click(cities.getByRole('button', { name: 'Koronadal City' }))
-    expect(cities.getByRole('button', { name: 'Koronadal City' })).toHaveAttribute('aria-pressed', 'true')
+    await user.selectOptions(screen.getByLabelText('City'), 'Koronadal City')
     expect(screen.getByRole('link', { name: /Rally Point Gensan/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Rally Point Davao/ })).not.toBeInTheDocument()
-    await user.click(cities.getByRole('button', { name: 'All cities' }))
+    await user.selectOptions(screen.getByLabelText('City'), '')
     await user.type(screen.getByLabelText('Search'), 'lanang')
     expect(screen.getByRole('link', { name: /Rally Point Davao/ })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Rally Point Gensan/ })).not.toBeInTheDocument()
@@ -116,13 +113,13 @@ describe('Find a court', () => {
       .toHaveAttribute('href', 'https://www.google.com/maps/dir/?api=1&destination=7.103,125.631')
     expect(venue.getByTitle('Map of Davao Main').getAttribute('src')).toContain('openstreetmap.org/export/embed.html')
     const court1 = within(venue.getByText('Davao Court 1').closest('li')!)
-    expect(court1.getByText(/\/hr/)).toHaveTextContent('Php 450.00/hr')
+    expect(court1.getByText('Php 450.00 per hour')).toBeInTheDocument()
     expect(court1.getByText('Members Php 400.00')).toBeInTheDocument()
     expect(court1.getByText('Available')).toBeInTheDocument()
     expect(court1.getByText('Sample')).toBeInTheDocument()
     const court2 = within(venue.getByText('Davao Court 2').closest('li')!)
     expect(court2.getByText('Out of service')).toBeInTheDocument()
-    expect(court2.queryByText(/\/hr/)).not.toBeInTheDocument()
+    expect(court2.queryByText(/per hour/)).not.toBeInTheDocument()
     expect(api.publicClubDetail).toHaveBeenCalledWith('rally-point-davao')
   })
 
@@ -181,7 +178,7 @@ describe('Find a court', () => {
     const { unmount } = renderAt('/clubs')
     const card = await screen.findByRole('link', { name: /Rally Point Davao/ })
     expect(within(card).getByRole('img', { name: 'Photo of Rally Point Davao' })).toHaveAttribute('src', 'https://example.test/cover.webp')
-    expect(within(card).queryByText('Sample image')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Sample')).not.toBeInTheDocument()
     unmount()
 
     renderAt('/clubs/rally-point-davao')
@@ -194,7 +191,8 @@ describe('Find a court', () => {
     expect(court1.queryByText('Sample')).not.toBeInTheDocument()
     // A court without photos keeps the labelled sample drawing.
     expect(within(venue.getByText('Davao Court 2').closest('li')!).getByText('Sample')).toBeInTheDocument()
-    expect(screen.queryByText('Sample image')).not.toBeInTheDocument()
+    // The club picture at the top uses the cover photo, not the drawing.
+    expect(screen.getByRole('img', { name: 'Photo of Rally Point Davao' })).toHaveAttribute('src', 'https://example.test/cover.webp')
   })
 
   it('explains an unknown club', async () => {

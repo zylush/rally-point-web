@@ -96,9 +96,11 @@ jobs:
       - name: Publish to gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # gh-pages cannot parse the bot address in --user, so the commit identity comes from git config.
         run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           npx --no-install gh-pages --silent \
             --dist pages-staging.local \
             --message "deploy: staging build of staging at ${GITHUB_SHA::7}" \
-            --user "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>" \
             --repo "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"

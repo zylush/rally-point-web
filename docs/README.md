@@ -29,4 +29,4 @@ Most of `docs/` is intentionally Git-ignored. These files may exist in the origi
 - Verification notes: `testing/`.
 - Private release packages and immutable evidence: `release-private/`.
 
-Do not move, rewrite, or publish private packages or historical evidence while organizing shared documentation. Keep new shared guides explicitly allowlisted in `.gitignore`; do not remove the broad `docs/*` ignore rule.
+Do not move, rewrite, or publish private packages or historical evidence while organizing shared documentation. The broad `docs/*` ignore rule and its allowlist live in each machine's `.git/info/exclude`, not in the shared `.gitignore`. Keep new shared guides allowlisted there, and do not remove the broad rule.

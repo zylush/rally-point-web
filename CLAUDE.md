@@ -12,7 +12,7 @@
 
 ## Where current information lives
 
-Most of `docs/` is Git-ignored. Only `docs/README.md`, `docs/CODEX.md`, and `docs/HELP-AND-INQUIRY-WORKFLOW.md` are shared, so a fresh clone lacks the rest. If a file is missing, say so instead of guessing what it says.
+Most of `docs/` is hidden from Git by this machine's `.git/info/exclude` (local-only rules stay out of the shared `.gitignore`). Only `docs/README.md`, `docs/CODEX.md`, and `docs/HELP-AND-INQUIRY-WORKFLOW.md` are shared, so a fresh clone lacks the rest. If a file is missing, say so instead of guessing what it says.
 
 | Need | Read | Watch out |
 | --- | --- | --- |
@@ -79,7 +79,7 @@ Never edit, move, or regenerate anything under `docs/release-private/`. Those ar
 
 ## Hosted systems and connected tools
 
-- **Permission prompts.** On the owner's machine, `.claude/settings.json` makes Claude ask before Supabase write and SQL tools, any Supabase CLI command, `npm run deploy`, `gh-pages`, `git push`, and the database runner scripts. Since 2026-10-17, `.claude/` is git-ignored and that file is no longer in the repo, so other machines get these prompts only if they add their own. Approving one prompt is not release approval; the rules below still apply.
+- **Permission prompts.** On the owner's machine, `.claude/settings.json` makes Claude ask before Supabase write and SQL tools, any Supabase CLI command, `npm run deploy`, `gh-pages`, `git push`, and the database runner scripts. Since 2026-10-17, `.claude/` is hidden from Git (now through `.git/info/exclude`) and that file is no longer in the repo, so other machines get these prompts only if they add their own. Approving one prompt is not release approval; the rules below still apply.
 - **Supabase MCP.** Documentation search is fine. Anything that reaches a project, including read-only SQL, table listings, logs, and advisors, needs an explicit task and a confirmed project ref (staging is pinned in `vite.config.ts`). Release checks fingerprint the database and look for other connected clients, so even a read can spoil evidence. Never use `apply_migration` on staging or production. Migrations reach them only through reviewed release packages, one named migration at a time, never through a blanket `supabase db push` or `--include-all`.
   - On the owner's machine, a local-scope override (`claude mcp add --scope local`) pins the `supabase` server for this repo to staging in read-only mode.
   - That override lives in `~/.claude.json`, not in the repo, so other machines may still connect with write access. The rules above apply either way.

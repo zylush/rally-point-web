@@ -1,0 +1,104 @@
+name: CI
+
+# Every push and pull request runs lint, tests and the production build.
+# A push to `staging` that passes those checks also publishes the staging site
+# (https://zylush.github.io/rally-point-web/) to the `gh-pages` branch.
+# Database migrations are never applied here; they go through reviewed release packages.
+
+on:
+  push:
+    branches-ignore: [gh-pages]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/staging' }}
+
+jobs:
+  verify:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      # Runs every suite except the ones that need the owner's local-only
+      # release evidence; see vitest.ci.config.ts. The full suite still runs
+      # locally before each push.
+      - name: Test
+        run: npx --no-install vitest run --config vitest.ci.config.ts
+
+      - name: Build (browser demo, type check included)
+        run: npm run build
+
+  deploy-staging:
+    name: Publish staging site
+    needs: verify
+    if: github.ref == 'refs/heads/staging' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: staging-pages
+      cancel-in-progress: false
+    environment:
+      name: staging
+      url: https://zylush.github.io/rally-point-web/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Check the publishable key is configured
+        env:
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Add the staging publishable key as the VITE_SUPABASE_ANON_KEY repository secret."
+            exit 1
+          fi
+
+      # vite.config.ts refuses any URL or key that is not the pinned staging project.
+      # The build goes to its own folder; staging-artifact.local holds the frozen September artifact.
+      - name: Build staging site
+        env:
+          VITE_SUPABASE_URL: https://iclrvvsiwypxlwrwgqia.supabase.co
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npx --no-install vite build --mode staging --outDir pages-staging.local
+
+      - name: Check the build
+        run: |
+          test -f pages-staging.local/index.html
+          test -f pages-staging.local/404.html
+          grep -q '/rally-point-web/assets/' pages-staging.local/index.html
+          grep -lq 'iclrvvsiwypxlwrwgqia' pages-staging.local/assets/*.js
+
+      - name: Publish to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx --no-install gh-pages --silent \
+            --dist pages-staging.local \
+            --message "deploy: staging build of staging at ${GITHUB_SHA::7}" \
+            --user "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>" \
+            --repo "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"

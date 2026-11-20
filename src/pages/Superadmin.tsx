@@ -119,7 +119,7 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
     <AppShell role="superadmin">
       <AppHeader
         title={sectionTitle[section]}
-        subtitle="Rally Point platform"
+        subtitle="bRineLy platform"
         right={
           <div className="flex items-center gap-2">
             <button

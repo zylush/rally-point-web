@@ -68,7 +68,7 @@ async function loadAccess(identity: Profile, preferredClubId?: string | null): P
     const waiting = ownerClubs.filter((club) => club.status === 'provisioning')
     if (waiting.length) {
       throw new OwnerNotice(
-        `Your owner account is ready. ${ownerNames(waiting)} ${waiting.length === 1 ? 'is' : 'are'} still being set up. You can log in as soon as Rally Point opens ${waiting.length === 1 ? 'it' : 'them'}.`,
+        `Your owner account is ready. ${ownerNames(waiting)} ${waiting.length === 1 ? 'is' : 'are'} still being set up. You can log in as soon as bRineLy opens ${waiting.length === 1 ? 'it' : 'them'}.`,
       )
     }
     return null

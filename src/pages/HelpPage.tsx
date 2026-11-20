@@ -27,13 +27,13 @@ const contacts: Record<Role, { title: string; body: string; email: string; phone
   admin: {
     title: 'Contact superadmin',
     body: 'For platform, provisioning, or escalation concerns, contact your superadmin or platform owner.',
-    email: 'superadmin@rallypointgensan.com',
+    email: 'superadmin@brinely.info',
     phone: '+63 917 555 0102',
   },
   superadmin: {
     title: 'Platform operations',
     body: 'For cloud infrastructure, database hosting, or payment provider escalations, contact technical ops.',
-    email: 'ops@rallypoint.ph',
+    email: 'ops@brinely.info',
     phone: '+63 917 555 0199',
   },
 }

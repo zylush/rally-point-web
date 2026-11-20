@@ -9,7 +9,7 @@ import { SuperadminPage } from './Superadmin'
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 'user_superadmin', email: 'superadmin@rallypoint.local', full_name: 'Morgan Superadmin', role: 'superadmin', created_at: '2026-01-01T00:00:00.000Z' },
+    user: { id: 'user_superadmin', email: 'superadmin@brinely.info', full_name: 'Morgan Superadmin', role: 'superadmin', created_at: '2026-01-01T00:00:00.000Z' },
     loading: false,
     demo: true,
     clubs: [],
@@ -30,7 +30,7 @@ function renderSection(section: 'overview' | 'clubs' | 'ledger' | 'requests') {
 beforeEach(() => {
   setActiveClubId(null)
   demoStore.reset()
-  demoStore.login('superadmin@rallypoint.local', 'superadmin123')
+  demoStore.login('superadmin@brinely.info', 'superadmin123')
 })
 
 function askForCall() {
@@ -79,9 +79,9 @@ describe('SuperadminPage', () => {
     await user.click(within(card).getByRole('button', { name: 'Activate' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Assign a club admin before activating this club')
 
-    await user.type(within(card).getByLabelText('Add an admin by email'), 'member@rallypoint.local')
+    await user.type(within(card).getByLabelText('Add an admin by email'), 'member@brinely.info')
     await user.click(within(card).getByRole('button', { name: 'Add admin' }))
-    expect(await screen.findByText('member@rallypoint.local is now an admin of Cebu Hub.')).toBeInTheDocument()
+    expect(await screen.findByText('member@brinely.info is now an admin of Cebu Hub.')).toBeInTheDocument()
 
     await user.click(within(screen.getByRole('article', { name: 'Cebu Hub' })).getByRole('button', { name: 'Activate' }))
     expect(await screen.findByText('Cebu Hub is now active.')).toBeInTheDocument()

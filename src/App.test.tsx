@@ -56,7 +56,7 @@ describe('public routes', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Welcome to Rally Point' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Welcome to bRineLy' })).toBeInTheDocument()
     expect(api.listPublicClubs).toHaveBeenCalled()
     expect(screen.getByLabelText('Search')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /I own a court/ })).toHaveAttribute('href', '/owners')
@@ -100,7 +100,7 @@ describe('public routes', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.queryByRole('heading', { name: 'Welcome to Rally Point' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Welcome to bRineLy' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Platform overview' })).toBeInTheDocument()
   })
 })

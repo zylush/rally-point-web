@@ -9,7 +9,7 @@ const pic = (n: number) => `data:image/jpeg;base64,${n}`
 
 function signInGensanAdmin() {
   setActiveClubId(DEMO_CLUB_ID)
-  demoStore.login('admin@rallypoint.local', 'admin123')
+  demoStore.login('admin@brinely.info', 'admin123')
 }
 
 describe('demo club business profile (mirrors the club_business_profile functions)', () => {
@@ -21,7 +21,7 @@ describe('demo club business profile (mirrors the club_business_profile function
 
   it('lets only the club admin change the profile', () => {
     setActiveClubId(DEMO_CLUB_ID)
-    demoStore.login('staff@rallypoint.local', 'staff123')
+    demoStore.login('staff@brinely.info', 'staff123')
     expect(() => demoStore.clubProfile()).toThrow('admin access required')
     expect(() => demoStore.updateClubProfile(emptyClubProfile())).toThrow('admin access required')
 
@@ -102,7 +102,7 @@ describe('demo club business profile (mirrors the club_business_profile function
 
     demoStore.logout()
     setActiveClubId(DEMO_DAVAO_CLUB_ID)
-    demoStore.login('davao.admin@rallypoint.local', 'davao123')
+    demoStore.login('davao.admin@brinely.info', 'davao123')
     expect(demoStore.clubProfile().addons).toEqual([])
     expect(() => demoStore.removeClubAddon(paddles.id)).toThrow('add-on not found')
     expect(demoStore.publicClubProfile('rally-point-davao')?.addons).toEqual([])

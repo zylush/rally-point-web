@@ -231,8 +231,8 @@ export function ClubDirectory({ landing = false }: { landing?: boolean }) {
 
   return (
     <Frame
-      title={landing ? 'Welcome to Rally Point' : 'Find a court'}
-      subtitle={landing ? 'Pick a court and book your play' : 'Pick a club or court to book'}
+      title={landing ? 'Welcome to bRineLy' : 'Find a court'}
+      subtitle={landing ? 'Pick a court and book your play · brinely.info' : 'Pick a club or court to book'}
     >
       <section className="enter-rise card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3" aria-label="Search clubs">
         <div>
@@ -345,7 +345,7 @@ export function ClubDirectory({ landing = false }: { landing?: boolean }) {
           </span>
           <div className="min-w-0">
             <p className="text-subtitle font-bold text-slate-900">Own a pickleball club?</p>
-            <p className="text-body text-slate-600">List your courts on Rally Point and manage bookings online.</p>
+            <p className="text-body text-slate-600">List your courts on bRineLy and manage bookings online.</p>
           </div>
         </div>
         <Link to="/owners" className="control-feedback inline-flex min-h-12 items-center gap-1.5 rounded-xl border-2 border-slate-200 bg-white px-4 text-body font-semibold text-slate-800">

@@ -45,19 +45,19 @@ describe('demoStore account and catalog behavior', () => {
     expect(demoStore.members()).toHaveLength(40)
     expect(demoStore.courts()).toHaveLength(4)
     expect(demoStore.users().map((user) => user.email)).toEqual([
-      'superadmin@rallypoint.local',
-      'admin@rallypoint.local',
-      'staff@rallypoint.local',
-      'member@rallypoint.local',
-      'davao.admin@rallypoint.local',
+      'superadmin@brinely.info',
+      'admin@brinely.info',
+      'staff@brinely.info',
+      'member@brinely.info',
+      'davao.admin@brinely.info',
     ])
     expect(demoStore.currentUser()).toBeNull()
 
-    expect(demoStore.login(' MEMBER@RALLYPOINT.LOCAL ', 'member123').role).toBe('member')
+    expect(demoStore.login(' MEMBER@BRINELY.INFO ', 'member123').role).toBe('member')
     expect(demoStore.currentUser()?.id).toBe('user_member')
     demoStore.logout()
     expect(demoStore.currentUser()).toBeNull()
-    expect(() => demoStore.login('member@rallypoint.local', 'wrong')).toThrow('Invalid email or password')
+    expect(() => demoStore.login('member@brinely.info', 'wrong')).toThrow('Invalid email or password')
   })
 
   it('registers a member only and keeps credentials out of storage', () => {
@@ -141,9 +141,9 @@ describe('demoStore account and catalog behavior', () => {
 
   it('rejects a credential whose seeded profile was removed', () => {
     const db = demoStore.get()
-    db.profiles = db.profiles.filter((profile) => profile.email !== 'member@rallypoint.local')
+    db.profiles = db.profiles.filter((profile) => profile.email !== 'member@brinely.info')
     demoStore.set(db)
-    expect(() => demoStore.login('member@rallypoint.local', 'member123')).toThrow('Invalid email or password')
+    expect(() => demoStore.login('member@brinely.info', 'member123')).toThrow('Invalid email or password')
   })
 
   it('finds and upserts members while keeping sorted catalog results', () => {
@@ -476,8 +476,8 @@ describe('demoStore staff and member operations', () => {
 describe('demoStore storage migration behavior', () => {
   it('repairs malformed legacy storage and preserves safe defaults', () => {
     localStorage.clear()
-    localStorage.setItem('rally_point_demo_v4', JSON.stringify({
-      profiles: [{ id: 'user_member', email: 'member@rallypoint.local', full_name: 'Mia', role: 'member', created_at: new Date().toISOString() }],
+    localStorage.setItem('brinely_demo_v4', JSON.stringify({
+      profiles: [{ id: 'user_member', email: 'member@brinely.info', full_name: 'Mia', role: 'member', created_at: new Date().toISOString() }],
       members: [{ id: 'mem_1', member_code: 'RP-1', full_name: 'Mia', membership_type: 'basic', status: 'active', join_date: '2026-01-01', expiry_date: '2026-12-31', created_at: new Date().toISOString() }],
       courts: [],
       sessions: [],
@@ -495,6 +495,6 @@ describe('demoStore storage migration behavior', () => {
     expect(db.reminders).toEqual([])
     expect(db.members[0].qr_token).toBe('QR_RP1')
     expect(db.sessionUserId).toBe('user_member')
-    expect(localStorage.getItem('rally_point_demo_v4')).not.toContain('passwords')
+    expect(localStorage.getItem('brinely_demo_v4')).not.toContain('passwords')
   })
 })

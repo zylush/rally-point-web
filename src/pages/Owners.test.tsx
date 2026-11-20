@@ -40,7 +40,7 @@ describe('OwnersPage', () => {
   it('explains how listing works and offers a call and an owner account', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: 'List your club' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Put your courts on Rally Point' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Put your courts on bRineLy' })).toBeInTheDocument()
     expect(screen.getAllByRole('listitem')).toHaveLength(3)
     expect(screen.getByRole('link', { name: 'Create my owner account' })).toHaveAttribute('href', '/login')
     expect(screen.getByLabelText('Day for the call')).toHaveAttribute('min', ownerCallDateRange().min)
@@ -62,7 +62,7 @@ describe('OwnersPage', () => {
     const user = userEvent.setup()
     renderPage()
     await fillIn(user)
-    await user.click(screen.getByRole('checkbox', { name: /Rally Point may contact me/ }))
+    await user.click(screen.getByRole('checkbox', { name: /bRineLy may contact me/ }))
     await user.click(screen.getByRole('button', { name: 'Ask for a call' }))
 
     expect(requestOwnerCall).toHaveBeenCalledWith({
@@ -89,7 +89,7 @@ describe('OwnersPage', () => {
     const user = userEvent.setup()
     renderPage()
     await fillIn(user)
-    await user.click(screen.getByRole('checkbox', { name: /Rally Point may contact me/ }))
+    await user.click(screen.getByRole('checkbox', { name: /bRineLy may contact me/ }))
     await user.click(screen.getByRole('button', { name: 'Ask for a call' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('You already asked us to call. We will contact you soon.')
     expect(screen.getByRole('button', { name: 'Ask for a call' })).toBeEnabled()
@@ -99,7 +99,7 @@ describe('OwnersPage', () => {
     const user = userEvent.setup()
     const { container } = renderPage()
     await fillIn(user)
-    await user.click(screen.getByRole('checkbox', { name: /Rally Point may contact me/ }))
+    await user.click(screen.getByRole('checkbox', { name: /bRineLy may contact me/ }))
     await user.type(container.querySelector('input[name="website"]')!, 'http://spam.example')
     await user.click(screen.getByRole('button', { name: 'Ask for a call' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Thank you, Ana')

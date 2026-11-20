@@ -1,7 +1,7 @@
 {
-  "name": "Rally Point Gensan",
-  "short_name": "Rally Point",
-  "description": "Book courts, join open play, show QR, pay dues.",
+  "name": "bRineLy — Stay in the brine. Play more.",
+  "short_name": "bRineLy",
+  "description": "Stay in the brine. Play more. Book courts, join open play, show QR, pay dues on brinely.info.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#020617",

@@ -5,8 +5,8 @@ import { hasDemoPassword, normalizeDemoEmail } from './credentials'
 import { defaultClubAccount } from './commissions'
 import { DEMO_CLUB_ID, DEMO_VENUE_ID, demoClub } from '../tenant'
 
-const KEY = 'rally_point_demo_v4'
-const LEGACY_KEYS = ['rally_point_demo_v1', 'rally_point_demo_v2', 'rally_point_demo_v3']
+const KEY = 'brinely_demo_v4'
+const LEGACY_KEYS = ['rally_point_demo_v1', 'rally_point_demo_v2', 'rally_point_demo_v3', 'rally_point_demo_v4']
 
 export function resetStorage() {
   localStorage.removeItem(KEY)

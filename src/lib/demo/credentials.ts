@@ -1,9 +1,9 @@
 const seededDemoPasswords = new Map<string, string>([
-  ['superadmin@rallypoint.local', 'superadmin123'],
-  ['admin@rallypoint.local', 'admin123'],
-  ['staff@rallypoint.local', 'staff123'],
-  ['member@rallypoint.local', 'member123'],
-  ['davao.admin@rallypoint.local', 'davao123'],
+  ['superadmin@brinely.info', 'superadmin123'],
+  ['admin@brinely.info', 'admin123'],
+  ['staff@brinely.info', 'staff123'],
+  ['member@brinely.info', 'member123'],
+  ['davao.admin@brinely.info', 'davao123'],
 ])
 
 let demoPasswords = new Map(seededDemoPasswords)

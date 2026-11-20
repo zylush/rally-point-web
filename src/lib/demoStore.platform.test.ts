@@ -28,7 +28,7 @@ function resetAll() {
 }
 
 function asSuperadmin() {
-  return demoStore.login('superadmin@rallypoint.local', 'superadmin123')
+  return demoStore.login('superadmin@brinely.info', 'superadmin123')
 }
 
 function updateDb(update: (db: DemoDB) => void) {
@@ -48,10 +48,10 @@ describe('demo platform access', () => {
     expect(demoStore.platformClubs().map((club) => club.slug)).toEqual(['rally-point-davao', 'rally-point-gensan'])
 
     for (const [email, password] of [
-      ['admin@rallypoint.local', 'admin123'],
-      ['staff@rallypoint.local', 'staff123'],
-      ['member@rallypoint.local', 'member123'],
-      ['davao.admin@rallypoint.local', 'davao123'],
+      ['admin@brinely.info', 'admin123'],
+      ['staff@brinely.info', 'staff123'],
+      ['member@brinely.info', 'member123'],
+      ['davao.admin@brinely.info', 'davao123'],
     ]) {
       demoStore.login(email, password)
       expect(() => demoStore.platformClubs()).toThrow('Platform access required')
@@ -112,7 +112,7 @@ describe('demo club setup', () => {
       action: 'club.provision',
       club_id: clubId,
       club_name: 'Cebu IT Park',
-      actor_email: 'superadmin@rallypoint.local',
+      actor_email: 'superadmin@brinely.info',
     })
   })
 
@@ -158,7 +158,7 @@ describe('demo club setup', () => {
       'club.provision',
     ])
     expect(actions.find((row) => row.action === 'club.commission_rate')?.details).toEqual({ from: 7.5, to: 8.25 })
-    expect(actions.every((row) => row.actor_email === 'superadmin@rallypoint.local')).toBe(true)
+    expect(actions.every((row) => row.actor_email === 'superadmin@brinely.info')).toBe(true)
   })
 
   it('refuses to close the default sign-up club and rejects bad input', () => {
@@ -250,7 +250,7 @@ describe('demo club membership', () => {
     expect(demoStore.myClubs('user_admin').map((row) => `${row.slug}:${row.role}`)).toEqual(['rally-point-gensan:admin'])
     expect(demoStore.myClubs('user_staff').map((row) => `${row.slug}:${row.role}`)).toEqual(['rally-point-gensan:staff'])
     expect(demoStore.myClubs('user_davao_admin').map((row) => `${row.slug}:${row.role}`)).toEqual(['rally-point-davao:admin'])
-    expect(demoStore.login('davao.admin@rallypoint.local', 'davao123').role).toBe('admin')
+    expect(demoStore.login('davao.admin@brinely.info', 'davao123').role).toBe('admin')
   })
 
   it('signs up through a join link or the default club, and refuses a bad link', () => {
@@ -304,7 +304,7 @@ describe('demo cross-club isolation', () => {
   beforeEach(resetAll)
 
   it('scopes every view to the active club', () => {
-    demoStore.login('admin@rallypoint.local', 'admin123')
+    demoStore.login('admin@brinely.info', 'admin123')
     setActiveClubId(DEMO_DAVAO_CLUB_ID)
     expect(demoStore.members().map((row) => row.member_code).sort()).toEqual(['DV-1001', 'DV-1002', 'DV-1003'])
     expect(demoStore.courts().map((row) => row.id)).toEqual(['court_davao_1', 'court_davao_2'])
@@ -326,7 +326,7 @@ describe('demo cross-club isolation', () => {
   })
 
   it("keeps a two-club member's memberships, passes and messages apart", () => {
-    demoStore.login('member@rallypoint.local', 'member123')
+    demoStore.login('member@brinely.info', 'member123')
     expect(demoStore.memberByUser('user_member')?.member_code).toBe('RP-1001')
     setActiveClubId(DEMO_DAVAO_CLUB_ID)
     expect(demoStore.memberByUser('user_member')?.member_code).toBe('DV-1001')

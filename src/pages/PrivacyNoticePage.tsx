@@ -22,10 +22,10 @@ function sections(club: NoticeClub): { title: string; content: ReactNode }[] {
       content: (
         <p>
           {club.isGensan
-            ? 'Rally Point Gensan is the club and app name used in this notice.'
-            : `${club.name ?? 'Your club'} is the club named in this notice, and Rally Point is the app it uses.`}{' '}
+            ? 'Rally Point Gensan is the club named in this notice, and bRineLy (brinely.info) is the app it uses.'
+            : `${club.name ?? 'Your club'} is the club named in this notice, and bRineLy (brinely.info) is the app it uses.`}{' '}
           The legal registered entity operating the service has not yet been confirmed here. This
-          notice explains how information is handled when you use the Rally Point app and services.
+          notice explains how information is handled when you use the bRineLy app and services.
         </p>
       ),
     },
@@ -41,7 +41,7 @@ function sections(club: NoticeClub): { title: string; content: ReactNode }[] {
             <li>
               If you ask us to call you about listing your club: your name, your club or venue name and
               city, how many courts it has, your mobile number or email, when you would like the call,
-              and any message. Only the Rally Point platform team sees these requests.
+              and any message. Only the bRineLy platform team sees these requests.
             </li>
           </ul>
           <p className="mt-2">
@@ -197,10 +197,10 @@ export function PrivacyNoticePage() {
     (user ? homeFor(user.role) : clubParam ? `/join/${encodeURIComponent(clubParam)}` : '/login')
 
   const subtitle = club.isGensan
-    ? 'For Rally Point Gensan app users'
+    ? 'For Rally Point Gensan players on the bRineLy app'
     : club.name
-      ? `For ${club.name} players on the Rally Point app`
-      : 'For Rally Point app users'
+      ? `For ${club.name} players on the bRineLy app`
+      : 'For bRineLy app users'
 
   const content = (
     <main className="app-content-rail safe-bottom mx-auto w-full py-6 sm:py-10">

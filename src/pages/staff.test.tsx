@@ -9,7 +9,7 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     user: {
       id: 'u-staff',
-      email: 'staff@rallypoint.local',
+      email: 'staff@brinely.info',
       full_name: 'Sam Staff',
       role: 'staff',
     },

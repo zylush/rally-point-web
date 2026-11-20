@@ -215,7 +215,7 @@ export function ScheduleBoard({
         <header className="flex flex-wrap items-end justify-between gap-3 mb-4">
           <div>
             <p className="text-teal-300 text-xs font-bold uppercase tracking-widest">
-              {club?.name ?? 'Rally Point'}
+              {club?.name ?? 'bRineLy'}
               {tvVenueId ? ` · ${venues.find((venue) => venue.id === tvVenueId)?.name ?? ''}` : ''} · Live board
             </p>
             <h1 className="text-3xl md:text-4xl font-black mt-1">

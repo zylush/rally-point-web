@@ -204,7 +204,7 @@ describe('Help inquiry workflow', () => {
     expect(api.inquiries).not.toHaveBeenCalled()
 
     await user.click(contactHeading)
-    expect(screen.getByRole('link', { name: /ops@rallypoint\.ph/ })).toBeVisible()
+    expect(screen.getByRole('link', { name: /ops@brinely\.info/ })).toBeVisible()
     expect(screen.getByRole('link', { name: /\+63 917 555 0199/ })).toBeVisible()
 
     expect(api.createInquiry).not.toHaveBeenCalled()

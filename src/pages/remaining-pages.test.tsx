@@ -13,7 +13,7 @@ import { localRangeISO, ymdLocal } from '../types'
 const authState = vi.hoisted(() => ({
   user: {
     id: 'user_admin',
-    email: 'admin@rallypoint.local',
+    email: 'admin@brinely.info',
     full_name: 'Alex Admin',
     role: 'admin',
     phone: null,
@@ -24,7 +24,7 @@ const adminUser = authState.user
 const memberUser: Profile = {
   ...adminUser,
   id: 'user_member',
-  email: 'member@rallypoint.local',
+  email: 'member@brinely.info',
   full_name: 'Mia Member',
   role: 'member',
 }
@@ -75,7 +75,7 @@ const member: Member = {
   user_id: 'user_member',
   member_code: 'RP-1001',
   full_name: 'Mia Member',
-  email: 'member@rallypoint.local',
+  email: 'member@brinely.info',
   phone: '+63 917 555 0101',
   membership_type: 'premium',
   status: 'active',
@@ -305,7 +305,7 @@ describe('member booking and pass pages', () => {
     apiMock.payBooking.mockResolvedValueOnce(twoHourBooking)
     apiMock.sendBookingConfirmationEmail.mockResolvedValueOnce({
       sent: true,
-      preview: 'Receipt sent to member@rallypoint.local for Court B',
+      preview: 'Receipt sent to member@brinely.info for Court B',
     })
 
     render(<MemoryRouter><MemberBook /></MemoryRouter>)
@@ -324,7 +324,7 @@ describe('member booking and pass pages', () => {
     expect(await screen.findByText('Booking confirmed')).toBeInTheDocument()
     expect(screen.getByText('Booked · 2 hours')).toBeInTheDocument()
     expect(screen.getByText('No refund')).toBeInTheDocument()
-    expect(screen.getByText('Receipt sent to member@rallypoint.local for Court B')).toBeInTheDocument()
+    expect(screen.getByText('Receipt sent to member@brinely.info for Court B')).toBeInTheDocument()
     expect(apiMock.sendBookingConfirmationEmail).toHaveBeenCalledWith(expect.objectContaining({
       booking: twoHourBooking,
       recipientEmail: memberUser.email,

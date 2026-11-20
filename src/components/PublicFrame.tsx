@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { BrinelyLogo } from './BrinelyLogo'
 import { AppHeader, AppShell, SignOutButton } from './Shell'
 
 /**
@@ -35,7 +36,11 @@ export function PublicFrame({
       <header className="sticky top-0 z-30 bg-white/98 backdrop-blur border-b border-slate-200 pt-4 pb-3.5">
         <div className="app-content-rail flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-caption font-bold text-brand-800 mb-1">Rally Point</p>
+            <p className="mb-1 inline-flex items-center gap-1.5 text-caption font-bold text-brand-800">
+              <BrinelyLogo variant="mark" className="h-5 w-5 rounded-md object-contain" title="bRineLy" />
+              <span>bRineLy</span>
+              <span className="font-medium text-slate-500">· brinely.info</span>
+            </p>
             <h1 className="text-heading-2 font-semibold text-slate-900">{title}</h1>
             {subtitle ? <p className="text-subtitle font-medium text-slate-600 mt-1">{subtitle}</p> : null}
           </div>

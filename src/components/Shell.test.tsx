@@ -16,7 +16,7 @@ const auth = vi.hoisted(() => ({
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     user: {
-      email: 'member@rallypoint.local',
+      email: 'member@brinely.info',
       full_name: 'Demo Member',
       role: auth.role,
     },

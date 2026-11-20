@@ -18,8 +18,7 @@ import { createPortal } from 'react-dom'
 import type { ClubRole, Role } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { homeFor } from '../lib/roleHome'
-import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
-import { RallyPointLogo } from './RallyPointLogo'
+import { BrinelyLogo } from './BrinelyLogo'
 import { LoadingShapes, SkeletonBlock, SkeletonCard, SkeletonRows } from './Skeleton'
 
 /** Plain-language nav — short words players of any age recognize */
@@ -51,15 +50,14 @@ const adminTabs = [
 ]
 
 /**
- * The current logo artwork says "Gensan", so it is shown only for that club.
- * Other clubs and the platform portal get a neutral badge until they have their own.
+ * The bRineLy platform emblem shows when viewing platform screens (no active club).
+ * Clubs without their own uploaded logo show a clean initials badge.
  */
 function ClubMark({ size }: { size: 'small' | 'large' }) {
-  const { activeClub, user } = useAuth()
-  const showGensanLogo = activeClub ? activeClub.slug === DEFAULT_CLUB_SLUG : user?.role !== 'superadmin'
+  const { activeClub } = useAuth()
   const box = size === 'large' ? 'w-11 h-11' : 'w-8 h-8'
-  if (showGensanLogo) return <RallyPointLogo variant="mark" className={`${box} object-contain`} />
-  const words = (activeClub?.name ?? 'Rally Point').split(/\s+/).filter(Boolean)
+  if (!activeClub) return <BrinelyLogo variant="mark" className={`${box} object-contain`} />
+  const words = activeClub.name.split(/\s+/).filter(Boolean)
   const initials = `${words[0]?.[0] ?? ''}${words.length > 1 ? words[words.length - 1][0] : ''}`.toUpperCase()
   return (
     <span
@@ -132,7 +130,7 @@ function tabsFor(role: Role) {
 export function SideNav({ role }: { role: Role }) {
   const { user, activeClub } = useAuth()
   const tabs = tabsFor(role)
-  const placeName = activeClub?.name ?? (role === 'superadmin' ? 'Rally Point platform' : 'Rally Point')
+  const placeName = activeClub?.name ?? (role === 'superadmin' ? 'bRineLy platform' : 'bRineLy')
   const roleLabel =
     role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin' : role === 'staff' ? 'Staff' : 'Member'
 
@@ -247,7 +245,7 @@ export function AppHeader({
   left?: ReactNode
   right?: ReactNode
 }) {
-  const clubName = useAuth().activeClub?.name ?? 'Rally Point'
+  const clubName = useAuth().activeClub?.name ?? 'bRineLy'
   return (
     <header className="sticky top-0 z-30 bg-white/98 backdrop-blur border-b border-slate-200 pt-4 pb-3.5">
       <div className="app-content-rail flex items-start justify-between gap-3">

@@ -54,7 +54,7 @@ describe('PrivacyNoticePage', () => {
     renderNotice()
 
     expect(screen.getByRole('heading', { level: 1, name: 'Privacy Notice' })).toBeInTheDocument()
-    expect(screen.getByText('For Rally Point Gensan app users')).toBeInTheDocument()
+    expect(screen.getByText('For Rally Point Gensan players on the bRineLy app')).toBeInTheDocument()
     expect(screen.getByText('Last updated: November 15, 2026')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Who we are' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Personal information we collect' })).toBeInTheDocument()
@@ -75,7 +75,7 @@ describe('PrivacyNoticePage', () => {
   it("names a join link's club, leaves out Gensan's email, and goes back to that join link", async () => {
     renderNotice('/privacy?club=rally-point-davao')
 
-    expect(await screen.findByText('For Rally Point Davao players on the Rally Point app')).toBeInTheDocument()
+    expect(await screen.findByText('For Rally Point Davao players on the bRineLy app')).toBeInTheDocument()
     expect(api.publicClub).toHaveBeenCalledWith('rally-point-davao')
     expect(screen.queryByText(/Gensan/)).not.toBeInTheDocument()
     expect(screen.getByText(/ask the staff at Rally Point Davao/)).toBeInTheDocument()
@@ -87,7 +87,7 @@ describe('PrivacyNoticePage', () => {
     renderNotice('/privacy?club=missing-club')
 
     expect(await screen.findByText(/ask the staff at your club/)).toBeInTheDocument()
-    expect(screen.getByText('For Rally Point app users')).toBeInTheDocument()
+    expect(screen.getByText('For bRineLy app users')).toBeInTheDocument()
     expect(screen.queryByText(/Gensan/)).not.toBeInTheDocument()
   })
 
@@ -96,7 +96,7 @@ describe('PrivacyNoticePage', () => {
     auth.activeClub = davao
     renderNotice({ pathname: '/privacy', state: { from: '/member/help' } })
 
-    expect(screen.getByText('For Rally Point Davao players on the Rally Point app')).toBeInTheDocument()
+    expect(screen.getByText('For Rally Point Davao players on the bRineLy app')).toBeInTheDocument()
     expect(screen.getAllByRole('navigation', { name: 'Main menu' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Back to Help' })).toHaveAttribute('href', '/member/help')
     expect(screen.queryByRole('link', { name: 'Back to login' })).not.toBeInTheDocument()

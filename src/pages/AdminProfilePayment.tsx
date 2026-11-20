@@ -22,7 +22,7 @@ export function PaymentCard({
   const { editing, open, close } = useInlineForm()
   return (
     <section className="enter-rise card p-4 space-y-3" style={stagger(index)} aria-labelledby="profile-payment">
-      <SectionTitle id="profile-payment" hint="Players pay you directly. Rally Point does not receive or check these payments.">
+      <SectionTitle id="profile-payment" hint="Players pay you directly. bRineLy does not receive or check these payments.">
         How players pay you
       </SectionTitle>
       <form className="space-y-3" onSubmit={onSaveNote}>

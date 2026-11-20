@@ -87,13 +87,13 @@ describe('club page profile sections', () => {
     expect(screen.getByRole('link', { name: /Contact Ana/ })).toHaveAttribute('href', 'https://m.me/coachana')
   })
 
-  it('shows how to pay, with the QR code, and says Rally Point does not take the payment', () => {
+  it('shows how to pay, with the QR code, and says bRineLy does not take the payment', () => {
     render(<ClubPaymentCard clubName="Rally Point" profile={full} index={0} />)
     const card = within(screen.getByRole('region', { name: 'How to pay Rally Point' }))
     expect(card.getByText('GCash')).toBeInTheDocument()
     expect(card.getByText('0917 111 1111')).toBeInTheDocument()
     expect(card.getByRole('img', { name: 'GCash QR code for paying Rally Point' })).toBeInTheDocument()
-    expect(card.getByRole('note')).toHaveTextContent('Rally Point does not receive or check this payment.')
+    expect(card.getByRole('note')).toHaveTextContent('bRineLy does not receive or check this payment.')
   })
 
   it('keeps rules and terms closed until tapped', async () => {

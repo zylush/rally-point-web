@@ -1,6 +1,6 @@
-# Resend Email Verification & Booking Receipt Setup
+# bRineLy — Resend Email Verification & Booking Receipt Setup
 
-Rally Point uses **Resend** for:
+bRineLy (`brinely.info`) uses **Resend** for:
 1. **Sign-up 6-digit email verification codes (OTP)** via Supabase Auth Custom SMTP.
 2. **Booking confirmation receipts** (`Booked · n hours · No refund`) via the `send-booking-email` Supabase Edge Function.
 
@@ -15,8 +15,8 @@ In the **Supabase Dashboard** → **Project Settings** → **Authentication** �
 - **Port:** `465` (or `587`)
 - **Username:** `resend`
 - **Password:** `<your RESEND_API_KEY>`
-- **Sender email:** Your verified Resend domain address (e.g., `noreply@rallypoint.ph`)
-- **Sender name:** `Rally Point`
+- **Sender email:** Your verified Resend domain address (e.g., `noreply@brinely.info`)
+- **Sender name:** `bRineLy`
 
 Then in **Authentication** → **Email Templates** → **Confirm signup**, paste the HTML from [`supabase/templates/confirm_signup.html`](../supabase/templates/confirm_signup.html) so users receive a branded 6-digit verification code (`{{ .Token }}`). Make sure **Confirm email** is enabled under **Authentication** → **Providers** → **Email**.
 
@@ -25,7 +25,7 @@ Then in **Authentication** → **Email Templates** → **Confirm signup**, paste
 ## 2. Deploy the `send-booking-email` Edge Function
 ```bash
 supabase secrets set RESEND_API_KEY=re_your_api_key
-supabase secrets set RESEND_FROM_EMAIL="Rally Point <bookings@yourdomain.com>"
+supabase secrets set RESEND_FROM_EMAIL="bRineLy <bookings@brinely.info>"
 supabase functions deploy send-booking-email
 ```
 

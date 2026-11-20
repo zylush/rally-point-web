@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
   }
 
   const resendApiKey = Deno.env.get('RESEND_API_KEY')?.trim()
-  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL')?.trim() || 'Rally Point <onboarding@resend.dev>'
+  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL')?.trim() || 'bRineLy <onboarding@resend.dev>'
   if (!resendApiKey) {
     return new Response(JSON.stringify({ sent: false, reason: 'RESEND_API_KEY not configured' }), {
       status: 200,
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
       <tr>
         <td style="padding:24px;background:linear-gradient(135deg,#0f766e,#115e59);color:#ffffff;">
-          <p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;opacity:0.9;">${escapeHtml(body.clubName ?? 'Rally Point')}</p>
+          <p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;opacity:0.9;">${escapeHtml(body.clubName ?? 'bRineLy')}</p>
           <h1 style="margin:6px 0 0;font-size:22px;">Booking confirmed</h1>
         </td>
       </tr>
@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
     body: JSON.stringify({
       from: fromEmail,
       to: [targetEmail],
-      subject: `Booked: ${body.courtName} (${hoursLabel}) · ${body.clubName ?? 'Rally Point'}`,
+      subject: `Booked: ${body.courtName} (${hoursLabel}) · ${body.clubName ?? 'bRineLy'}`,
       html,
     }),
   })

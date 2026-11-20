@@ -34,7 +34,7 @@ describe('demo player marketplace (mirrors the public directory and join_club_as
   })
 
   it('leaves out a club that is still being set up', () => {
-    demoStore.login('superadmin@rallypoint.local', 'superadmin123')
+    demoStore.login('superadmin@brinely.info', 'superadmin123')
     demoStore.provisionClub({
       name: 'Cebu IT Park', slug: 'cebu-it-park', city: 'Cebu City', address: 'Cebu IT Park',
       contact_email: 'cebu@example.invalid', contact_phone: '0917 555 6666', commission_rate: 5, court_count: 2,

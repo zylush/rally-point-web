@@ -38,7 +38,7 @@ beforeEach(() => {
 })
 
 function asSuperadmin() {
-  demoStore.login('superadmin@rallypoint.local', 'superadmin123')
+  demoStore.login('superadmin@brinely.info', 'superadmin123')
 }
 
 describe('demo owner call requests', () => {
@@ -47,7 +47,7 @@ describe('demo owner call requests', () => {
     const id = demoStore.requestOwnerCall(request({ email: ' Ana@Example.invalid ' }))
     expect(() => demoStore.platformOwnerCallRequests()).toThrow('Platform access required')
 
-    demoStore.login('admin@rallypoint.local', 'admin123')
+    demoStore.login('admin@brinely.info', 'admin123')
     expect(() => demoStore.setOwnerCallStatus(id, 'called')).toThrow('Platform access required')
 
     asSuperadmin()
@@ -55,7 +55,7 @@ describe('demo owner call requests', () => {
     expect(row).toMatchObject({ id, full_name: 'Ana Reyes', email: 'ana@example.invalid', status: 'new', handled_by_email: null })
 
     demoStore.setOwnerCallStatus(id, 'called')
-    expect(demoStore.platformOwnerCallRequests('called')[0]).toMatchObject({ status: 'called', handled_by_email: 'superadmin@rallypoint.local' })
+    expect(demoStore.platformOwnerCallRequests('called')[0]).toMatchObject({ status: 'called', handled_by_email: 'superadmin@brinely.info' })
     // The audit keeps the request id only, never the owner's contact details.
     expect(demoStore.platformRecentActions(1)[0]).toMatchObject({ action: 'owner_request.status', details: { request_id: id, from: 'new', to: 'called' } })
 
@@ -86,8 +86,8 @@ describe('demo owner invites', () => {
   it('makes an existing account the admin at once, and invites anyone else', () => {
     asSuperadmin()
     const clubId = demoStore.provisionClub(setupInput)
-    expect(demoStore.inviteClubOwner(clubId, ' Member@RallyPoint.local ')).toBe('assigned')
-    expect(demoStore.platformClubAdmins(clubId).map((admin) => admin.email)).toEqual(['member@rallypoint.local'])
+    expect(demoStore.inviteClubOwner(clubId, ' Member@Brinely.info ')).toBe('assigned')
+    expect(demoStore.platformClubAdmins(clubId).map((admin) => admin.email)).toEqual(['member@brinely.info'])
 
     expect(demoStore.inviteClubOwner(clubId, 'new.owner@example.invalid')).toBe('invited')
     expect(demoStore.inviteClubOwner(clubId, 'NEW.OWNER@example.invalid')).toBe('invited')

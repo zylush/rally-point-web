@@ -555,7 +555,7 @@ describe('AuthProvider trusted role boundary', () => {
     await user.click(screen.getByRole('button', { name: 'Switch to Rally Point Davao' }))
     expect(await screen.findByText('Rally Point Davao as admin')).toBeInTheDocument()
     expect(getActiveClubId()).toBe('club-davao')
-    expect(localStorage.getItem(`rally_point_last_club:${authState.sessionUser.id}`)).toBe('club-davao')
+    expect(localStorage.getItem(`brinely_last_club:${authState.sessionUser.id}`)).toBe('club-davao')
   })
 
   it('sends the club link with a join-link signup, and refuses an invalid link before signing up', async () => {
@@ -608,7 +608,7 @@ describe('AuthProvider trusted role boundary', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(await screen.findByText(
-      'Your owner account is ready. Cebu Hub is still being set up. You can log in as soon as Rally Point opens it.',
+      'Your owner account is ready. Cebu Hub is still being set up. You can log in as soon as bRineLy opens it.',
     )).toBeInTheDocument()
     expect(screen.getByText('Signed out')).toBeInTheDocument()
     expect(supabaseMock.auth.signOut).toHaveBeenCalled()
@@ -674,7 +674,7 @@ describe('AuthProvider trusted role boundary', () => {
       await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
       expect(await screen.findByText(
-        'Your owner account is ready. Cebu Hub is still being set up. You can log in as soon as Rally Point opens it.',
+        'Your owner account is ready. Cebu Hub is still being set up. You can log in as soon as bRineLy opens it.',
       )).toBeInTheDocument()
       expect(screen.getByText('Signed out')).toBeInTheDocument()
     } finally {

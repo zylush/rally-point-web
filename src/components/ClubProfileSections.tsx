@@ -176,7 +176,7 @@ export function ClubCoachesCard({ profile, index }: { profile: PublicClubProfile
   )
 }
 
-/** How to pay the club directly. Rally Point does not take or check these payments. */
+/** How to pay the club directly. bRineLy does not take or check these payments. */
 export function ClubPaymentCard({ clubName, profile, index }: { clubName: string; profile: PublicClubProfile; index: number }) {
   if (!profile.payment_note && profile.payment_methods.length === 0) return null
   return (
@@ -203,7 +203,7 @@ export function ClubPaymentCard({ clubName, profile, index }: { clubName: string
         </ul>
       ) : null}
       <p className="text-body font-normal text-slate-600" role="note">
-        You pay {clubName} directly. Rally Point does not receive or check this payment. Keep your receipt and show it at the desk.
+        You pay {clubName} directly. bRineLy does not receive or check this payment. Keep your receipt and show it at the desk.
       </p>
     </Card>
   )

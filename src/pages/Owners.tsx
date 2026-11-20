@@ -87,7 +87,7 @@ export function OwnersPage() {
       </Link>
 
       <section className="enter-rise card p-4 space-y-3" aria-labelledby="owners-how">
-        <h2 id="owners-how" className="text-subtitle font-bold text-slate-900">Put your courts on Rally Point</h2>
+        <h2 id="owners-how" className="text-subtitle font-bold text-slate-900">Put your courts on bRineLy</h2>
         <p className="text-body text-slate-700">
           Players near you find your club, see your courts and rates, and book. You run your club from your own admin screens.
         </p>
@@ -195,7 +195,7 @@ export function OwnersPage() {
           <div>
             <label className="flex min-h-12 items-start gap-3 text-body text-slate-700">
               <input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-              <span>Rally Point may contact me about listing my club.</span>
+              <span>bRineLy may contact me about listing my club.</span>
             </label>
             <Link to="/privacy" state={{ from: '/owners' }} className={textLink}>
               Read the Privacy Notice

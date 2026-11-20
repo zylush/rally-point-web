@@ -33,7 +33,7 @@ import {
   ymdLocal,
 } from '../types'
 
-const BOOKING_INTENT_KEY = 'rally_point_booking_intent'
+const BOOKING_INTENT_KEY = 'brinely_booking_intent'
 
 interface BookingIntent {
   clubSlug: string
@@ -486,7 +486,7 @@ export function MemberBook() {
           const venueObj = venues.find((v) => v.id === (done.venue_id ?? venueId))
           const receipt = await api.sendBookingConfirmationEmail({
             booking: done,
-            clubName: clubName ?? activeClub?.name ?? 'Rally Point',
+            clubName: clubName ?? activeClub?.name ?? 'bRineLy',
             venueName: venueObj?.name,
             recipientEmail: user.email,
           })

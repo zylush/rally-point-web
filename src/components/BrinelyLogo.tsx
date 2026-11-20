@@ -1,4 +1,4 @@
-/** Exact Figma rpg_logo assets from UI/UX file */
+/** Official bRineLy brand logo & icon mark assets */
 type LogoProps = {
   variant?: 'color' | 'mark'
   className?: string
@@ -7,7 +7,7 @@ type LogoProps = {
 
 const BASE = import.meta.env.BASE_URL || '/'
 
-export function RallyPointLogo({ variant = 'color', className = '', title = 'Rally Point' }: LogoProps) {
+export function BrinelyLogo({ variant = 'color', className = '', title = 'bRineLy' }: LogoProps) {
   const src = variant === 'mark' ? `${BASE}logo-mark.png` : `${BASE}logo.png`
 
   return (

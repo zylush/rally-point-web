@@ -106,9 +106,10 @@ The full runbook is in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): environments,
 | Environment | Built from | Database | Address |
 | --- | --- | --- | --- |
 | Production | `main` | Supabase `brinely-production` | https://brinely.info |
-| Preview | every other branch and pull request | Supabase staging (`Rally-Point-Database`) | the Vercel preview link, with a "Test site" banner |
+| Staging | `staging` (Vercel project `brinely-staging`) | Supabase staging (`Rally-Point-Database`) | https://brinely-staging.vercel.app, with a "Test site" banner |
+| Preview | every other branch and pull request | Supabase staging (`Rally-Point-Database`) | the Vercel preview link (Vercel sign-in), with a "Test site" banner |
 
-GitHub CI runs lint, the CI tests and the build on every push and pull request, but it never publishes and never touches a database. Vercel builds and publishes, and merging into `main` puts a change live. Database migrations reach staging and production only through reviewed, owner-approved release packages, never through `supabase db push`, so a change that needs new migrations merges only after they are on production.
+GitHub CI runs lint, the CI tests and the build on every push and pull request, but it never publishes and never touches a database. Vercel builds and publishes. Every change goes through `staging` first: pull requests target `staging`, a merge there updates the staging site, and only then does a pull request from `staging` into `main` put it live. Database migrations reach staging and production only through reviewed, owner-approved release packages, never through `supabase db push`, so a change that needs new migrations merges only after they are on production.
 
 ## More documentation
 

@@ -29,3 +29,5 @@ coverage
 .env
 .env.*
 !.env.example
+# Public brinely.info (Vercel) target: URL and base only, never a key.
+!.env.vercel

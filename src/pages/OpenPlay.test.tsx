@@ -8,7 +8,7 @@ import { MemberOpenPlay, OpenPlayManage } from './OpenPlay'
 
 const memberUser: Profile = {
   id: 'member-user',
-  email: 'member@rallypoint.test',
+  email: 'member@brinely.info',
   full_name: 'Jamie Player',
   phone: null,
   role: 'member',

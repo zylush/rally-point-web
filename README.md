@@ -1,4 +1,4 @@
-# Rally Point Gensan
+# bRineLy (`brinely.info`)
 
 Mobile-first **court rental + membership** web app for pickleball (Figma UI/UX → production).
 
@@ -15,7 +15,7 @@ Vite · React · TypeScript · Tailwind v4 · HashRouter · Supabase (demo fallb
 | Staff | Check-in (QR) · Schedule board · Open play · Courts · Help inquiries and replies |
 | Admin | Home KPIs · Floor ops · Board · Open play · Bookings · Members · Users · Help inquiry inbox |
 | Public | TV board `/#/board/tv` |
-| Brand | Exact Figma `rpg_logo` (RALLY POINT GENSAN) |
+| Brand | bRineLy (`brinely.info`) — Stay in the brine. Play more. |
 
 Help/FAQ, Admin inquiry inbox, Staff inquiry updates, migration prerequisites, and verification notes are documented in [Help and Inquiry Workflow](./docs/HELP-AND-INQUIRY-WORKFLOW.md).
 
@@ -29,9 +29,9 @@ npm run dev
 ```
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | admin@rallypoint.local | admin123 |
-| Staff | staff@rallypoint.local | staff123 |
-| Member | member@rallypoint.local | member123 |
+| Admin | admin@brinely.info | admin123 |
+| Staff | staff@brinely.info | staff123 |
+| Member | member@brinely.info | member123 |
 
 *(Demo only when `.env` has no Supabase keys.)*
 

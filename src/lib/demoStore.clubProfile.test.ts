@@ -34,18 +34,18 @@ describe('demo club business profile (mirrors the club_business_profile function
     demoStore.updateClubProfile({
       ...emptyClubProfile(),
       about: '  Six indoor courts.  ',
-      email: 'Hello@RallyPoint.ph',
+      email: 'Hello@Brinely.info',
       facebook_url: 'https://facebook.com/rallypointgensan',
       amenities: ['parking', 'night_lights', 'parking'],
       terms: '   ',
     })
     expect(demoStore.clubProfile().profile).toMatchObject({
-      about: 'Six indoor courts.', email: 'hello@rallypoint.ph', amenities: ['night_lights', 'parking'], terms: null,
+      about: 'Six indoor courts.', email: 'hello@brinely.info', amenities: ['night_lights', 'parking'], terms: null,
     })
     expect(demoStore.publicClubProfile('rally-point-gensan')).toMatchObject({
       about: 'Six indoor courts.', facebook_url: 'https://facebook.com/rallypointgensan',
     })
-    expect(() => demoStore.updateClubProfile({ ...emptyClubProfile(), website_url: 'http://rallypoint.ph' }))
+    expect(() => demoStore.updateClubProfile({ ...emptyClubProfile(), website_url: 'http://brinely.info' }))
       .toThrow('The website link must start with https://')
     expect(demoStore.publicClubProfile('no-such-club')).toBeNull()
   })

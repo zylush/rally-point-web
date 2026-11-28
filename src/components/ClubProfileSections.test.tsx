@@ -19,7 +19,7 @@ const full: PublicClubProfile = {
   ...empty,
   about: 'Six indoor courts.\nOpen to everyone.',
   phone: '0917 123 4567',
-  email: 'hello@rallypoint.ph',
+  email: 'hello@brinely.info',
   facebook_url: 'https://facebook.com/rallypointgensan',
   messenger_url: 'https://m.me/rallypointgensan',
   // A bad link that somehow got through is never made clickable.
@@ -58,7 +58,7 @@ describe('club page profile sections', () => {
     expect(card.getByText(/Six indoor courts\./)).toBeInTheDocument()
     expect(card.getByText('Lights for night play')).toBeInTheDocument()
     expect(card.getByRole('link', { name: /Call 0917 123 4567/ })).toHaveAttribute('href', 'tel:09171234567')
-    expect(card.getByRole('link', { name: /Email/ })).toHaveAttribute('href', 'mailto:hello@rallypoint.ph')
+    expect(card.getByRole('link', { name: /Email/ })).toHaveAttribute('href', 'mailto:hello@brinely.info')
     const facebook = card.getByRole('link', { name: /Facebook page/ })
     expect(facebook).toHaveAttribute('href', 'https://facebook.com/rallypointgensan')
     expect(facebook).toHaveAttribute('target', '_blank')
@@ -67,7 +67,7 @@ describe('club page profile sections', () => {
   })
 
   it('links only a plain email address, so a stored value cannot add mail fields', () => {
-    render(<ClubAboutCard clubName="Rally Point" profile={{ ...full, email: 'hello@rallypoint.ph?bcc=someone@example.com' }} index={0} />)
+    render(<ClubAboutCard clubName="Rally Point" profile={{ ...full, email: 'hello@brinely.info?bcc=someone@example.com' }} index={0} />)
     const card = within(screen.getByRole('region', { name: 'About Rally Point' }))
     expect(card.queryByRole('link', { name: /Email/ })).not.toBeInTheDocument()
     expect(card.getByRole('link', { name: /Facebook page/ })).toBeInTheDocument()

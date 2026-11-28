@@ -202,7 +202,7 @@ export interface ProvisionClubInput {
   court_count: number
 }
 
-/** When a court owner would like Rally Point to call. */
+/** When a court owner would like bRineLy to call. */
 export type OwnerCallTime = 'morning' | 'afternoon' | 'evening'
 export type OwnerCallStatus = 'new' | 'called' | 'closed'
 
@@ -632,7 +632,7 @@ export interface PublicCoachListing {
   slots: PublicCoachSlot[]
 }
 
-/** A way to pay the club directly (GCash, Maya, a bank). Rally Point does not take or check these payments. */
+/** A way to pay the club directly (GCash, Maya, a bank). bRineLy does not take or check these payments. */
 export interface ClubPaymentMethod {
   id: string
   club_id: string

@@ -167,7 +167,7 @@ export default function LoginPage({
   const navState = location.state as { mode?: unknown; owner?: unknown; from?: unknown } | null
   // The page they were on: players and members go back to it once signed in.
   const returnTo = navState?.from
-  // The court-owner page opens sign-up with a note: owners use the email they gave Rally Point.
+  // The court-owner page opens sign-up with a note: owners use the email they gave bRineLy.
   const ownerSignup = navState?.owner === true && !joinClub
   const [mode, setMode] = useState<Mode>(joinClub || navState?.mode === 'join' ? 'join' : 'login')
   const [email, setEmail] = useState('')

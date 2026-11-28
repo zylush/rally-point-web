@@ -8,7 +8,7 @@ import { MemberNotifications, MemberTransactions } from './member'
 
 const memberUser = {
   id: 'u-member',
-  email: 'member@rallypoint.test',
+  email: 'member@brinely.info',
   full_name: 'Jamie Player',
   phone: null,
   role: 'member',

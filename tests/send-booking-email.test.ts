@@ -2,13 +2,16 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   buildBookingEmail,
+  buildBookingSubmittedEmail,
+  buildSignupAuthEmail,
   DEFAULT_FROM_EMAIL,
   type BookingEmailPayload,
 } from '../supabase/functions/send-booking-email/email.ts'
 
 /*
- * The booking confirmation email keeps the quiet court look (solid navy header, hairlines,
- * sentence case) and escapes every value the client sends.
+ * All bRineLy email cards (sign-up auth, booking email, booking confirmation, password reset)
+ * keep the quiet court look (solid navy header, hairlines, sentence case) and escape every
+ * value the client sends.
  */
 const payload: BookingEmailPayload = {
   bookingId: 'b-1',
@@ -49,6 +52,41 @@ describe('booking confirmation email', () => {
     expect(subject).toBe('Booked: Court 2 (2 hours) · Rally Point Gensan')
   })
 
+  it('builds the booking request card while payment is waiting for club confirmation', () => {
+    const { html, text, subject } = buildBookingSubmittedEmail(payload)
+    expect(subject).toBe('Booking request: Court 2 (2 hours) · Rally Point Gensan')
+    expect(html).toContain('Booking request received')
+    expect(html).toContain('>Status</td>')
+    expect(html).toContain('Waiting for the club to confirm')
+    expect(html).toContain('>Amount sent</td>')
+    expect(html).toContain('no-reply@brinely.info')
+    expect(text).toContain('Status: Waiting for the club to confirm')
+    expect(text).toContain('Amount sent: Php 900.00')
+  })
+
+  it('builds the sign-up auth 6-digit code card matching confirm_signup.html', () => {
+    const { html, text, subject } = buildSignupAuthEmail({ token: '482910' })
+    expect(subject).toBe('Confirm your bRineLy email')
+    expect(html).toContain('Confirm your email')
+    expect(html).toContain('482910')
+    expect(html).toContain('no-reply@brinely.info')
+    expect(html).not.toMatch(/linear-gradient/i)
+    expect(html).not.toMatch(/text-transform\s*:\s*uppercase/i)
+    expect(text).toContain('482910')
+
+    const template = readFileSync('supabase/templates/confirm_signup.html', 'utf8')
+    expect(template).toContain('{{ .Token }}')
+    expect(template).toContain('background:#0B2A5B')
+    expect(template).toContain('no-reply@brinely.info')
+    expect(template).not.toMatch(/linear-gradient/i)
+    expect(template).not.toMatch(/text-transform\s*:\s*uppercase/i)
+
+    const resetTemplate = readFileSync('supabase/templates/reset_password.html', 'utf8')
+    expect(resetTemplate).toContain('{{ .ConfirmationURL }}')
+    expect(resetTemplate).toContain('background:#0B2A5B')
+    expect(resetTemplate).toContain('no-reply@brinely.info')
+  })
+
   it('escapes every value the client sends', () => {
     const { html } = buildBookingEmail({
       ...payload,
@@ -82,8 +120,8 @@ describe('booking confirmation email', () => {
     expect(text).not.toMatch(/\n\n\n/)
   })
 
-  it('defaults to the bRineLy sender, still overridable by RESEND_FROM_EMAIL', () => {
-    expect(DEFAULT_FROM_EMAIL).toBe('bRineLy <bookings@brinely.info>')
+  it('defaults to the bRineLy no-reply@brinely.info sender, still overridable by RESEND_FROM_EMAIL', () => {
+    expect(DEFAULT_FROM_EMAIL).toBe('bRineLy <no-reply@brinely.info>')
     const source = readFileSync('supabase/functions/send-booking-email/index.ts', 'utf8')
     expect(source).toContain("Deno.env.get('RESEND_FROM_EMAIL')?.trim() || DEFAULT_FROM_EMAIL")
     expect(source).not.toContain('resend.dev')

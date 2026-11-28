@@ -44,6 +44,13 @@ function hasActiveAdmin(db: DemoDB, clubId: string) {
   return db.clubRoles.some((row) => row.club_id === clubId && row.role === 'admin' && row.is_active)
 }
 
+/** Mirrors platform_set_booking_fee's checks: whole centavos from 0 to 10,000 pesos. */
+function checkBookingFee(fee: number) {
+  if (!Number.isFinite(fee) || fee < 0 || fee > 10000) throw new Error('The booking fee must be between 0 and 10,000 pesos')
+  if (Math.abs(fee * 100 - Math.round(fee * 100)) > 1e-6) throw new Error('Enter the booking fee in pesos and centavos')
+  return round2(fee)
+}
+
 function sumOf(values: number[]) {
   return round2(values.reduce((total, value) => total + value, 0))
 }
@@ -71,6 +78,7 @@ export const platformOperations = {
           name: club.name,
           status: account.status,
           commission_rate: account.commission_rate,
+          booking_fee: account.booking_fee ?? 0,
           city: account.city,
           address: account.address,
           contact_email: account.contact_email,
@@ -113,20 +121,17 @@ export const platformOperations = {
     if (!name) throw new Error('Enter the club name')
     if (!SLUG_PATTERN.test(slug)) throw new Error('Use 3 to 50 lowercase letters, numbers or dashes for the link name')
     if (db.clubs.some((club) => club.slug.toLowerCase() === slug)) throw new Error('That link name is already used by another club')
-    if (!Number.isFinite(input.commission_rate) || input.commission_rate < 0 || input.commission_rate > 100) {
-      throw new Error('Commission rate must be between 0 and 100')
-    }
+    const fee = checkBookingFee(input.booking_fee)
     if (!Number.isInteger(courtCount) || courtCount < 1 || courtCount > 12) throw new Error('Choose between 1 and 12 courts')
 
     const now = todayISO()
     const clubId = uid('club')
     const venueId = uid('venue')
-    const rate = round2(input.commission_rate)
     db.clubs.push({ id: clubId, slug, name, default_timezone: 'Asia/Manila', is_active: false })
     db.clubAccounts.push({
       ...defaultClubAccount(clubId, false, now),
       status: 'provisioning',
-      commission_rate: rate,
+      booking_fee: fee,
       city: input.city.trim() || null,
       address: input.address.trim() || null,
       contact_email: normalizeDemoEmail(input.contact_email) || null,
@@ -136,7 +141,7 @@ export const platformOperations = {
     for (let n = 1; n <= courtCount; n++) {
       db.courts.push({ id: uid('court'), club_id: clubId, venue_id: venueId, name: `Court ${n}`, status: 'available', hourly_rate: 500 })
     }
-    audit(db, actor, 'club.provision', clubId, { slug, name, commission_rate: rate, court_count: courtCount })
+    audit(db, actor, 'club.provision', clubId, { slug, name, booking_fee: fee, court_count: courtCount })
     save(db)
     return clubId
   },
@@ -157,16 +162,17 @@ export const platformOperations = {
     audit(db, actor, 'club.status', clubId, { from, to: status })
     save(db)
   },
-  setCommissionRate(clubId: string, rate: number) {
+  /** The club's flat platform fee in pesos per court booking. */
+  setBookingFee(clubId: string, fee: number) {
     const db = load()
     const actor = requirePlatform(db)
-    if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new Error('Commission rate must be between 0 and 100')
+    const next = checkBookingFee(fee)
     findClub(db, clubId)
     const account = accountFor(db, clubId)
-    const from = account.commission_rate
-    account.commission_rate = round2(rate)
+    const from = account.booking_fee ?? 0
+    account.booking_fee = next
     account.updated_at = todayISO()
-    audit(db, actor, 'club.commission_rate', clubId, { from, to: account.commission_rate })
+    audit(db, actor, 'club.booking_fee', clubId, { from, to: next })
     save(db)
   },
   /** The person must already have an account (they sign up through the club link). */

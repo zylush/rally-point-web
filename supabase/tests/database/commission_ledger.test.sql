@@ -20,6 +20,9 @@ insert into public.staff_venue_grants (club_id, user_id, venue_id) values
 insert into public.platform_roles (user_id) values ('c1000000-0000-4000-8000-000000000064');
 delete from public.members where user_id = 'c1000000-0000-4000-8000-000000000064';
 
+-- This suite checks the percentage path, which the trigger still honours; since the flat booking
+-- fee every club starts at 0%, so Gensan's 5% is set here.
+update public.club_accounts set commission_rate = 5 where club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 update public.club_accounts set commission_rate = 10 where club_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 insert into public.transactions (id, club_id, venue_id, amount, type, description) values

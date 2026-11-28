@@ -195,6 +195,27 @@ describe('range reads (live)', () => {
     expect(live.calls).toContainEqual({ table: 'platform_commissions', op: 'select', args: ['commission_amount, gross_amount, created_at'] })
     expect(live.calls).toContainEqual({ table: 'platform_commissions', op: 'eq', args: ['club_id', live.clubId] })
   })
+
+  it("adds up the active club's platform fees, all time and this month, with its fee per booking", async () => {
+    live.tables.set('platform_commissions', [
+      // 23:59 and 00:00 Philippine time either side of December 1.
+      { commission_amount: '20.00', gross_amount: '500.00', created_at: '2026-11-30T15:59:00.000Z' },
+      { commission_amount: '25.50', gross_amount: '600.00', created_at: '2026-11-30T16:00:00.000Z' },
+      { commission_amount: '0.00', gross_amount: '200.00', created_at: '2026-12-02T01:00:00.000Z' },
+      // The database's own format, exactly at midnight on December 1 in the Philippines.
+      { commission_amount: '10.00', gross_amount: '300.00', created_at: '2026-11-30T16:00:00+00:00' },
+    ])
+    live.tables.set('club_accounts', [{ booking_fee: '25.50' }])
+    expect(await api.myClubFeeSummary(new Date('2026-12-03T04:00:00.000Z'))).toEqual({ total: 55.5, thisMonth: 35.5, lines: 4, bookingFee: 25.5 })
+    expect(live.calls).toContainEqual({ table: 'club_accounts', op: 'select', args: ['booking_fee'] })
+    expect(live.calls).toContainEqual({ table: 'club_accounts', op: 'eq', args: ['club_id', live.clubId] })
+  })
+
+  it('still shows the fee totals when the fee per booking cannot be read', async () => {
+    live.tables.set('platform_commissions', [{ commission_amount: '30.00', gross_amount: '600.00', created_at: '2026-12-01T02:00:00.000Z' }])
+    live.tables.set('club_accounts', new Error('column club_accounts.booking_fee does not exist'))
+    expect(await api.myClubFeeSummary(new Date('2026-12-03T04:00:00.000Z'))).toEqual({ total: 30, thisMonth: 30, lines: 1, bookingFee: null })
+  })
 })
 
 describe('platform analytics (live)', () => {

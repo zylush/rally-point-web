@@ -64,6 +64,21 @@ describe('demo persistence normalization', () => {
     expect(localStorage.getItem('rally_point_demo_v4')).toBeNull()
   })
 
+  it('moves accounts saved with a percentage onto the seeded flat booking fee', () => {
+    const fresh = demoStore.get()
+    const stored = {
+      ...fresh,
+      // Saved before the flat fee: a percentage and no booking fee.
+      clubAccounts: fresh.clubAccounts.map(({ booking_fee: _fee, ...account }) => ({ ...account, commission_rate: 5 })),
+    } as unknown as DemoDB
+    const normalized = normalizeStored(stored, () => true)
+    expect(normalized.repaired).toBe(true)
+    expect(normalized.db.clubAccounts.map((account) => [account.club_id, account.commission_rate, account.booking_fee])).toEqual(
+      fresh.clubAccounts.map((account) => [account.club_id, 0, account.booking_fee]),
+    )
+    expect(normalized.db.clubAccounts.every((account) => account.booking_fee > 0)).toBe(true)
+  })
+
   it('drops branch-era data and turns legacy roles into trusted club and platform roles', () => {
     const stored = {
       ...demoStore.get(),
@@ -83,7 +98,7 @@ describe('demo persistence normalization', () => {
     expect(normalized.db.commissions).toEqual([])
     expect(normalized.db.auditLog).toEqual([])
     expect(normalized.db.clubAccounts).toEqual([
-      expect.objectContaining({ club_id: 'club_rally_point', status: 'active', commission_rate: 5 }),
+      expect.objectContaining({ club_id: 'club_rally_point', status: 'active', commission_rate: 0, booking_fee: 0 }),
     ])
     expect(normalized.db.clubRoles).toEqual(expect.arrayContaining([
       { club_id: 'club_rally_point', user_id: 'user_admin', role: 'admin', is_active: true },

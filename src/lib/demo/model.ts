@@ -14,6 +14,8 @@ export interface DemoCommission {
   transaction_id: string
   gross_amount: number
   commission_rate: number
+  /** The flat booking fee in force when the line was recorded. */
+  booking_fee: number
   commission_amount: number
   club_net_amount: number
   verification_status: 'unverified' | 'verified'

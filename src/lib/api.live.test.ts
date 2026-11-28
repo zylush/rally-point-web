@@ -155,7 +155,7 @@ const live = vi.hoisted(() => {
     if (name === 'platform_assign_club_admin') return { data: 'user-admin', error: null }
     if (name === 'platform_list_clubs') {
       // Postgres numerics can arrive as strings; the adapter must turn them into numbers.
-      return { data: [{ club_id: clubId, slug: 'rally-point-gensan', name: 'Rally Point Gensan', status: 'active', commission_rate: '5.00', city: null, address: null, contact_email: null, contact_phone: null, venue_count: '2', court_count: '4', member_count: '40', admin_count: '1', gross_amount: '1000.00', commission_amount: '50.00', club_net_amount: '950.00', entry_count: '2', created_at: '2099-01-01T00:00:00.000Z' }], error: null }
+      return { data: [{ club_id: clubId, slug: 'rally-point-gensan', name: 'Rally Point Gensan', status: 'active', commission_rate: '0.00', booking_fee: '20.00', city: null, address: null, contact_email: null, contact_phone: null, venue_count: '2', court_count: '4', member_count: '40', admin_count: '1', gross_amount: '1000.00', commission_amount: '50.00', club_net_amount: '950.00', entry_count: '2', created_at: '2099-01-01T00:00:00.000Z' }], error: null }
     }
     if (name === 'platform_commission_ledger') {
       return { data: [{ id: 'commission-live', club_id: clubId, club_name: 'Rally Point Gensan', venue_id: venueId, transaction_id: 'tx-live', description: 'Desk rental — recorded charge', gross_amount: '600.00', commission_rate: '5.00', commission_amount: '30.00', club_net_amount: '570.00', verification_status: 'unverified', created_at: '2099-09-20T00:00:00.000Z' }], error: null }
@@ -583,25 +583,40 @@ describe('api live club context', () => {
 
   it('reads platform figures as numbers and sums them for the overview', async () => {
     const clubs = await api.platformClubs()
-    expect(clubs[0]).toMatchObject({ commission_rate: 5, member_count: 40, gross_amount: 1000, commission_amount: 50, entry_count: 2 })
+    expect(clubs[0]).toMatchObject({ commission_rate: 0, booking_fee: 20, member_count: 40, gross_amount: 1000, commission_amount: 50, entry_count: 2 })
     expect(summarizePlatform(clubs)).toEqual({ totalGrossVolume: 1000, totalCommissionsEarned: 50, activeClubsCount: 1, totalEntriesCount: 2 })
     const ledger = await api.platformLedger(live.clubId, 50)
     expect(ledger[0]).toMatchObject({ gross_amount: 600, commission_rate: 5, commission_amount: 30, club_net_amount: 570 })
     expect(live.calls).toContainEqual({ table: 'rpc', op: 'platform_commission_ledger', args: [{ p_club_id: live.clubId, p_limit: 50 }] })
   })
 
+  it('keeps a new club and reports the fee when only the booking fee fails to save', async () => {
+    const input = { name: 'Davao Hub', slug: 'davao-hub', city: '', address: '', contact_email: '', contact_phone: '', booking_fee: 30, court_count: 2 }
+    live.setRpcFailure('platform_set_booking_fee', new Error('network down'))
+    expect(await api.provisionClub(input)).toEqual({ club_id: 'club-new', fee_error: 'network down' })
+    live.reset()
+    // A fee the database would refuse stops set-up before any club is created.
+    await expect(api.provisionClub({ ...input, booking_fee: 12.345 })).rejects.toThrow('Enter the booking fee in pesos and centavos')
+    await expect(api.provisionClub({ ...input, booking_fee: Number.NaN })).rejects.toThrow('The booking fee must be between 0 and 10,000 pesos')
+    expect(live.calls.filter((call) => call.op === 'platform_provision_club')).toEqual([])
+    // No fee asked for, no second call.
+    await api.provisionClub({ ...input, booking_fee: 0 })
+    expect(live.calls.some((call) => call.op === 'platform_set_booking_fee')).toBe(false)
+  })
+
   it('sends platform changes to the audited platform functions', async () => {
-    expect(await api.provisionClub({ name: 'Davao Hub', slug: 'davao-hub', city: 'Davao City', address: 'Ecoland', contact_email: 'davao@example.invalid', contact_phone: '0917', commission_rate: 6, court_count: 3 })).toBe('club-new')
+    expect(await api.provisionClub({ name: 'Davao Hub', slug: 'davao-hub', city: 'Davao City', address: 'Ecoland', contact_email: 'davao@example.invalid', contact_phone: '0917', booking_fee: 30, court_count: 3 })).toEqual({ club_id: 'club-new', fee_error: null })
     await api.setClubStatus('club-new', 'active')
-    await api.setCommissionRate('club-new', 7.5)
+    await api.setBookingFee('club-new', 45.5)
     expect(await api.assignClubAdmin('club-new', 'admin@example.invalid')).toBe('user-admin')
     await api.revokeClubAdmin('club-new', 'user-admin')
     expect(await api.platformClubAdmins('club-new')).toEqual([{ user_id: 'user-admin', email: 'admin@example.invalid', full_name: 'Club Admin' }])
     expect((await api.platformRecentActions(5))[0].action).toBe('club.provision')
     expect(live.calls).toEqual(expect.arrayContaining([
-      { table: 'rpc', op: 'platform_provision_club', args: [{ p_name: 'Davao Hub', p_slug: 'davao-hub', p_city: 'Davao City', p_address: 'Ecoland', p_contact_email: 'davao@example.invalid', p_contact_phone: '0917', p_commission_rate: 6, p_court_count: 3 }] },
+      { table: 'rpc', op: 'platform_provision_club', args: [{ p_name: 'Davao Hub', p_slug: 'davao-hub', p_city: 'Davao City', p_address: 'Ecoland', p_contact_email: 'davao@example.invalid', p_contact_phone: '0917', p_commission_rate: 0, p_court_count: 3 }] },
+      { table: 'rpc', op: 'platform_set_booking_fee', args: [{ p_club_id: 'club-new', p_fee: 30 }] },
       { table: 'rpc', op: 'platform_set_club_status', args: [{ p_club_id: 'club-new', p_status: 'active' }] },
-      { table: 'rpc', op: 'platform_set_commission_rate', args: [{ p_club_id: 'club-new', p_rate: 7.5 }] },
+      { table: 'rpc', op: 'platform_set_booking_fee', args: [{ p_club_id: 'club-new', p_fee: 45.5 }] },
       { table: 'rpc', op: 'platform_assign_club_admin', args: [{ p_club_id: 'club-new', p_email: 'admin@example.invalid' }] },
       { table: 'rpc', op: 'platform_revoke_club_admin', args: [{ p_club_id: 'club-new', p_user_id: 'user-admin' }] },
     ]))

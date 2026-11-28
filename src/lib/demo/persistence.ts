@@ -46,7 +46,13 @@ export function normalizeStored(
     ? withoutLegacy.platformRoles
     : profiles.filter((profile) => profile.role === 'superadmin').map((profile) => ({ user_id: profile.id, role: 'superadmin' as const }))
   // Every club has an account, as the clubs insert trigger guarantees in the database.
-  const storedAccounts: ClubAccount[] = Array.isArray(withoutLegacy.clubAccounts) ? withoutLegacy.clubAccounts : []
+  // Accounts saved before the flat booking fee get the seeded fee and lose the retired percentage,
+  // as migration 20261127110000 does for the database (where every club starts at 0).
+  const storedAccounts: ClubAccount[] = (Array.isArray(withoutLegacy.clubAccounts) ? withoutLegacy.clubAccounts : []).map((account) =>
+    typeof account.booking_fee === 'number'
+      ? account
+      : { ...account, commission_rate: 0, booking_fee: defaults.clubAccounts.find((row) => row.club_id === account.club_id)?.booking_fee ?? 0 },
+  )
   const clubAccounts = [
     ...storedAccounts,
     ...clubs
@@ -183,6 +189,7 @@ export function normalizeStored(
     !Array.isArray(withoutLegacy.clubs) ||
     !Array.isArray(withoutLegacy.clubAccounts) ||
     clubAccounts.length !== storedAccounts.length ||
+    storedAccounts.some((account, index) => account !== withoutLegacy.clubAccounts?.[index]) ||
     !Array.isArray(withoutLegacy.clubRoles) ||
     !Array.isArray(withoutLegacy.platformRoles) ||
     !Array.isArray(withoutLegacy.auditLog) ||

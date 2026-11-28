@@ -27,7 +27,7 @@ const setupInput = {
   address: '',
   contact_email: '',
   contact_phone: '',
-  commission_rate: 5,
+  booking_fee: 0,
   court_count: 2,
 }
 

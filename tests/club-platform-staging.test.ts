@@ -641,6 +641,36 @@ describe('staging releases', () => {
     expect(postflight).toContain('= 43')
   })
 
+  it('builds the flat booking fee release on the 43-migration state and re-runs every earlier check', async () => {
+    const { coachesCourtTypesRelease, flatBookingFeeRelease, releaseManifest, releases } = await load()
+    const { flatBookingFeeChecks } = await import('../scripts/club-platform-checks.mjs')
+    expect(flatBookingFeeRelease.baseVersions).toHaveLength(43)
+    expect(flatBookingFeeRelease.baseVersions.at(-1)).toBe('20261127100000')
+    expect(flatBookingFeeRelease.migrations).toEqual(['20261127110000_flat_booking_fee.sql'])
+    expect(flatBookingFeeRelease.stateCheck).toEqual({ file: 'coaches_court_types_postflight.sql', kind: 'coachesCourtTypes' })
+    expect(flatBookingFeeRelease.postChecks.map((check: { kind: string, ignore: string[] }) => [check.kind, [...check.ignore]]).slice(0, 3)).toEqual([
+      ['flatBookingFee', []],
+      ['coachesCourtTypes', ['ledger_has_coaches_court_types']],
+      ['tournamentFixes', ['ledger_has_tournament_fixes']],
+    ])
+    expect(flatBookingFeeRelease.postChecks).toHaveLength(coachesCourtTypesRelease.postChecks.length + 1)
+    const earlier = Object.values(releases).filter(release => release !== flatBookingFeeRelease)
+      .flatMap((release: { dirs: object, databases: object }) => [...Object.values(release.dirs), ...Object.values(release.databases)])
+    expect([...Object.values(flatBookingFeeRelease.dirs), ...Object.values(flatBookingFeeRelease.databases)]
+      .filter(name => earlier.includes(name))).toEqual([])
+    const { contents } = releaseManifest(flatBookingFeeRelease)
+    const migration = contents.get('supabase/migrations/20261127110000_flat_booking_fee.sql')?.toString('utf8') ?? ''
+    // Bookings and the other paused tables are never written; only club accounts change.
+    expect(migration).not.toMatch(/\b(insert into|update|delete from)\s+public\.(bookings|court_sessions|open_plays|open_play_signups|court_allocations|courts|transactions)\b/i)
+    expect(migration).toContain('grant execute on function public.platform_set_booking_fee(uuid, numeric) to authenticated')
+    expect(migration).toContain('grant execute on function public.platform_list_clubs() to authenticated')
+    expect(migration).not.toContain('to anon')
+    const postflight = contents.get('supabase/verification/flat_booking_fee_postflight.sql')?.toString('utf8') ?? ''
+    expect([...postflight.matchAll(/select \d+, '([a-z_]+)'/g)].map(match => match[1])).toEqual([...flatBookingFeeChecks])
+    expect(postflight).toContain("version = '20261127110000'")
+    expect(postflight).toContain('= 44')
+  })
+
   it('hashes the release definition and every file, and returns the bytes it hashed', async () => {
     const { releaseManifest } = await load()
     const { dir, release } = releaseFixture()

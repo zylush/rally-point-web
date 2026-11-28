@@ -52,7 +52,7 @@ describe('SuperadminPage', () => {
     renderSection('overview')
     expect(await screen.findByRole('heading', { name: 'Platform overview' })).toBeInTheDocument()
     const totals = screen.getByRole('region', { name: 'Platform totals' })
-    expect(within(totals).getByText('Commission recorded')).toBeInTheDocument()
+    expect(within(totals).getByText('Platform revenue')).toBeInTheDocument()
     expect(within(totals).getByText('Active clubs')).toBeInTheDocument()
     expect(within(totals).getByText('2')).toBeInTheDocument()
     expect(screen.getByText(/not collected money/)).toBeInTheDocument()
@@ -88,6 +88,21 @@ describe('SuperadminPage', () => {
     await waitFor(() => expect(within(screen.getByRole('article', { name: 'Cebu Hub' })).getByText('Active')).toBeInTheDocument())
   })
 
+  it("sets a club's platform fee in pesos per booking, never as a percentage", async () => {
+    const user = userEvent.setup()
+    renderSection('clubs')
+    const davao = await screen.findByRole('article', { name: 'Rally Point Davao' })
+    const fee = within(davao).getByLabelText('Booking fee (₱)')
+    expect(fee).toHaveValue(25)
+    expect(within(davao).queryByText(/%/)).not.toBeInTheDocument()
+    await user.clear(fee)
+    await user.type(fee, '40')
+    await user.click(within(davao).getByRole('button', { name: 'Save fee' }))
+    expect(await screen.findByText('Rally Point Davao booking fee set to Php 40.00.')).toBeInTheDocument()
+    expect(demoStore.platformClubs().find((club) => club.name === 'Rally Point Davao')?.booking_fee).toBe(40)
+    expect(demoStore.platformRecentActions(1)[0]).toMatchObject({ action: 'club.booking_fee', details: { from: 25, to: 40 } })
+  })
+
   it('never offers to suspend the default sign-up club', async () => {
     renderSection('clubs')
     const gensan = await screen.findByRole('article', { name: 'Rally Point Gensan' })
@@ -100,7 +115,7 @@ describe('SuperadminPage', () => {
   it('filters the commission ledger by club', async () => {
     const user = userEvent.setup()
     renderSection('ledger')
-    expect(await screen.findByRole('heading', { name: 'Commission ledger' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Fee ledger' })).toBeInTheDocument()
     expect((await screen.findAllByText('Rally Point Davao')).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Recorded, not verified/).length).toBeGreaterThan(0)
 

@@ -464,7 +464,8 @@ export function seed(): DemoDB {
     {
       club_id: DEMO_CLUB_ID,
       status: 'active',
-      commission_rate: 5,
+      commission_rate: 0,
+      booking_fee: 20,
       city: 'General Santos City',
       address: 'General Santos City',
       contact_email: 'gensan@brinely.info',
@@ -476,7 +477,8 @@ export function seed(): DemoDB {
     {
       club_id: DEMO_DAVAO_CLUB_ID,
       status: 'active',
-      commission_rate: 6,
+      commission_rate: 0,
+      booking_fee: 25,
       city: 'Davao City',
       address: 'Davao City',
       contact_email: 'davao@brinely.info',

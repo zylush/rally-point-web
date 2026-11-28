@@ -19,12 +19,48 @@ vi.mock('../context/AuthContext', () => ({
   }),
 }))
 
-function renderSection(section: 'overview' | 'clubs' | 'ledger' | 'requests') {
+function renderSection(section: 'overview' | 'clubs' | 'ledger' | 'requests', path = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <SuperadminPage section={section} />
     </MemoryRouter>,
   )
+}
+
+/** A club's row in the clubs list: a button named by the club, which opens its actions. */
+function clubRow(name: string) {
+  return screen.getByRole('button', { name: new RegExp(`^${name}`) })
+}
+
+/** Opens one club's row and returns its actions. */
+async function openClub(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const row = await screen.findByRole('button', { name: new RegExp(`^${name}`) })
+  if (row.getAttribute('aria-expanded') !== 'true') await user.click(row)
+  expect(row).toHaveAttribute('aria-expanded', 'true')
+  return screen.getByRole('article', { name })
+}
+
+/** The names of the clubs listed, in order; none is open in the tests that use it. */
+function listedClubs() {
+  return within(screen.getByRole('region', { name: 'All clubs' }))
+    .getAllByRole('button', { expanded: false })
+    .map((row) => row.querySelector('span span')?.textContent)
+}
+
+function setUpClubs(count: number, prefix = 'Test Club') {
+  for (let index = 1; index <= count; index += 1) {
+    const number = String(index).padStart(2, '0')
+    demoStore.provisionClub({
+      name: `${prefix} ${number}`,
+      slug: `${prefix.toLowerCase().replace(/ /g, '-')}-${number}`,
+      city: 'Cebu City',
+      address: '',
+      contact_email: '',
+      contact_phone: '',
+      booking_fee: 20,
+      court_count: 2,
+    })
+  }
 }
 
 beforeEach(() => {
@@ -72,8 +108,10 @@ describe('SuperadminPage', () => {
 
     expect(await screen.findByText('Cebu Hub is set up. Assign an admin, then activate it.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // The new club opens by itself, flagged as needing an admin.
+    expect(clubRow('Cebu Hub')).toHaveAttribute('aria-expanded', 'true')
+    expect(clubRow('Cebu Hub')).toHaveTextContent(/In setup.*Needs an admin/)
     const card = screen.getByRole('article', { name: 'Cebu Hub' })
-    expect(within(card).getByText('In setup')).toBeInTheDocument()
     expect(within(card).getByText('#/join/cebu-hub')).toBeInTheDocument()
 
     await user.click(within(card).getByRole('button', { name: 'Activate' }))
@@ -85,13 +123,14 @@ describe('SuperadminPage', () => {
 
     await user.click(within(screen.getByRole('article', { name: 'Cebu Hub' })).getByRole('button', { name: 'Activate' }))
     expect(await screen.findByText('Cebu Hub is now active.')).toBeInTheDocument()
-    await waitFor(() => expect(within(screen.getByRole('article', { name: 'Cebu Hub' })).getByText('Active')).toBeInTheDocument())
+    await waitFor(() => expect(clubRow('Cebu Hub')).toHaveTextContent('Active'))
+    expect(clubRow('Cebu Hub')).not.toHaveTextContent('Needs an admin')
   })
 
   it("sets a club's platform fee in pesos per booking, never as a percentage", async () => {
     const user = userEvent.setup()
     renderSection('clubs')
-    const davao = await screen.findByRole('article', { name: 'Rally Point Davao' })
+    const davao = await openClub(user, 'Rally Point Davao')
     const fee = within(davao).getByLabelText('Booking fee (₱)')
     expect(fee).toHaveValue(25)
     expect(within(davao).queryByText(/%/)).not.toBeInTheDocument()
@@ -99,16 +138,21 @@ describe('SuperadminPage', () => {
     await user.type(fee, '40')
     await user.click(within(davao).getByRole('button', { name: 'Save fee' }))
     expect(await screen.findByText('Rally Point Davao booking fee set to Php 40.00.')).toBeInTheDocument()
+    await waitFor(() => expect(clubRow('Rally Point Davao')).toHaveTextContent('Php 40.00'))
     expect(demoStore.platformClubs().find((club) => club.name === 'Rally Point Davao')?.booking_fee).toBe(40)
     expect(demoStore.platformRecentActions(1)[0]).toMatchObject({ action: 'club.booking_fee', details: { from: 25, to: 40 } })
   })
 
   it('never offers to suspend the default sign-up club', async () => {
+    const user = userEvent.setup()
     renderSection('clubs')
-    const gensan = await screen.findByRole('article', { name: 'Rally Point Gensan' })
+    const gensan = await openClub(user, 'Rally Point Gensan')
     expect(within(gensan).getByText('Default sign-up club')).toBeInTheDocument()
     expect(within(gensan).queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument()
-    const davao = screen.getByRole('article', { name: 'Rally Point Davao' })
+    // One club is open at a time.
+    const davao = await openClub(user, 'Rally Point Davao')
+    expect(clubRow('Rally Point Gensan')).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('article', { name: 'Rally Point Gensan' })).not.toBeInTheDocument()
     expect(within(davao).getByRole('button', { name: 'Suspend' })).toBeInTheDocument()
   })
 
@@ -131,7 +175,7 @@ describe('SuperadminPage', () => {
   it('opens a logged, read-only support view of a club and closes it again', async () => {
     const user = userEvent.setup()
     renderSection('clubs')
-    const davao = await screen.findByRole('article', { name: 'Rally Point Davao' })
+    const davao = await openClub(user, 'Rally Point Davao')
     await user.click(within(davao).getByRole('button', { name: /Open support view/ }))
     const dialog = screen.getByRole('dialog', { name: 'Support view of Rally Point Davao' })
     await user.type(within(dialog).getByLabelText('Reason'), 'Checking a court booking complaint')
@@ -244,7 +288,7 @@ describe('SuperadminPage', () => {
   it('invites an owner who has no account yet from the club card, shows the invite, and cancels it', async () => {
     const user = userEvent.setup()
     renderSection('clubs')
-    const davao = await screen.findByRole('article', { name: 'Rally Point Davao' })
+    const davao = await openClub(user, 'Rally Point Davao')
     await user.click(within(davao).getByText('Admins and invites'))
     await user.type(within(davao).getByLabelText('Add an admin by email'), 'future.owner@example.invalid')
     await user.click(within(davao).getByRole('button', { name: 'Add admin' }))
@@ -258,6 +302,117 @@ describe('SuperadminPage', () => {
     await user.click(within(invites).getByRole('button', { name: 'Cancel invite' }))
     expect(await screen.findByText('The invite for future.owner@example.invalid is cancelled.')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Rally Point Davao owner invites' })).not.toBeInTheDocument())
+  })
+
+  it('opens the club with an open support view by itself, even when it is not on the first page', async () => {
+    setUpClubs(25, 'Aaa Club')
+    const davaoId = demoStore.platformClubs().find((club) => club.name === 'Rally Point Davao')!.club_id
+    demoStore.startSupportSession(davaoId, 'Checking a court booking complaint', 30)
+    renderSection('clubs')
+    const panel = await screen.findByRole('region', { name: 'Rally Point Davao support view' })
+    expect(await within(panel).findByText(/Support view open until/)).toBeInTheDocument()
+    expect(clubRow('Rally Point Davao')).toHaveAttribute('aria-expanded', 'true')
+    expect(clubRow('Rally Point Davao')).toHaveTextContent('Support view open')
+  })
+
+  it('finds clubs by name, link name or city', async () => {
+    const user = userEvent.setup()
+    renderSection('clubs')
+    expect(await screen.findByText('2 of 2 clubs')).toBeInTheDocument()
+    const search = screen.getByLabelText('Search clubs')
+
+    await user.type(search, 'davao')
+    expect(screen.getByText('1 of 2 clubs')).toBeInTheDocument()
+    expect(listedClubs()).toEqual(['Rally Point Davao'])
+
+    await user.clear(search)
+    await user.type(search, 'rally-point-gensan')
+    expect(listedClubs()).toEqual(['Rally Point Gensan'])
+
+    await user.clear(search)
+    await user.type(search, 'General Santos')
+    expect(listedClubs()).toEqual(['Rally Point Gensan'])
+
+    await user.clear(search)
+    await user.type(search, 'Nowhere')
+    expect(screen.getByText('No clubs match this search.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show all clubs' }))
+    expect(search).toHaveValue('')
+    expect(listedClubs()).toHaveLength(2)
+  })
+
+  it('counts clubs by status, filters by status, and finds the clubs that need an admin', async () => {
+    setUpClubs(3)
+    const davaoId = demoStore.platformClubs().find((club) => club.name === 'Rally Point Davao')!.club_id
+    demoStore.setClubStatus(davaoId, 'suspended')
+    const user = userEvent.setup()
+    renderSection('clubs')
+    const filters = within(await screen.findByRole('group', { name: 'Show clubs' }))
+    expect(filters.getByRole('button', { name: 'All 5' })).toHaveAttribute('aria-pressed', 'true')
+    expect(filters.getByRole('button', { name: 'Active 1' })).toBeInTheDocument()
+    expect(filters.getByRole('button', { name: 'In setup 3' })).toBeInTheDocument()
+    expect(filters.getByRole('button', { name: 'Suspended 1' })).toBeInTheDocument()
+    expect(filters.getByRole('button', { name: 'Needs an admin 3' })).toBeInTheDocument()
+
+    await user.click(filters.getByRole('button', { name: 'Suspended 1' }))
+    expect(filters.getByRole('button', { name: 'Suspended 1' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('1 of 5 clubs')).toBeInTheDocument()
+    expect(listedClubs()).toEqual(['Rally Point Davao'])
+
+    await user.click(filters.getByRole('button', { name: 'Needs an admin 3' }))
+    expect(listedClubs()).toEqual(['Test Club 01', 'Test Club 02', 'Test Club 03'])
+
+    // The counts follow the search.
+    await user.type(screen.getByLabelText('Search clubs'), 'club 02')
+    expect(filters.getByRole('button', { name: 'All 1' })).toBeInTheDocument()
+    expect(filters.getByRole('button', { name: 'In setup 1' })).toBeInTheDocument()
+    expect(filters.getByRole('button', { name: 'Suspended 0' })).toBeInTheDocument()
+    expect(listedClubs()).toEqual(['Test Club 02'])
+  })
+
+  it('starts on the status the overview link asks for', async () => {
+    setUpClubs(2)
+    renderSection('clubs', '/superadmin/clubs?show=provisioning')
+    expect(await screen.findByText('2 of 4 clubs')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'In setup 2' })).toHaveAttribute('aria-pressed', 'true')
+    expect(listedClubs()).toEqual(['Test Club 01', 'Test Club 02'])
+  })
+
+  it('sorts clubs by commission revenue, highest first', async () => {
+    setUpClubs(2)
+    const user = userEvent.setup()
+    renderSection('clubs')
+    expect(await screen.findByText('4 of 4 clubs')).toBeInTheDocument()
+    expect(listedClubs()).toEqual(['Rally Point Davao', 'Rally Point Gensan', 'Test Club 01', 'Test Club 02'])
+
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'Commission revenue')
+    const expected = demoStore
+      .platformClubs()
+      .sort((a, b) => b.commission_amount - a.commission_amount || a.name.localeCompare(b.name))
+      .map((club) => club.name)
+    expect(expected.slice(2)).toEqual(['Test Club 01', 'Test Club 02'])
+    expect(expected[0]).toBe('Rally Point Gensan')
+    expect(listedClubs()).toEqual(expected)
+  })
+
+  it('shows 20 clubs at a time and moves to the first new one after "Show more"', async () => {
+    setUpClubs(25)
+    const user = userEvent.setup()
+    renderSection('clubs')
+    expect(await screen.findByText('27 of 27 clubs')).toBeInTheDocument()
+    expect(screen.getByText(/showing the first 20/)).toBeInTheDocument()
+    expect(listedClubs()).toHaveLength(20)
+
+    await user.click(screen.getByRole('button', { name: 'Show 7 more' }))
+    expect(listedClubs()).toHaveLength(27)
+    expect(clubRow('Test Club 19')).toHaveFocus()
+    expect(screen.queryByRole('button', { name: /^Show \d+ more/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/showing the first/)).not.toBeInTheDocument()
+
+    // A new search starts again from the first 20.
+    await user.type(screen.getByLabelText('Search clubs'), 'test club')
+    expect(screen.getByText('25 of 27 clubs')).toBeInTheDocument()
+    expect(listedClubs()).toHaveLength(20)
   })
 
   it('points the overview at new owner requests', async () => {

@@ -2,7 +2,7 @@ begin;
 set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions, pg_catalog;
-select extensions.plan(24);
+select extensions.plan(27);
 
 -- Fixture:
 --   user 81: platform superadmin with no club role
@@ -74,6 +74,18 @@ select extensions.throws_ok(
 select extensions.lives_ok(
   $$select public.platform_set_booking_fee('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 30)$$,
   'the superadmin sets a club''s booking fee');
+-- No API path takes a percentage any more.
+select extensions.throws_ok(
+  $$select public.platform_set_commission_rate('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 5)$$,
+  '22023', 'The platform fee is a flat amount per booking. Set the booking fee instead of a percentage.',
+  'the old rate setter refuses a percentage');
+select extensions.throws_ok(
+  $$select public.platform_provision_club('Percent Club', 'percent-club', '', '', '', '', 5, 2)$$,
+  '22023', 'The platform fee is a flat amount per booking. Set the booking fee instead of a percentage.',
+  'set-up refuses a percentage');
+select extensions.ok(
+  public.platform_provision_club('Flat Club', 'flat-club', '', '', '', '', 0, 2) is not null,
+  'set-up with no percentage still works');
 select extensions.is(
   (select booking_fee::text from public.platform_list_clubs() where club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
   '30.00', 'the club list shows the club''s booking fee');

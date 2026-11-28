@@ -4,9 +4,10 @@
 -- booking: an online booking or a desk rental. An extension adds time to a booking that already
 -- carries its fee, so it adds none. Every club starts at PHP 0 until the superadmin sets its fee.
 --
--- The percentage is retired: its default and every club's rate become 0. The commission_rate
--- columns and platform_set_commission_rate stay so earlier checks and the frozen release
--- packages keep working, but the app no longer shows or sets a rate. Ledger lines recorded
+-- The percentage is retired: its default and every club's rate become 0, and the two functions
+-- that took a rate (platform_set_commission_rate, platform_provision_club) now take only 0. The
+-- commission_rate columns and both signatures stay so earlier checks and the frozen release
+-- packages keep working. Ledger lines recorded
 -- before this migration keep the amounts they were recorded with.
 --
 -- Nothing in the reservation-write pause changes: no booking function is touched, and the
@@ -107,6 +108,97 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- No percentage through the API any more
+-- ---------------------------------------------------------------------------
+
+-- The old rate setter stays (frozen checks list it) but takes only 0, so no API path can
+-- put a percentage back. Setting 0 is still audited as club.commission_rate.
+create or replace function public.platform_set_commission_rate(p_club_id uuid, p_rate numeric)
+returns void
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_old numeric;
+begin
+  perform private.require_platform_superadmin();
+  if p_rate is distinct from 0 then
+    raise exception 'The platform fee is a flat amount per booking. Set the booking fee instead of a percentage.'
+      using errcode = '22023';
+  end if;
+  select a.commission_rate into v_old from public.club_accounts a where a.club_id = p_club_id for update;
+  if not found then
+    raise exception 'Club not found' using errcode = 'P0002';
+  end if;
+  update public.club_accounts set commission_rate = 0, updated_at = now() where club_id = p_club_id;
+  perform private.platform_audit('club.commission_rate', p_club_id, jsonb_build_object('from', v_old, 'to', 0));
+end;
+$$;
+
+-- Set-up keeps its signature (the app and frozen checks call it) but its rate must be 0; the
+-- booking fee is set right after with platform_set_booking_fee. Otherwise unchanged: a new club
+-- starts in setup (inactive, hidden from players) with one venue and its courts, through this
+-- audited definer path only.
+create or replace function public.platform_provision_club(
+  p_name text,
+  p_slug text,
+  p_city text,
+  p_address text,
+  p_contact_email text,
+  p_contact_phone text,
+  p_commission_rate numeric,
+  p_court_count integer default 2
+)
+returns uuid
+language plpgsql volatile security definer set search_path = ''
+as $$
+declare
+  v_club uuid := extensions.gen_random_uuid();
+  v_venue uuid := extensions.gen_random_uuid();
+  v_name text := btrim(coalesce(p_name, ''));
+  v_slug text := lower(btrim(coalesce(p_slug, '')));
+  v_courts integer := coalesce(p_court_count, 2);
+begin
+  perform private.require_platform_superadmin();
+  if v_name = '' then
+    raise exception 'Enter the club name' using errcode = '22023';
+  end if;
+  if v_slug !~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$' then
+    raise exception 'Use 3 to 50 lowercase letters, numbers or dashes for the link name' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.clubs c where c.slug = v_slug) then
+    raise exception 'That link name is already used by another club' using errcode = '23505';
+  end if;
+  if p_commission_rate is distinct from 0 then
+    raise exception 'The platform fee is a flat amount per booking. Set the booking fee instead of a percentage.'
+      using errcode = '22023';
+  end if;
+  if v_courts < 1 or v_courts > 12 then
+    raise exception 'Choose between 1 and 12 courts' using errcode = '22023';
+  end if;
+
+  insert into public.clubs (id, slug, name, is_active) values (v_club, v_slug, v_name, false);
+  -- The clubs trigger created a provisioning account; fill in the agreed terms.
+  update public.club_accounts
+  set status = 'provisioning',
+      commission_rate = 0,
+      city = nullif(btrim(p_city), ''),
+      address = nullif(btrim(p_address), ''),
+      contact_email = nullif(lower(btrim(p_contact_email)), ''),
+      contact_phone = nullif(btrim(p_contact_phone), ''),
+      updated_at = now()
+  where club_id = v_club;
+  insert into public.venues (id, club_id, slug, name) values (v_venue, v_club, 'main', v_name);
+  insert into public.courts (club_id, venue_id, name)
+  select v_club, v_venue, 'Court ' || n from generate_series(1, v_courts) as n;
+
+  perform private.platform_audit('club.provision', v_club, jsonb_build_object(
+    'slug', v_slug, 'name', v_name, 'court_count', v_courts
+  ));
+  return v_club;
+end;
+$$;
+
 -- The club list now carries each club's booking fee. Its row type changes, so it is
 -- dropped and created again with the same owner and grants.
 drop function public.platform_list_clubs();
@@ -149,11 +241,17 @@ $$;
 alter function private.record_platform_commission() owner to postgres;
 alter function public.platform_set_booking_fee(uuid, numeric) owner to postgres;
 alter function public.platform_list_clubs() owner to postgres;
+alter function public.platform_set_commission_rate(uuid, numeric) owner to postgres;
+alter function public.platform_provision_club(text, text, text, text, text, text, numeric, integer) owner to postgres;
 revoke all on function private.record_platform_commission() from public, anon, authenticated;
 revoke all on function public.platform_set_booking_fee(uuid, numeric) from public, anon;
 revoke all on function public.platform_list_clubs() from public, anon;
+revoke all on function public.platform_set_commission_rate(uuid, numeric) from public, anon;
+revoke all on function public.platform_provision_club(text, text, text, text, text, text, numeric, integer) from public, anon;
 grant execute on function public.platform_set_booking_fee(uuid, numeric) to authenticated;
 grant execute on function public.platform_list_clubs() to authenticated;
+grant execute on function public.platform_set_commission_rate(uuid, numeric) to authenticated;
+grant execute on function public.platform_provision_club(text, text, text, text, text, text, numeric, integer) to authenticated;
 
 comment on function public.platform_set_booking_fee(uuid, numeric) is
   'Platform superadmin only: sets a club''s flat platform fee in pesos per court booking. Audited as club.booking_fee.';

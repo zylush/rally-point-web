@@ -104,14 +104,14 @@ select extensions.is(
   0::bigint, 'a superadmin with no club role reads no club rows directly');
 select extensions.ok(
   public.platform_provision_club('Davao Test Club', 'davao-test', 'Davao City', 'Ecoland',
-                                 ' Davao@Example.invalid ', '0917 000 0000', 6.5, 3) is not null,
+                                 ' Davao@Example.invalid ', '0917 000 0000', 0, 3) is not null,
   'the superadmin can set up a club');
 
 set local role postgres;
 select extensions.is(
   (select c.is_active::text || ':' || a.status || ':' || a.commission_rate::text || ':' || a.contact_email
    from public.clubs c join public.club_accounts a on a.club_id = c.id where c.slug = 'davao-test'),
-  'false:provisioning:6.50:davao@example.invalid', 'a new club starts in setup with the agreed terms');
+  'false:provisioning:0.00:davao@example.invalid', 'a new club starts in setup with the agreed terms');
 select extensions.is(
   (select count(*)::int from public.venues v join public.clubs c on c.id = v.club_id where c.slug = 'davao-test'),
   1, 'setup creates one main venue');
@@ -130,9 +130,10 @@ select extensions.throws_ok(
   '23505', 'That link name is already used by another club', 'link names must be unique');
 select extensions.throws_ok(
   $$select public.platform_provision_club('Rate', 'rate-test', '', '', '', '', 150, 2)$$,
-  '22023', 'Commission rate must be between 0 and 100', 'commission rates are validated');
+  '22023', 'The platform fee is a flat amount per booking. Set the booking fee instead of a percentage.',
+  'a percentage is refused at set-up (since the flat booking fee)');
 select extensions.throws_ok(
-  $$select public.platform_provision_club('Courts', 'courts-test', '', '', '', '', 5, 0)$$,
+  $$select public.platform_provision_club('Courts', 'courts-test', '', '', '', '', 0, 0)$$,
   '22023', 'Choose between 1 and 12 courts', 'court counts are validated');
 select extensions.throws_ok(
   $$select public.platform_set_club_status((select club_id from public.platform_list_clubs() where slug = 'davao-test'), 'active')$$,
@@ -166,8 +167,8 @@ select extensions.throws_ok(
   $$select public.platform_set_club_status('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'suspended')$$,
   '22023', 'The default sign-up club must stay active', 'the default sign-up club cannot be suspended');
 select extensions.lives_ok(
-  $$select public.platform_set_commission_rate((select club_id from public.platform_list_clubs() where slug = 'davao-test'), 7.25)$$,
-  'the superadmin can change a club''s commission rate');
+  $$select public.platform_set_commission_rate((select club_id from public.platform_list_clubs() where slug = 'davao-test'), 0)$$,
+  'the superadmin can still set the retired rate, to 0 only');
 select extensions.lives_ok(
   $$select public.platform_set_club_status((select club_id from public.platform_list_clubs() where slug = 'davao-test'), 'suspended')$$,
   'the superadmin can suspend a club');
@@ -190,7 +191,7 @@ set local role postgres;
 select extensions.is(
   (select c.is_active::text || ':' || a.status || ':' || a.commission_rate::text
    from public.clubs c join public.club_accounts a on a.club_id = c.id where c.slug = 'davao-test'),
-  'false:suspended:7.25', 'suspending closes the club and keeps the new rate');
+  'false:suspended:0.00', 'suspending closes the club and keeps its terms');
 select extensions.is(
   (select string_agg(action, ',' order by created_at)
    from public.platform_audit_log where club_id = (select id from public.clubs where slug = 'davao-test')),

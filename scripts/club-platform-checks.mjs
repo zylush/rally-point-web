@@ -138,7 +138,7 @@ export const coachesCourtTypesChecks = Object.freeze([
 export const flatBookingFeeChecks = Object.freeze([
   'ledger_has_flat_booking_fee', 'reservation_writes_still_paused', 'booking_fee_columns_checked',
   'percentage_retired', 'fee_functions_signed_in_only', 'changed_functions_pin_search_path',
-  'fee_trigger_covers_court_time_only', 'booking_fee_counts',
+  'fee_trigger_covers_court_time_only', 'rate_setters_take_no_percentage', 'booking_fee_counts',
 ])
 
 export const isolationCheckCount = 55

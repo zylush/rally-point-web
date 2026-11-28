@@ -26,9 +26,13 @@ with paused_tables(name) as (
          ('public.platform_commissions', 'platform_commissions_booking_fee_check')
 ), signed_in_functions(signature) as (
   values ('public.platform_set_booking_fee(uuid, numeric)'), ('public.platform_list_clubs()')
+), rate_setters(signature) as (
+  values ('public.platform_set_commission_rate(uuid, numeric)'),
+         ('public.platform_provision_club(text, text, text, text, text, text, numeric, integer)')
 ), changed_functions(signature) as (
   select signature from signed_in_functions
   union all select 'private.record_platform_commission()'
+  union all select signature from rate_setters
 ), checks(sort, check_name, required, ok, detail) as (
   select 1, 'ledger_has_flat_booking_fee', true,
          exists (select 1 from supabase_migrations.schema_migrations where version = '20261127110000')
@@ -70,7 +74,7 @@ with paused_tables(name) as (
               or has_function_privilege('public', to_regprocedure(f.signature), 'EXECUTE')
               or has_function_privilege('anon', to_regprocedure(f.signature), 'EXECUTE')
               or not has_function_privilege('authenticated', to_regprocedure(f.signature), 'EXECUTE'))
-         and 'booking_fee' = any((select proargnames from pg_proc where oid = 'public.platform_list_clubs()'::regprocedure)),
+         and coalesce((select 'booking_fee' = any(p.proargnames) from pg_proc p where p.oid = 'public.platform_list_clubs()'::regprocedure), false),
          'platform_set_booking_fee and platform_list_clubs (now with booking_fee) need a signed-in caller; the superadmin check is inside'
   union all
   select 6, 'changed_functions_pin_search_path', true,
@@ -82,7 +86,7 @@ with paused_tables(name) as (
               or pg_get_userbyid(p.proowner) <> 'postgres')
          and not exists (select 1 from api_roles r
                          where has_function_privilege(r.name, 'private.record_platform_commission()', 'EXECUTE')),
-         'the three new or changed functions run with definer rights, an empty search path, and postgres as owner; the trigger function stays private'
+         'the five new or changed functions run with definer rights, an empty search path, and postgres as owner; the trigger function stays private'
   union all
   select 7, 'fee_trigger_covers_court_time_only', true,
          exists (select 1 from pg_trigger t
@@ -93,7 +97,16 @@ with paused_tables(name) as (
                    and pg_get_triggerdef(t.oid) !~ 'walk_in'),
          'the fee trigger is enabled and still records court time only (bookings, desk rentals, extensions)'
   union all
-  select 8, 'booking_fee_counts', false, true,
+  select 8, 'rate_setters_take_no_percentage', true,
+         not exists (
+           select 1 from rate_setters f
+           where to_regprocedure(f.signature) is null
+              or pg_get_functiondef(to_regprocedure(f.signature)) !~ 'p_[a-z_]*rate is distinct from 0'
+              or has_function_privilege('anon', to_regprocedure(f.signature), 'EXECUTE')
+              or not has_function_privilege('authenticated', to_regprocedure(f.signature), 'EXECUTE')),
+         'platform_set_commission_rate and platform_provision_club keep their signatures and grants but accept only 0'
+  union all
+  select 9, 'booking_fee_counts', false, true,
          (select count(*)::text from public.club_accounts where booking_fee > 0) || ' clubs with a booking fee, '
          || (select count(*)::text from public.platform_commissions) || ' ledger lines, '
          || (select count(*)::text from public.platform_commissions where booking_fee > 0) || ' with a flat fee'

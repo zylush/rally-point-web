@@ -660,8 +660,15 @@ describe('staging releases', () => {
       .filter(name => earlier.includes(name))).toEqual([])
     const { contents } = releaseManifest(flatBookingFeeRelease)
     const migration = contents.get('supabase/migrations/20261127110000_flat_booking_fee.sql')?.toString('utf8') ?? ''
-    // Bookings and the other paused tables are never written; only club accounts change.
-    expect(migration).not.toMatch(/\b(insert into|update|delete from)\s+public\.(bookings|court_sessions|open_plays|open_play_signups|court_allocations|courts|transactions)\b/i)
+    // Bookings and the other paused tables are never written. Courts are created only by the
+    // redefined set-up function, exactly as before (one insert, inside platform_provision_club).
+    expect(migration).not.toMatch(/\b(insert into|update|delete from)\s+public\.(bookings|court_sessions|open_plays|open_play_signups|court_allocations|transactions)\b/i)
+    expect(migration).not.toMatch(/\b(update|delete from)\s+public\.courts\b/i)
+    expect(migration.match(/insert into public\.courts\b/gi)).toHaveLength(1)
+    const provision = migration.slice(migration.indexOf('create or replace function public.platform_provision_club('))
+    expect(provision.slice(0, provision.indexOf('$$;'))).toContain('insert into public.courts')
+    expect(migration).toContain('p_commission_rate is distinct from 0')
+    expect(migration).toContain('p_rate is distinct from 0')
     expect(migration).toContain('grant execute on function public.platform_set_booking_fee(uuid, numeric) to authenticated')
     expect(migration).toContain('grant execute on function public.platform_list_clubs() to authenticated')
     expect(migration).not.toContain('to anon')

@@ -1442,6 +1442,11 @@ export function MemberBook() {
               </li>
               <li>Type the reference number {payApp} shows after you pay, then tap “I’ve paid”.</li>
             </ol>
+            {/* Paying a QR code shown on a website is a common scam pattern: say who gets the money. */}
+            <p className="text-subtitle text-ink">
+              You pay <span className="font-extrabold">{summaryClubName ?? 'the club'}</span> directly. bRineLy never receives
+              your money. Check that the account name below is the club’s before you send.
+            </p>
             {(payMethods ?? []).map((m) => <PayMethodCard key={m.id} method={m} amount={pending.amount} />)}
           </div>
 

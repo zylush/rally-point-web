@@ -47,6 +47,8 @@ export default defineConfig(({ mode }) => {
   if (target) validateTarget(env, target)
   return {
     base: target?.base ?? (process.env.VITE_BASE || pagesBase),
+    // Tells the app which database a hosted build uses, so non-production builds say "Test site".
+    define: { 'import.meta.env.VITE_DATA_TARGET': JSON.stringify(target?.label ?? '') },
     // Keep the reviewed staging artifact separate from the legacy deploy script.
     build: { outDir: mode === 'staging' ? 'staging-artifact.local' : 'dist' },
     plugins: [react(), tailwindcss()],

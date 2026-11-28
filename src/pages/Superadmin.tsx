@@ -553,6 +553,8 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
   const [admins, setAdmins] = useState<PlatformClubAdmin[] | null>(null)
   const [invites, setInvites] = useState<ClubOwnerInvite[]>([])
   const [busy, setBusy] = useState(false)
+  // A club in setup with no admin opens its admin section, since adding one is the next step.
+  const [adminsStartOpen] = useState(() => club.status === 'provisioning' && club.admin_count === 0)
   const isDefault = club.slug === DEFAULT_CLUB_SLUG
 
   const loadAdmins = useCallback(async () => {
@@ -563,6 +565,10 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
     setAdmins(adminRows)
     setInvites(inviteRows)
   }, [club.club_id])
+
+  useEffect(() => {
+    if (adminsStartOpen) void loadAdmins()
+  }, [adminsStartOpen, loadAdmins])
 
   async function act<T>(action: () => Promise<T>, success: string | ((result: T) => string)) {
     setBusy(true)
@@ -580,25 +586,31 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
       : [{ label: club.status === 'provisioning' ? 'Activate' : 'Reactivate', next: 'active' }]
 
   return (
-    <article className="card space-y-4 p-4" aria-labelledby={`club-${club.club_id}`}>
+    <article className="card space-y-3 p-4" aria-labelledby={`club-${club.club_id}`}>
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id={`club-${club.club_id}`} className="text-subtitle font-bold text-slate-900">
-            {club.name}
-          </h2>
-          <StatusBadge status={club.status} />
-          {isDefault ? <span className="ml-2 text-caption text-slate-600">Default sign-up club</span> : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id={`club-${club.club_id}`} className="text-subtitle font-bold text-slate-900">
+              {club.name}
+            </h2>
+            <StatusBadge status={club.status} />
+            {isDefault ? <span className="text-caption text-slate-600">Default sign-up club</span> : null}
+          </div>
           <p className="mt-1 text-body text-slate-600">
-            Join link: <span className="font-mono text-slate-800">{joinLink(club.slug)}</span>
+            <span className="font-mono text-slate-800">{joinLink(club.slug)}</span>
+            {[club.city, club.contact_email, club.contact_phone].filter(Boolean).map((part) => (
+              <span key={part}> · {part}</span>
+            ))}
           </p>
+          <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-body text-slate-600">
+            <Figure label="Venues" value={club.venue_count} />
+            <Figure label="Courts" value={club.court_count} />
+            <Figure label="Members" value={club.member_count} />
+            <Figure label="Admins" value={club.admin_count} />
+          </dl>
           {club.status === 'provisioning' ? (
-            <p className="text-body font-semibold text-slate-700">
+            <p className="mt-1 text-body font-semibold text-slate-700">
               {club.admin_count > 0 ? 'Has an admin. Ready to activate.' : 'Needs an admin before it can be activated.'}
-            </p>
-          ) : null}
-          {club.city || club.contact_email ? (
-            <p className="text-body text-slate-600">
-              {[club.city, club.contact_email, club.contact_phone].filter(Boolean).join(' · ')}
             </p>
           ) : null}
         </div>
@@ -607,7 +619,8 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
             <button
               key={label}
               type="button"
-              className={next === 'suspended' ? 'btn-secondary min-h-12' : 'btn-primary min-h-12'}
+              className={next === 'suspended' ? 'btn-compact' : 'btn-primary'}
+              style={next === 'suspended' ? undefined : { width: 'auto' }}
               disabled={busy}
               onClick={() => void act(() => api.setClubStatus(club.club_id, next), `${club.name} is now ${statusLabel[next].toLowerCase()}.`)}
             >
@@ -617,43 +630,63 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
         </div>
       </header>
 
-      <dl className="grid grid-cols-2 gap-2 text-body sm:grid-cols-4">
-        <Figure label="Venues" value={club.venue_count} />
-        <Figure label="Courts" value={club.court_count} />
-        <Figure label="Members" value={club.member_count} />
-        <Figure label="Admins" value={club.admin_count} />
-      </dl>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault()
+            void act(() => api.setCommissionRate(club.club_id, Number(rate)), `${club.name} commission set to ${Number(rate)}%.`)
+          }}
+        >
+          <label className="flex items-center gap-2">
+            <span className="whitespace-nowrap text-body font-semibold text-slate-800">Commission (%)</span>
+            <input
+              className="input min-h-12 w-24"
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={rate}
+              onChange={(event) => setRate(event.target.value)}
+              required
+            />
+          </label>
+          <button type="submit" className="btn-compact whitespace-nowrap" disabled={busy}>
+            Save rate
+          </button>
+        </form>
+        <section
+          aria-label={`${club.name} support view`}
+          className={supportSession ? 'w-full border-t border-slate-100 pt-3' : undefined}
+          tabIndex={-1}
+          data-return-focus
+        >
+          {supportSession ? (
+            <SupportPanel
+              session={supportSession}
+              onEnd={() => run(() => api.endSupportSession(supportSession.id), `Support view of ${club.name} closed.`)}
+            />
+          ) : (
+            <button type="button" className="btn-compact" onClick={() => setShowSupport(true)}>
+              <LifeBuoy size={18} aria-hidden /> Open support view
+            </button>
+          )}
+        </section>
+      </div>
 
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          void act(() => api.setCommissionRate(club.club_id, Number(rate)), `${club.name} commission set to ${Number(rate)}%.`)
+      <details
+        className="border-t border-slate-100 pt-1"
+        open={adminsStartOpen}
+        onToggle={(event) => {
+          if (event.currentTarget.open && admins === null) void loadAdmins()
         }}
       >
-        <label className="block">
-          <span className="label">Commission (%)</span>
-          <input
-            className="input min-h-12 w-32"
-            type="number"
-            min={0}
-            max={100}
-            step="0.01"
-            value={rate}
-            onChange={(event) => setRate(event.target.value)}
-            required
-          />
-        </label>
-        <button type="submit" className="btn-secondary min-h-12" disabled={busy}>
-          Save rate
-        </button>
-      </form>
-
-      <section aria-label={`${club.name} admins`} className="space-y-3">
+        <summary className="disclosure-summary text-body font-semibold text-slate-800">
+          Admins and invites
+        </summary>
+      <section aria-label={`${club.name} admins`} className="space-y-3 pb-1 pt-2">
         {admins === null ? (
-          <button type="button" className="btn-secondary min-h-12" onClick={() => void loadAdmins()}>
-            Show admins and invites
-          </button>
+          <p className="text-body text-slate-600">Loading admins…</p>
         ) : admins.length === 0 ? (
           <p className="text-body text-slate-600">No admins yet.</p>
         ) : (
@@ -665,7 +698,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
                 </span>
                 <button
                   type="button"
-                  className="btn-secondary min-h-12"
+                  className="btn-compact"
                   disabled={busy}
                   onClick={() => void act(() => api.revokeClubAdmin(club.club_id, admin.user_id), `${admin.full_name} is no longer an admin of ${club.name}.`)}
                 >
@@ -684,7 +717,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
                 </span>
                 <button
                   type="button"
-                  className="btn-secondary min-h-12"
+                  className="btn-compact"
                   disabled={busy}
                   onClick={() => void act(() => api.cancelClubOwnerInvite(invite.id), `The invite for ${invite.email} is cancelled.`)}
                 >
@@ -725,7 +758,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
               required
             />
           </label>
-          <button type="submit" className="btn-primary min-h-12" disabled={busy}>
+          <button type="submit" className="btn-primary" style={{ width: 'auto' }} disabled={busy}>
             Add admin
           </button>
           <p id={`admin-hint-${club.club_id}`} className="w-full text-caption text-slate-500">
@@ -733,19 +766,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
           </p>
         </form>
       </section>
-
-      <section aria-label={`${club.name} support view`} className="border-t border-slate-100 pt-4" tabIndex={-1} data-return-focus>
-        {supportSession ? (
-          <SupportPanel
-            session={supportSession}
-            onEnd={() => run(() => api.endSupportSession(supportSession.id), `Support view of ${club.name} closed.`)}
-          />
-        ) : (
-          <button type="button" className="btn-secondary min-h-12" onClick={() => setShowSupport(true)}>
-            <LifeBuoy size={18} aria-hidden /> Open support view
-          </button>
-        )}
-      </section>
+      </details>
 
       {showSupport ? (
         <SupportDialog
@@ -989,9 +1010,9 @@ function SupportPanel({ session, onEnd }: { session: SupportSession; onEnd: () =
 
 function Figure({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <dt className="text-caption font-semibold text-slate-600">{label}</dt>
-      <dd className="text-subtitle font-bold text-slate-900">{value}</dd>
+    <div className="flex items-baseline gap-1.5">
+      <dt className="order-2">{(value === 1 ? label.replace(/s$/, '') : label).toLowerCase()}</dt>
+      <dd className="font-bold text-slate-900">{value}</dd>
     </div>
   )
 }

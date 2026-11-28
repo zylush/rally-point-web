@@ -153,7 +153,7 @@ Keep the Google Workspace MX, SPF and DKIM records, `resend._domainkey` and `_do
 | A page on the live site is empty or shows "could not load" after a merge | Its migration isn't on production yet (step 6) |
 | "Test site" banner on brinely.info | The deployment wasn't built as Production (`VERCEL_ENV`), so check which deployment the domain points at |
 | New players never get the confirmation email | No custom SMTP yet, so Supabase only mails team addresses (step 5) |
-| The old site at `zylush.github.io/rally-point-web` still loads | GitHub Pages is still on. Turn it off in the repository's Settings → Pages |
+| The old site at `zylush.github.io/rally-point-web` shows a 404 | Expected: GitHub Pages was turned off on 2026-11-28 (Settings → Pages: unpublished, source None). Use the staging site instead |
 | Chrome warns "Deceptive site ahead" | Ask for a review in Google Search Console → Security issues, with brinely.info verified there |
 
 ## 12. Open items (2026-11-28)
@@ -161,5 +161,4 @@ Keep the Google Workspace MX, SPF and DKIM records, `resend._domainkey` and `_do
 - Resend account and custom SMTP for production Auth.
 - A production release script for migrations after the bootstrap. Staging has 44 migrations (the flat booking fee), production 43.
 - Production backups and leaving the Free plan. The Vercel Hobby plan is for non-commercial use.
-- Turning off GitHub Pages.
 - Legal review of the Terms of use.

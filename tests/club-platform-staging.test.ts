@@ -654,6 +654,9 @@ describe('staging releases', () => {
       ['tournamentFixes', ['ledger_has_tournament_fixes']],
     ])
     expect(flatBookingFeeRelease.postChecks).toHaveLength(coachesCourtTypesRelease.postChecks.length + 1)
+    expect(flatBookingFeeRelease.isolation).toEqual({ file: 'two_club_isolation_flat_fee.sql', plan: 55 })
+    expect(flatBookingFeeRelease.files).toContain('supabase/verification/two_club_isolation_flat_fee.sql')
+    expect(flatBookingFeeRelease.files).not.toContain('supabase/verification/two_club_isolation.sql')
     const earlier = Object.values(releases).filter(release => release !== flatBookingFeeRelease)
       .flatMap((release: { dirs: object, databases: object }) => [...Object.values(release.dirs), ...Object.values(release.databases)])
     expect([...Object.values(flatBookingFeeRelease.dirs), ...Object.values(flatBookingFeeRelease.databases)]

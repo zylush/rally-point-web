@@ -686,7 +686,9 @@ export const flatBookingFeeRelease = Object.freeze({
   // The SQL that runs and the code that runs it. Approval pins all of these bytes.
   files: Object.freeze(['supabase/migrations/20261127110000_flat_booking_fee.sql',
     'supabase/verification/flat_booking_fee_postflight.sql',
-    ...coachesCourtTypesRelease.files.filter(path => path.startsWith('supabase/verification/') || path.startsWith('scripts/'))]),
+    'supabase/verification/two_club_isolation_flat_fee.sql',
+    ...coachesCourtTypesRelease.files.filter(path => (path.startsWith('supabase/verification/') || path.startsWith('scripts/'))
+      && path !== 'supabase/verification/two_club_isolation.sql')]),
   stateCheck: Object.freeze({ file: 'coaches_court_types_postflight.sql', kind: 'coachesCourtTypes' }),
   postChecks: Object.freeze([
     Object.freeze({ file: 'flat_booking_fee_postflight.sql', kind: 'flatBookingFee', ignore: Object.freeze([]) }),
@@ -695,7 +697,9 @@ export const flatBookingFeeRelease = Object.freeze({
       ignore: Object.freeze(['ledger_has_coaches_court_types']) }),
     ...coachesCourtTypesRelease.postChecks.slice(1),
   ]),
-  isolation: Object.freeze({ file: 'two_club_isolation.sql', plan: 55 }),
+  // Set-up takes no percentage any more, so this release (and later ones) use the copy whose
+  // second club has a flat 32-peso fee instead of 8%; the original stays frozen for earlier releases.
+  isolation: Object.freeze({ file: 'two_club_isolation_flat_fee.sql', plan: 55 }),
   dirs: Object.freeze({
     capture: 'docs/release-private/staging-backup-20261128-flat-fee-r1',
     restore: 'docs/release-private/staging-backup-restore-20261128-flat-fee-r1',

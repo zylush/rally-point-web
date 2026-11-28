@@ -7,6 +7,7 @@ Start with the repository [README](../README.md) for setup and product overview.
 - [Codex guide](CODEX.md): local commands, repository map, verification, and handoff guidance.
 - [Claude Code guide](../CLAUDE.md): Claude-specific tool rules, a dated summary of the current state, and a doc map that notes each document's age. Claude Code loads it automatically, together with `AGENTS.md`.
 - [Agent instructions](../AGENTS.md): project rules, implementation ownership, and action boundaries. This file stays at the repository root for agent discovery.
+- [Deployment runbook](DEPLOYMENT.md): Vercel and Supabase environments, variables, database releases, the domain, backups and troubleshooting.
 
 ## Design references
 

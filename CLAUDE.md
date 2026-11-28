@@ -12,7 +12,7 @@
 
 ## Where current information lives
 
-Most of `docs/` is hidden from Git by this machine's `.git/info/exclude` (local-only rules stay out of the shared `.gitignore`). Only `docs/README.md`, `docs/CODEX.md`, and `docs/HELP-AND-INQUIRY-WORKFLOW.md` are shared, so a fresh clone lacks the rest. If a file is missing, say so instead of guessing what it says.
+Most of `docs/` is hidden from Git by this machine's `.git/info/exclude` (local-only rules stay out of the shared `.gitignore`). Only `docs/README.md`, `docs/CODEX.md`, `docs/HELP-AND-INQUIRY-WORKFLOW.md`, and `docs/DEPLOYMENT.md` are shared, so a fresh clone lacks the rest. If a file is missing, say so instead of guessing what it says.
 
 | Need | Read | Watch out |
 | --- | --- | --- |

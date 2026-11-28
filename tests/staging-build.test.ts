@@ -31,6 +31,7 @@ describe('staging build target', () => {
     const result = await settings()
     expect(result.base).toBe('/rally-point-web/')
     expect(result.build?.outDir).toBe('staging-artifact.local')
+    expect(result.define?.['import.meta.env.VITE_DATA_TARGET']).toBe('"Staging"')
   })
 
   it.each(['', ' ', 'https://ausgoiwwhevrplfetccm.supabase.co', `http://${project}.supabase.co`, `${url}/other`, `${url}?key=hidden`])('rejects a missing or wrong project URL (%s)', async (value) => {
@@ -86,6 +87,8 @@ describe('staging build target', () => {
 
     it('accept only the production project, at the domain root', async () => {
       expect((await settings('vercel')).base).toBe('/')
+      // Only this build hides the "Test site" banner.
+      expect((await settings('vercel')).define?.['import.meta.env.VITE_DATA_TARGET']).toBe('"Production"')
       env.VITE_SUPABASE_ANON_KEY = token('anon', production)
       expect((await settings('vercel')).build?.outDir).toBe('dist')
     })
@@ -106,6 +109,7 @@ describe('staging build target', () => {
       await expect(settings('vercel')).rejects.toThrow('Staging requires')
       env.VITE_SUPABASE_URL = url
       expect((await settings('vercel')).base).toBe('/')
+      expect((await settings('vercel')).define?.['import.meta.env.VITE_DATA_TARGET']).toBe('"Staging"')
     })
   })
 
@@ -120,5 +124,6 @@ describe('staging build target', () => {
     const result = await settings(mode)
     expect(result.base).toBe('/rally-point-web/')
     expect(result.build?.outDir ?? 'dist').toBe('dist')
+    expect(result.define?.['import.meta.env.VITE_DATA_TARGET']).toBe('""')
   })
 })

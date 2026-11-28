@@ -12,12 +12,13 @@ import {
   ownerCallProblem,
   phoneDigits,
 } from '../ownerRequests'
+import { isPlatformSuperadmin } from './access'
 import { todayISO, uid } from './common'
 import { defaultClubAccount } from './commissions'
 import { normalizeDemoEmail } from './credentials'
 import type { DemoDB, DemoOwnerInvite } from './model'
 import { load, save } from './persistence'
-import { audit, findClub, requirePlatform } from './platform'
+import { audit, findClub, refusePlatformAccountEmail, requirePlatform } from './platform'
 
 const STATUSES: OwnerCallStatus[] = ['new', 'called', 'closed']
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
@@ -112,7 +113,8 @@ export const ownerOperations = {
   /**
    * Mirrors platform_invite_club_owner: someone who already has an account
    * becomes the club's admin now; anyone else is invited and becomes the admin
-   * once they sign up with that email.
+   * once they sign up with that email. A platform account's email is refused
+   * before anything is recorded.
    */
   inviteClubOwner(clubId: string, email: string): 'assigned' | 'invited' {
     const db = load()
@@ -120,6 +122,7 @@ export const ownerOperations = {
     findClub(db, clubId)
     const wanted = normalizeDemoEmail(email)
     if (!wanted || wanted.length > 254 || !EMAIL.test(wanted)) throw new Error('Enter an email like name@example.com')
+    refusePlatformAccountEmail(db, wanted)
     const profile = db.profiles.find((row) => row.email.toLowerCase() === wanted)
     if (profile) {
       makeAdmin(db, clubId, profile.id)
@@ -165,7 +168,8 @@ export const ownerOperations = {
   /**
    * Mirrors claim_my_owner_clubs: open invites for the signed-in person's email
    * make them the club's admin, but only for an account made after the invite
-   * (the demo has no email confirmation step). Then lists the clubs they own.
+   * (the demo has no email confirmation step), and never for a platform account,
+   * whose invites stay open without an error. Then lists the clubs they own.
    */
   claimOwnerClubs(): OwnerClub[] {
     const db = load()
@@ -174,7 +178,8 @@ export const ownerOperations = {
     if (!profile) return []
     const email = profile.email.toLowerCase()
     let changed = false
-    for (const invite of db.ownerInvites ?? []) {
+    const claimable = isPlatformSuperadmin(db, profile.id) ? [] : db.ownerInvites ?? []
+    for (const invite of claimable) {
       if (!isOpen(invite) || invite.email !== email || invite.created_at > profile.created_at) continue
       if (!db.clubs.some((club) => club.id === invite.club_id)) continue
       makeAdmin(db, invite.club_id, profile.id)

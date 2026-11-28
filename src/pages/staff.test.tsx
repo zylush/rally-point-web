@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { demoStore } from '../lib/demoStore'
 import type { CourtSession, Member } from '../types'
 import { StaffCheckIn, StaffCourts, StaffHome, StaffMembers } from './staff'
 
@@ -406,6 +407,29 @@ describe('StaffCourts', () => {
     expect(await screen.findByText('Walk-in registered')).toBeInTheDocument()
     expect(fields[0]).toHaveValue('')
     expect(fields[1]).toHaveValue('')
+  })
+
+  it('shows why a walk-in was refused, keeps what was typed, and records nothing', async () => {
+    demoStore.reset()
+    const before = demoStore.get()
+    vi.mocked(api.createWalkIn).mockImplementation(async (input) => demoStore.createWalkIn(input))
+    const user = userEvent.setup()
+    render(<MemoryRouter><StaffCourts /></MemoryRouter>)
+    await screen.findByRole('heading', { name: 'Live court sessions' })
+    await user.click(screen.getByRole('button', { name: 'Walk-in' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Register walk-in' })).toBeEnabled())
+    const fields = screen.getAllByRole('textbox')
+    await user.click(fields[0])
+    await user.paste('a'.repeat(90))
+    await user.type(fields[1], '09170001111')
+    await user.click(screen.getByRole('button', { name: 'Register walk-in' }))
+
+    expect(await screen.findByText('Full name is limited to 80 characters')).toBeInTheDocument()
+    expect(screen.queryByText('Walk-in registered')).not.toBeInTheDocument()
+    expect(fields[0]).toHaveValue('a'.repeat(90))
+    expect(fields[1]).toHaveValue('09170001111')
+    expect(demoStore.get().walkins).toHaveLength(before.walkins.length)
+    expect(demoStore.get().transactions).toHaveLength(before.transactions.length)
   })
 
   it('cancels adding a player without changing the court', async () => {

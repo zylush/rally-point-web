@@ -8,10 +8,10 @@ select extensions.plan(44);
 --   user 31: platform superadmin with no club role
 --   user 32: Gensan member
 --   user 33: Gensan admin
---   user 34: has an account; becomes the new club's admin
-insert into auth.users (id, email, raw_user_meta_data)
+--   user 34: has a confirmed account; becomes the new club's admin
+insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at)
 select ('c1000000-0000-4000-8000-0000000000' || n)::uuid, 'plat-' || n || '@fixture.invalid',
-       jsonb_build_object('full_name', 'Platform User ' || n)
+       jsonb_build_object('full_name', 'Platform User ' || n), now()
 from generate_series(31, 34) n;
 insert into public.platform_roles (user_id) values ('c1000000-0000-4000-8000-000000000031');
 delete from public.members where user_id = 'c1000000-0000-4000-8000-000000000031';

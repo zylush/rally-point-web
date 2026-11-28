@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 // Provisional contact pending confirmation of its role by the bRineLy team.
 const brinelyPrivacyEmail = 'admin@brinely.info'
 
-export const PRIVACY_NOTICE_UPDATED = 'November 27, 2026'
+export const PRIVACY_NOTICE_UPDATED = 'November 28, 2026'
 
 export type NoticeClub = { isGensan: boolean; name: string | null }
 
@@ -238,8 +238,9 @@ export function corePrivacyNoticeSections(club: NoticeClub): PrivacyNoticeSectio
             </li>
             <li>
               <strong>Linked club coaches:</strong> When you request a coaching lesson slot, the
-              linked coach account receives your full name, email address, lesson request details,
-              and messages in that request thread to coordinate your lesson.
+              linked coach account receives your full name, your lesson request details, and the
+              messages in that request thread to coordinate your lesson. Coaches do not receive your
+              email address, and a coach the club removes can no longer see your requests.
             </li>
             <li>
               <strong>Platform superadmins:</strong> Authorized platform superadmins can view

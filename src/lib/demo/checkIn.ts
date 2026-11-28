@@ -1,6 +1,6 @@
 import type { CheckIn, CheckInMember, CheckInResult, Member } from '../../types'
 import { hasActiveMembership } from '../../types'
-import { activeClubId } from './access'
+import { activeClubId, clubRoleFor } from './access'
 import { todayISO, uid } from './common'
 import { load, save } from './persistence'
 
@@ -14,7 +14,8 @@ export const checkInOperations = {
       m.qr_token = `QR_${m.member_code.replace(/[^A-Z0-9]/gi, '')}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`
       save(db)
     }
-    return m
+    // Like ensure_member_qr: staff notes only for the club's admins.
+    return clubRoleFor(db, db.sessionUserId, clubId) === 'admin' ? { ...m } : { ...m, notes: null }
   },
   checkInByQr(payload: string, staffId?: string, venueId?: string): CheckInResult {
     const db = load()

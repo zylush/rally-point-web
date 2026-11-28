@@ -236,6 +236,18 @@ describe('checkout errors (live)', () => {
     await expect(api.rejectBookingPayment('b', 'Not received')).rejects.toThrow('Something went wrong. Please try again.')
   })
 
+  it('shows the booking window and the limit on payments waiting in the function’s own words', async () => {
+    live.tables.set('courts', live.court)
+    const hold = () => api.createBooking({ court_id: live.court.id, member_id: 'm', dateYmd: '2099-09-20', startHour: 9, hours: 1, user_id: 'u' })
+    fail({ code: '22023', message: 'You can book up to 30 days ahead. Pick an earlier date.' })
+    await expect(hold()).rejects.toThrow('You can book up to 30 days ahead. Pick an earlier date.')
+    const waiting = 'You have 4 payments waiting for the club to check. You can book again once the club confirms or rejects one.'
+    fail({ code: '55000', message: waiting })
+    const holding = hold()
+    await expect(holding).rejects.toBeInstanceOf(Error)
+    await expect(holding).rejects.toThrow(waiting)
+  })
+
   it('reports a read that fails as an Error too', async () => {
     live.tables.set('bookings', { code: '42501', message: 'permission denied for table bookings' })
     const reading = api.myBooking('b')

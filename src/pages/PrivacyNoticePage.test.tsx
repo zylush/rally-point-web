@@ -65,7 +65,7 @@ describe('PrivacyNoticePage', () => {
     expect(screen.getByText('For bRineLy booking portal users')).toBeInTheDocument()
     // A legal page carries no marketing tagline; the site footer has it.
     expect(within(screen.getByRole('main')).queryByText('Stay in the brine. Play more.')).not.toBeInTheDocument()
-    expect(screen.getByText('Last updated: November 27, 2026')).toBeInTheDocument()
+    expect(screen.getByText('Last updated: November 28, 2026')).toBeInTheDocument()
     expect(screen.queryByText(/Rally Point Gensan/)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'At a glance' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Who we are and club responsibilities' })).toBeInTheDocument()
@@ -81,7 +81,8 @@ describe('PrivacyNoticePage', () => {
     expect(screen.getByText(/whether that invitation was claimed or cancelled/)).toBeInTheDocument()
     expect(screen.getByText(/6-to-30-character GCash reference number/)).toBeInTheDocument()
     expect(screen.getByText(/Club membership requests are paid directly to the club/)).toBeInTheDocument()
-    expect(screen.getByText(/linked coach account receives your full name, email address/)).toBeInTheDocument()
+    expect(screen.getByText(/linked coach account receives your full name, your lesson request details/)).toBeInTheDocument()
+    expect(screen.getByText(/Coaches do not receive your\s+email address/)).toBeInTheDocument()
     expect(screen.getByText(/Ordinary members in the same club cannot view each other's private court bookings/)).toBeInTheDocument()
     expect(screen.getByText(/court-booking TV schedule views never display player names/i)).toBeInTheDocument()
     expect(screen.getByText(/public club leaderboards, tournament pages/)).toBeInTheDocument()

@@ -1,8 +1,20 @@
 import type { Role, WalkIn } from '../../types'
 import { activeClubId } from './access'
+import { tidyName } from './account'
 import { todayISO, uid } from './common'
 import { recordTransaction } from './commissions'
 import { load, save } from './persistence'
+
+// Mirrors create_desk_walkin (20261128100500_desk_walkin_checks.sql): the same limits and messages.
+const WALKIN_NAME_MAX = 80
+const WALKIN_PHONE_MAX = 24
+const WALKIN_PURPOSE_MAX = 200
+const WALKIN_AMOUNT_MAX = 100000
+
+/** Length as Postgres counts it (characters, not UTF-16 units). */
+function charLength(text: string) {
+  return Array.from(text).length
+}
 
 export const ledgerOperations = {
   transactions(userId?: string, role?: Role) {
@@ -35,6 +47,17 @@ export const ledgerOperations = {
     save(db)
   },
   createWalkIn(input: { full_name: string; phone?: string; purpose: string; amount: number; venue_id?: string; created_by?: string }) {
+    const fullName = tidyName(input.full_name)
+    if (!fullName) throw new Error("Please enter the guest's full name")
+    if (charLength(fullName) > WALKIN_NAME_MAX) throw new Error(`Full name is limited to ${WALKIN_NAME_MAX} characters`)
+    const phone = tidyName(input.phone) || null
+    if (phone && charLength(phone) > WALKIN_PHONE_MAX) throw new Error(`Phone is limited to ${WALKIN_PHONE_MAX} characters`)
+    const purpose = tidyName(input.purpose)
+    if (charLength(purpose) > WALKIN_PURPOSE_MAX) throw new Error(`Purpose is limited to ${WALKIN_PURPOSE_MAX} characters`)
+    const amount = input.amount
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > WALKIN_AMOUNT_MAX) {
+      throw new Error('Amount must be between 0 and 100,000 pesos')
+    }
     const db = load()
     const venueClub = input.venue_id ? db.venues.find((venue) => venue.id === input.venue_id)?.club_id : undefined
     const clubId = venueClub ?? activeClubId(db)
@@ -42,10 +65,10 @@ export const ledgerOperations = {
       id: uid('wi'),
       club_id: clubId,
       venue_id: input.venue_id,
-      full_name: input.full_name,
-      phone: input.phone ?? null,
-      purpose: input.purpose,
-      amount: input.amount,
+      full_name: fullName,
+      phone,
+      purpose,
+      amount,
       created_at: todayISO(),
       created_by: input.created_by ?? null,
     }
@@ -55,9 +78,9 @@ export const ledgerOperations = {
       club_id: clubId,
       venue_id: input.venue_id ?? null,
       member_id: null,
-      amount: input.amount,
+      amount,
       type: 'walk_in',
-      description: `Walk-in: ${input.full_name} — ${input.purpose}`,
+      description: `Walk-in: ${fullName} — ${purpose}`,
       created_at: todayISO(),
       created_by: input.created_by ?? null,
     })

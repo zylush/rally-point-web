@@ -61,4 +61,7 @@ export const releaseApprovals = Object.freeze({
   // staging passed (all checks, isolation 55/55 with two_club_isolation_flat_fee.sql, local build
   // matches): "yes".
   'flat-booking-fee-20261128': '3057d14d64cd973f331b1648176054e5374c61b4c30adefcf1bf93db61f0a025',
+  // Security review fixes (owner, 2026-11-28: "yes, go ahead" to writing the fixes). Not approved
+  // to apply yet: the capture, restore check and dry run come first.
+  'security-fixes-20261128': null,
 })

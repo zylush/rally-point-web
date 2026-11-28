@@ -1297,13 +1297,13 @@ export const api = {
       p_coach_id: coachId,
       p_policy: policy.trim(),
     })
-    if (error) throw error
+    if (error) throw databaseError(error)
   },
 
   async coachListMySlots(): Promise<CoachBookingSlot[]> {
     if (isDemoMode) return demoStore.coachListMySlots()
     const { data, error } = await supabase!.rpc('coach_list_my_slots')
-    if (error) throw error
+    if (error) throw databaseError(error)
     return ((data ?? []) as CoachBookingSlot[]).map(toCoachSlot)
   },
 
@@ -1331,7 +1331,7 @@ export const api = {
       p_rate: input.rate,
       p_max_students: input.max_students,
     })
-    if (error) throw error
+    if (error) throw databaseError(error)
   },
 
   async coachSetBookingSlotOpen(slotId: string, isOpen: boolean): Promise<void> {
@@ -1343,7 +1343,7 @@ export const api = {
       p_slot_id: slotId,
       p_is_open: isOpen,
     })
-    if (error) throw error
+    if (error) throw databaseError(error)
   },
 
   /** Active coaches and open future lesson times across every active club (the public Rent a coach page). */
@@ -1468,7 +1468,8 @@ export const api = {
       p_student_count: input.student_count,
       p_message: input.message,
     })
-    if (error) throw error
+    // The function's own words (on hold, too many open requests, time taken) reach the screen.
+    if (error) throw databaseError(error)
     const row = data as {
       id: string
       slot_id: string
@@ -1501,7 +1502,7 @@ export const api = {
   async coachListMyRequests(): Promise<CoachBookingRequest[]> {
     if (isDemoMode) return demoStore.coachListMyRequests()
     const { data, error } = await supabase!.rpc('coach_list_my_requests')
-    if (error) throw error
+    if (error) throw databaseError(error)
     return ((data ?? []) as CoachBookingRequest[]).map(toCoachRequest)
   },
 
@@ -1518,7 +1519,7 @@ export const api = {
       p_request_id: requestId,
       p_accept: accept,
     })
-    if (error) throw error
+    if (error) throw databaseError(error)
   },
 
   async memberCancelCoachRequest(requestId: string): Promise<void> {
@@ -1533,7 +1534,7 @@ export const api = {
       p_request_id: requestId,
       p_body: body.trim(),
     })
-    if (error) throw error
+    if (error) throw databaseError(error)
     return data as CoachRequestMessage
   },
 
@@ -1542,7 +1543,7 @@ export const api = {
     const { data, error } = await supabase!.rpc('coach_list_request_messages', {
       p_request_id: requestId,
     })
-    if (error) throw error
+    if (error) throw databaseError(error)
     return (data ?? []) as CoachRequestMessage[]
   },
 
@@ -2239,7 +2240,7 @@ export const api = {
     async assignClubAdmin(clubId: string, email: string): Promise<string> {
       if (isDemoMode) return demoStore.assignClubAdmin(clubId, email)
       const { data, error } = await supabase!.rpc('platform_assign_club_admin', { p_club_id: clubId, p_email: email })
-      if (error) throw error
+      if (error) throw databaseError(error)
       return data as string
     },
 
@@ -2288,15 +2289,9 @@ export const api = {
     async inviteClubOwner(clubId: string, email: string): Promise<'assigned' | 'invited'> {
       if (isDemoMode) return demoStore.inviteClubOwner(clubId, email)
       const { data, error } = await supabase!.rpc('platform_invite_club_owner', { p_club_id: clubId, p_email: email })
-      if (error) {
-        // Until the owner-invite migration reaches this database, keep the older step:
-        // an existing account becomes the admin, and anyone else is asked to sign up first.
-        if (isMissingFunction(error)) {
-          await api.assignClubAdmin(clubId, email)
-          return 'assigned'
-        }
-        throw error
-      }
+      // No fallback to platform_assign_club_admin: this function is on staging and production,
+      // and the older step made accounts admins without asking for a confirmed email.
+      if (error) throw databaseError(error)
       return data === 'assigned' ? 'assigned' : 'invited'
     },
 
@@ -2926,6 +2921,18 @@ function checkoutError(error: unknown, unavailable = CHECKOUT_UNAVAILABLE): Erro
     return new Error('Could not reach bRineLy. Check your connection and try again.')
   }
   return new Error(text || 'Something went wrong. Please try again.')
+}
+
+/**
+ * A database refusal as an Error a screen can show, keeping the function's own plain-English
+ * message and its code. PostgREST hands back plain objects, and screens show only an Error's
+ * message.
+ */
+function databaseError(error: unknown): Error {
+  if (error instanceof Error) return error
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown }
+  const text = typeof message === 'string' ? message.trim() : ''
+  return Object.assign(new Error(text || 'Something went wrong. Please try again.'), typeof code === 'string' ? { code } : {})
 }
 
 /** A function that returns one public.bookings row; PostgREST may send it inside a list. */

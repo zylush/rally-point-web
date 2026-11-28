@@ -1,6 +1,6 @@
 import type { ClubAccount, ClubStatus, PlatformAction, PlatformClub, PlatformClubAdmin, PlatformCommission, ProvisionClubInput, SupportSession, SupportSnapshot } from '../../types'
 import { DEFAULT_CLUB_SLUG } from '../tenant'
-import { normalizeSlug } from './access'
+import { isPlatformSuperadmin, normalizeSlug } from './access'
 import { todayISO, uid } from './common'
 import { defaultClubAccount, round2 } from './commissions'
 import { normalizeDemoEmail } from './credentials'
@@ -28,6 +28,17 @@ export function findClub(db: DemoDB, clubId: string) {
   const club = db.clubs.find((row) => row.id === clubId)
   if (!club) throw new Error('Club not found')
   return club
+}
+
+/**
+ * Mirrors 20261128100200_admin_assign_confirmed_email.sql: a platform account never becomes a
+ * club admin (superadmins see a club only through the read-only support view), so its email is
+ * refused before anything is recorded. `email` is already normalized.
+ */
+export function refusePlatformAccountEmail(db: DemoDB, email: string) {
+  if (email && db.profiles.some((row) => row.email.toLowerCase() === email && isPlatformSuperadmin(db, row.id))) {
+    throw new Error('A platform account cannot be a club admin. Use a different email for the club.')
+  }
 }
 
 /** The club's account, created on the fly for clubs saved without one. */
@@ -175,12 +186,17 @@ export const platformOperations = {
     audit(db, actor, 'club.booking_fee', clubId, { from, to: next })
     save(db)
   },
-  /** The person must already have an account (they sign up through the club link). */
+  /**
+   * The person must already have an account (they sign up through the club link), and it may not
+   * be a platform account. The live function also needs a confirmed email; demo accounts have no
+   * confirmation step, so every demo account counts as confirmed.
+   */
   assignClubAdmin(clubId: string, email: string): string {
     const db = load()
     const actor = requirePlatform(db)
     findClub(db, clubId)
     const wanted = normalizeDemoEmail(email)
+    refusePlatformAccountEmail(db, wanted)
     const profile = db.profiles.find((row) => row.email.toLowerCase() === wanted)
     if (!wanted || !profile) throw new Error('No account uses that email yet. Ask them to sign up first.')
     const existing = db.clubRoles.find((row) => row.club_id === clubId && row.user_id === profile.id)

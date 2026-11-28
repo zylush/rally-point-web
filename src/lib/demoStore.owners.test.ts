@@ -149,6 +149,35 @@ describe('demo owner invites', () => {
     expect(demoStore.claimOwnerClubs()).toEqual([])
   })
 
+  it('never makes a platform account a club admin, now or through an invite', () => {
+    // Mirrors 20261128100200_admin_assign_confirmed_email.sql.
+    asSuperadmin()
+    const clubId = demoStore.provisionClub(setupInput)
+    const platform = 'A platform account cannot be a club admin. Use a different email for the club.'
+    expect(() => demoStore.inviteClubOwner(clubId, ' SuperAdmin@Brinely.info ')).toThrow(platform)
+    expect(() => demoStore.assignClubAdmin(clubId, 'superadmin@brinely.info')).toThrow(platform)
+    expect(demoStore.platformClubAdmins(clubId)).toEqual([])
+    expect(demoStore.clubOwnerInvites(clubId)).toEqual([])
+    expect(demoStore.platformRecentActions().filter((row) => row.club_id === clubId).map((row) => row.action)).toEqual(['club.provision'])
+
+    // An invite made before the account became a platform account is not taken up at sign-in,
+    // and that raises nothing; once the platform role is gone, it is taken up as usual.
+    demoStore.inviteClubOwner(clubId, 'future.boss@example.invalid')
+    demoStore.logout()
+    const boss = demoStore.registerMember({ email: 'future.boss@example.invalid', password: 'boss-pass', full_name: 'Future Boss' })
+    const db = demoStore.get()
+    db.platformRoles.push({ user_id: boss.id, role: 'superadmin' })
+    demoStore.set(db)
+    expect(demoStore.claimOwnerClubs()).toEqual([])
+    expect(demoStore.get().clubRoles.some((row) => row.user_id === boss.id)).toBe(false)
+    expect(demoStore.get().ownerInvites?.find((invite) => invite.email === 'future.boss@example.invalid')?.claimed_at).toBeNull()
+
+    const after = demoStore.get()
+    after.platformRoles = after.platformRoles.filter((row) => row.user_id !== boss.id)
+    demoStore.set(after)
+    expect(demoStore.claimOwnerClubs()).toEqual([{ club_id: clubId, name: 'Owner Club', status: 'provisioning' }])
+  })
+
   it('lets the superadmin cancel an open invite, once', () => {
     asSuperadmin()
     const clubId = demoStore.provisionClub(setupInput)

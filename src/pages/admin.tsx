@@ -377,17 +377,22 @@ export function AdminOps() {
 
   async function walkIn(e: FormEvent) {
     e.preventDefault()
-    await api.createWalkIn({
-      full_name: wiName,
-      phone: wiPhone,
-      purpose: wiPurpose,
-      amount: wiAmount,
-      ...(venueId ? { venue_id: venueId } : {}),
-      created_by: user?.id,
-    })
-    setMsg('Walk-in registered')
-    setWiName('')
-    setTimeout(() => setMsg(null), 2500)
+    try {
+      await api.createWalkIn({
+        full_name: wiName,
+        phone: wiPhone,
+        purpose: wiPurpose,
+        amount: wiAmount,
+        ...(venueId ? { venue_id: venueId } : {}),
+        created_by: user?.id,
+      })
+      setMsg('Walk-in registered')
+      setWiName('')
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setTimeout(() => setMsg(null), 2500)
+    }
   }
 
   async function checkIn(e: FormEvent) {
@@ -528,7 +533,7 @@ export function AdminOps() {
             <input className="input" required placeholder="Full name" value={wiName} onChange={(e) => setWiName(e.target.value)} />
             <input className="input" placeholder="Phone" value={wiPhone} onChange={(e) => setWiPhone(e.target.value)} />
             <input className="input" value={wiPurpose} onChange={(e) => setWiPurpose(e.target.value)} />
-            <input className="input" type="number" value={wiAmount} onChange={(e) => setWiAmount(Number(e.target.value))} />
+            <input className="input" type="number" min={0} value={wiAmount} onChange={(e) => setWiAmount(Number(e.target.value))} />
             <button className="btn-primary" type="submit">
               Register
             </button>

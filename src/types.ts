@@ -583,7 +583,11 @@ export interface CoachBookingRequest {
   coach_name: string
   player_user_id?: string
   player_name?: string
-  player_email?: string
+  /**
+   * Never filled in: coaches talk to players in the request's conversation, not by email (owner
+   * decision, 2026-11-28). coach_list_my_requests returns null here, kept only for its API shape.
+   */
+  player_email?: string | null
   starts_at: string
   ends_at: string
   lesson_type: CoachLessonType
@@ -767,6 +771,16 @@ export const BOOKING_HOLD_MINUTES = 15
 
 /** Minutes the club has to check a GCash payment before the request shows as overdue. */
 export const CONFIRM_PAYMENT_MINUTES = 15
+
+/** How many days after today (Philippine time) a player may book online (hold_court_booking). */
+export const BOOKING_WINDOW_DAYS = 30
+
+/**
+ * Sent payments a player may have waiting for one club to confirm or reject before holding
+ * more hours (hold_court_booking). A sent payment never runs out, so this keeps one account
+ * from holding every court. The owner set it at 4 (2026-11-28).
+ */
+export const MAX_PAYMENTS_WAITING = 4
 
 /**
  * Where an online checkout stands. A payment the player has sent is never released by

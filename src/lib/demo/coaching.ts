@@ -12,6 +12,9 @@ import { activePublicClubBySlug } from './leaderboard'
 import type { DemoDB } from './model'
 import { load, save } from './persistence'
 
+/** Coach requests a player may have waiting for an answer per club (member_request_coach_slot). */
+export const MAX_OPEN_COACH_REQUESTS = 3
+
 type SlotInput = {
   id?: string
   coach_id: string
@@ -23,9 +26,23 @@ type SlotInput = {
   max_students: number
 }
 
-function linkedCoach(db: DemoDB, coachId: string) {
+/** Messages one lesson request's conversation may hold (coach_send_request_message). */
+export const MAX_THREAD_MESSAGES = 200
+
+/**
+ * Mirrors private.coach_can_act (20261128100700_coach_account_checks.sql): the signed-in account is
+ * linked to the coach, the coach is active, and the club is open by the public coach list's test.
+ */
+function canActAsCoach(db: DemoDB, coachId: string | null | undefined) {
   const coach = db.clubCoaches?.find((row) => row.id === coachId && row.account_user_id === db.sessionUserId)
-  if (!coach) throw new Error('Coach profile not found')
+  const club = coach && db.clubs.find((row) => row.id === coach.club_id)
+  return coach?.is_active && club && activePublicClubBySlug(db, club.slug) ? coach : undefined
+}
+
+/** The coach profile the signed-in account may act for, or the function's own plain refusal. */
+function actingCoach(db: DemoDB, coachId: string | null | undefined, refusal: string) {
+  const coach = canActAsCoach(db, coachId)
+  if (!coach) throw new Error(refusal)
   return coach
 }
 
@@ -54,11 +71,10 @@ function requestById(db: DemoDB, requestId: string) {
   return request
 }
 
+/** The player, or the request's coach while they may act as a coach. */
 function canAccessRequest(db: DemoDB, request: CoachBookingRequest) {
   if (request.player_user_id === db.sessionUserId) return true
-  return db.clubCoaches?.some((coach) =>
-    coach.id === request.coach_id && coach.account_user_id === db.sessionUserId,
-  ) ?? false
+  return !!canActAsCoach(db, request.coach_id)
 }
 
 export const coachingOperations = {
@@ -118,7 +134,7 @@ export const coachingOperations = {
 
   coachSetBookingPolicy(coachId: string, policy: string) {
     const db = load()
-    const coach = linkedCoach(db, coachId)
+    const coach = actingCoach(db, coachId, 'Coach profile not found')
     const cleaned = policy.trim()
     if (cleaned.length > 2000) throw new Error('Booking policy is limited to 2,000 characters')
     coach.booking_policy = cleaned || null
@@ -127,7 +143,8 @@ export const coachingOperations = {
 
   coachListMySlots(): CoachBookingSlot[] {
     const db = load()
-    const profiles = db.clubCoaches?.filter((row) => row.account_user_id === db.sessionUserId) ?? []
+    // A coach who lost access (removed, or the club suspended) sees nothing.
+    const profiles = db.clubCoaches?.filter((row) => !!canActAsCoach(db, row.id)) ?? []
     return (db.coachBookingSlots ?? []).filter((slot) => profiles.some((coach) => coach.id === slot.coach_id))
       .map((slot) => {
         const coach = profiles.find((row) => row.id === slot.coach_id)
@@ -145,8 +162,7 @@ export const coachingOperations = {
 
   coachUpsertBookingSlot(input: SlotInput): CoachBookingSlot {
     const db = load()
-    const coach = linkedCoach(db, input.coach_id)
-    if (!coach.is_active) throw new Error('This coach profile is not active')
+    const coach = actingCoach(db, input.coach_id, 'This coach profile is not available to your account')
     const start = new Date(input.starts_at)
     const end = new Date(input.ends_at)
     if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start || start <= new Date()) {
@@ -204,7 +220,7 @@ export const coachingOperations = {
     const db = load()
     const slot = (db.coachBookingSlots ?? []).find((row) => row.slot_id === slotId)
     if (!slot) throw new Error('Coach slot not found')
-    const coach = linkedCoach(db, slot.coach_id)
+    const coach = actingCoach(db, slot.coach_id, 'Coach slot not found')
     if (isOpen && (!coach.is_active || new Date(slot.starts_at) <= new Date())) {
       throw new Error('An inactive coach or a past time cannot be opened')
     }
@@ -260,6 +276,18 @@ export const coachingOperations = {
     const db = load()
     const clubId = activeClubId(db)
     if (clubRoleFor(db, db.sessionUserId, clubId) !== 'member') throw new Error('Join this club as a player to book a coach')
+    // Mirrors 20261128100300_coach_request_limits.sql: no requests while the account is on hold,
+    // and at most MAX_OPEN_COACH_REQUESTS waiting for a coach's answer per player and club.
+    if (db.members.some((row) => row.club_id === clubId && row.user_id === db.sessionUserId && row.status === 'suspended')) {
+      throw new Error('Your account at this club is on hold. Ask the desk.')
+    }
+    const open = (db.coachBookingRequests ?? []).filter((row) =>
+      row.club_id === clubId && row.player_user_id === db.sessionUserId && row.status === 'requested',
+    ).length
+    if (open >= MAX_OPEN_COACH_REQUESTS) {
+      throw new Error(`You have ${open} ${open === 1 ? 'coach request' : 'coach requests'} waiting for an answer. `
+        + 'Cancel one, or wait for a coach to answer, before you ask for another time.')
+    }
     const slot = (db.coachBookingSlots ?? []).find((row) => row.slot_id === input.slot.slot_id && row.club_id === clubId)
     const coach = slot && db.clubCoaches?.find((row) => row.id === slot.coach_id && row.is_active)
     if (!slot || !coach || !slot.is_open || new Date(slot.starts_at) <= new Date()) {
@@ -313,8 +341,9 @@ export const coachingOperations = {
 
   coachListMyRequests(): CoachBookingRequest[] {
     const db = load()
+    // A coach who lost access (removed, or the club suspended) sees no requests, so no player details.
     const coachIds = new Set((db.clubCoaches ?? [])
-      .filter((row) => row.account_user_id === db.sessionUserId)
+      .filter((row) => !!canActAsCoach(db, row.id))
       .map((row) => row.id))
     return (db.coachBookingRequests ?? []).filter((row) => !!row.coach_id && coachIds.has(row.coach_id))
       .map((row) => ({ ...row }))
@@ -333,7 +362,7 @@ export const coachingOperations = {
   coachRespondToBookingRequest(requestId: string, accept: boolean) {
     const db = load()
     const request = requestById(db, requestId)
-    linkedCoach(db, request.coach_id ?? '')
+    actingCoach(db, request.coach_id, 'Coaching request not found')
     if (request.status !== 'requested') throw new Error('This coaching request has already been decided')
     request.status = accept ? 'accepted' : 'declined'
     request.updated_at = new Date().toISOString()
@@ -361,6 +390,14 @@ export const coachingOperations = {
     if (!canAccessRequest(db, request)) throw new Error('Coaching request not found')
     const text = body.trim()
     if (text.length < 1 || text.length > 2000) throw new Error('Message must be 1 to 2,000 characters')
+    // Mirrors coach_send_request_message: a conversation is open only while the request waits or is
+    // accepted, and holds at most MAX_THREAD_MESSAGES messages.
+    if (request.status !== 'requested' && request.status !== 'accepted') {
+      throw new Error('This lesson request is closed, so no new messages can be sent.')
+    }
+    if ((db.coachRequestMessages ?? []).filter((row) => row.request_id === requestId).length >= MAX_THREAD_MESSAGES) {
+      throw new Error(`This conversation has reached the limit of ${MAX_THREAD_MESSAGES} messages.`)
+    }
     const message: CoachRequestMessage = {
       id: uid('coach-message'),
       request_id: requestId,
@@ -379,8 +416,10 @@ export const coachingOperations = {
     const db = load()
     const request = requestById(db, requestId)
     if (!canAccessRequest(db, request)) throw new Error('Coaching request not found')
+    // The latest MAX_THREAD_MESSAGES messages, oldest first (as coach_list_request_messages).
     return (db.coachRequestMessages ?? []).filter((row) => row.request_id === requestId)
       .map((row) => ({ ...row })).sort((a, b) => a.created_at.localeCompare(b.created_at))
+      .slice(-MAX_THREAD_MESSAGES)
   },
 
   /** Mirrors public.list_public_coaches: active coaches and open future lesson slots across active clubs. */

@@ -768,6 +768,16 @@ export const BOOKING_HOLD_MINUTES = 15
 /** Minutes the club has to check a GCash payment before the request shows as overdue. */
 export const CONFIRM_PAYMENT_MINUTES = 15
 
+/** How many days after today (Philippine time) a player may book online (hold_court_booking). */
+export const BOOKING_WINDOW_DAYS = 30
+
+/**
+ * Sent payments a player may have waiting for one club to confirm or reject before holding
+ * more hours (hold_court_booking). A sent payment never runs out, so this keeps one account
+ * from holding every court.
+ */
+export const MAX_PAYMENTS_WAITING = 2
+
 /**
  * Where an online checkout stands. A payment the player has sent is never released by
  * the clock: the club confirms it (booked) or says it was not received (released).

@@ -43,10 +43,12 @@ export const memberOperations = {
     const clubId = activeClubId(db)
     return db.members.find((m) => m.id === id && m.club_id === clubId) ?? null
   },
+  /** The person's own card, like member_self: staff notes stay with the club's admins (member editor). */
   memberByUser(userId: string) {
     const db = load()
     const clubId = activeClubId(db)
-    return db.members.find((m) => m.user_id === userId && m.club_id === clubId) ?? null
+    const member = db.members.find((m) => m.user_id === userId && m.club_id === clubId)
+    return member ? { ...member, notes: null } : null
   },
   upsertMember(input: Partial<Member> & { full_name: string; membership_type: MembershipType }) {
     const db = load()

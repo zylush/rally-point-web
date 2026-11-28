@@ -59,6 +59,18 @@ describe('club owner invites (live)', () => {
     expect(live.rpc).toHaveBeenCalledWith('platform_cancel_club_owner_invite', { p_invite_id: 'invite-1' })
   })
 
+  it('shows why an owner cannot be made admin, in the database’s own words', async () => {
+    // PostgREST hands back plain objects; the superadmin screen shows only an Error's message.
+    const platform = 'A platform account cannot be a club admin. Use a different email for the club.'
+    live.rpcResults.set('platform_invite_club_owner', { data: null, error: { code: '22023', message: platform } })
+    const inviting = api.inviteClubOwner('club-1', 'superadmin@example.com')
+    await expect(inviting).rejects.toBeInstanceOf(Error)
+    await expect(inviting).rejects.toThrow(platform)
+    const unconfirmed = 'That person has not confirmed their email yet. Ask them to confirm it, then try again.'
+    live.rpcResults.set('platform_assign_club_admin', { data: null, error: { code: '55000', message: unconfirmed } })
+    await expect(api.assignClubAdmin('club-1', 'early@example.com')).rejects.toMatchObject({ message: unconfirmed, code: '55000' })
+  })
+
   it('never fails a sign-in when the owner check cannot answer', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     live.rpcResults.set('claim_my_owner_clubs', { data: null, error: new Error('function public.claim_my_owner_clubs() does not exist') })
@@ -73,11 +85,11 @@ describe('club owner invites (live)', () => {
 describe('before the owner migrations reach a database (live)', () => {
   const missing = { code: 'PGRST202', message: 'Could not find the function' }
 
-  it('keeps "Add admin" working through the older step', async () => {
+  it('never falls back to the older step, which skipped the email confirmation', async () => {
     live.rpcResults.set('platform_invite_club_owner', { data: null, error: missing })
     live.rpcResults.set('platform_assign_club_admin', { data: 'user-1', error: null })
-    await expect(api.inviteClubOwner('club-1', 'owner@example.com')).resolves.toBe('assigned')
-    expect(live.rpc).toHaveBeenCalledWith('platform_assign_club_admin', { p_club_id: 'club-1', p_email: 'owner@example.com' })
+    await expect(api.inviteClubOwner('club-1', 'owner@example.com')).rejects.toThrow('Could not find the function')
+    expect(live.rpc).not.toHaveBeenCalledWith('platform_assign_club_admin', expect.anything())
   })
 
   it('shows no invites and a plain message on the owner form', async () => {

@@ -626,18 +626,23 @@ export function StaffCourts() {
   async function walkIn(e: FormEvent) {
     e.preventDefault()
     if (!venueId) return
-    await api.createWalkIn({
-      full_name: wiName,
-      phone: wiPhone,
-      purpose: wiPurpose,
-      amount: wiAmount,
-      venue_id: venueId,
-      created_by: user?.id,
-    })
-    setMsg('Walk-in registered')
-    setWiName('')
-    setWiPhone('')
-    setTimeout(() => setMsg(null), 2500)
+    try {
+      await api.createWalkIn({
+        full_name: wiName,
+        phone: wiPhone,
+        purpose: wiPurpose,
+        amount: wiAmount,
+        venue_id: venueId,
+        created_by: user?.id,
+      })
+      setMsg('Walk-in registered')
+      setWiName('')
+      setWiPhone('')
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'Failed')
+    } finally {
+      setTimeout(() => setMsg(null), 2500)
+    }
   }
 
   return (

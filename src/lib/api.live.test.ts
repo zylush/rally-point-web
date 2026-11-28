@@ -256,6 +256,36 @@ describe('api live tenant adapter', () => {
     })
   })
 
+  it('passes a refused coach request on as an Error in the function’s own words', async () => {
+    const [slot] = await api.memberListCoachSlots('2099-09-20T00:00:00.000Z', '2099-09-21T00:00:00.000Z')
+    const refusal = 'You have 3 coach requests waiting for an answer. Cancel one, or wait for a coach to answer, before you ask for another time.'
+    // PostgREST hands back a plain object, not an Error.
+    live.rpc.mockImplementationOnce(async () => ({ data: null, error: { code: '55000', message: refusal, details: null, hint: null } }))
+    const asking = api.memberRequestCoachSlot({ slot, student_count: 1, message: '' })
+    await expect(asking).rejects.toBeInstanceOf(Error)
+    await expect(asking).rejects.toThrow(refusal)
+    live.rpc.mockImplementationOnce(async () => ({ data: null, error: { code: '42501', message: 'Your account at this club is on hold. Ask the desk.' } }))
+    await expect(api.memberRequestCoachSlot({ slot, student_count: 1, message: '' }))
+      .rejects.toMatchObject({ message: 'Your account at this club is on hold. Ask the desk.', code: '42501' })
+  })
+
+  it('passes coach refusals on as Errors in the functions’ own words', async () => {
+    const closed = 'This lesson request is closed, so no new messages can be sent.'
+    live.rpc.mockImplementationOnce(async () => ({ data: null, error: { code: '55000', message: closed } }))
+    const sending = api.coachSendRequestMessage('request-1', 'Hello')
+    await expect(sending).rejects.toBeInstanceOf(Error)
+    await expect(sending).rejects.toThrow(closed)
+    live.rpc.mockImplementationOnce(async () => ({ data: null, error: { code: '55000', message: 'This conversation has reached the limit of 200 messages.' } }))
+    await expect(api.coachSendRequestMessage('request-1', 'Hello')).rejects.toThrow('This conversation has reached the limit of 200 messages.')
+    live.rpc.mockImplementationOnce(async () => ({ data: null, error: { code: 'P0002', message: 'Coaching request not found' } }))
+    await expect(api.coachRespondToBookingRequest('request-1', true)).rejects.toMatchObject({ message: 'Coaching request not found', code: 'P0002' })
+    live.rpc.mockImplementationOnce(async () => ({ data: null, error: { code: '42501', message: 'This coach profile is not available to your account' } }))
+    await expect(api.coachUpsertBookingSlot({
+      coach_id: 'coach-live', starts_at: '2099-09-20T12:00:00.000Z', ends_at: '2099-09-20T13:00:00.000Z',
+      lesson_type: 'private', pricing_model: 'per_session', rate: 600, max_students: 1,
+    })).rejects.toThrow('This coach profile is not available to your account')
+  })
+
   it('lists public coaches across clubs from list_public_coaches and resolves photos and numbers', async () => {
     live.rpc.mockResolvedValueOnce({
       data: [

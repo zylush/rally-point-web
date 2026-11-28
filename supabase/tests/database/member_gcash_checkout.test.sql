@@ -54,6 +54,11 @@ insert into public.courts (id, club_id, venue_id, name, status, hourly_rate) val
    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac', 'GCash Closed Court', 'maintenance', 500),
   ('d2000000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab', 'GCash Night Court', 'available', 300);
+-- A hold may be at most 30 days ahead (20261128100000_booking_hold_limits.sql), so the
+-- fixture days are a week from today in Philippine time instead of fixed dates in 2099.
+select set_config('test.day1', ((now() at time zone 'Asia/Manila')::date + 7)::text, true);
+select set_config('test.day2', ((now() at time zone 'Asia/Manila')::date + 8)::text, true);
+select set_config('test.day3', ((now() at time zone 'Asia/Manila')::date + 9)::text, true);
 
 -- ---------------------------------------------------------------------------
 -- Structure and privileges
@@ -111,7 +116,7 @@ select extensions.lives_ok(
       (select m.id from public.members m
        where m.user_id = 'd1000000-0000-4000-8000-000000000002'
          and m.club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
-      date '2099-06-01', 10, 1)).id::text, true)$$,
+      current_setting('test.day1')::date, 10, 1)).id::text, true)$$,
   'a desk booking is made for the player at 10 AM on Lagao Court B');
 
 -- ---------------------------------------------------------------------------
@@ -122,7 +127,7 @@ select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000001
 select extensions.lives_ok(
   $$select set_config('test.h1', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 18, 2)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 18, 2)).id::text, true)$$,
   'a member holds Lagao Court A from 6 to 8 PM');
 reset role;
 select extensions.is(
@@ -134,7 +139,8 @@ select extensions.is(
   'the hold waits 15 minutes for payment, priced at the member rate');
 select extensions.is(
   (select a.source || ':' || a.status || ':'
-          || (a.interval = tstzrange(timestamptz '2099-06-01 18:00+08', timestamptz '2099-06-01 20:00+08', '[)'))::text
+          || (a.interval = tstzrange((current_setting('test.day1') || ' 18:00+08')::timestamptz,
+                                     (current_setting('test.day1') || ' 20:00+08')::timestamptz, '[)'))::text
    from public.court_allocations a
    where a.source = 'booking' and a.source_id = nullif(current_setting('test.h1', true), '')::uuid),
   'booking:held:true',
@@ -145,7 +151,7 @@ select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000002
 select extensions.lives_ok(
   $$select set_config('test.h2', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 20, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 20, 1)).id::text, true)$$,
   'a player with no membership holds the next hour');
 reset role;
 select extensions.is(
@@ -156,23 +162,23 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000009', true);
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 19, 1)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 19, 1)$$,
   '23P01', 'That time was just taken. Pick another time.',
   'a hold cannot overlap hours someone else holds');
 
 select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000009', true);
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 9, 0)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 9, 0)$$,
   '22023', 'Pick at least 1 hour', 'a hold is at least 1 hour');
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 21, 2)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 21, 2)$$,
   '22023', 'That time is outside this location''s opening hours',
   'a hold must end by the location''s closing hour');
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
-      'd2000000-0000-4000-8000-000000000002', date '2099-06-01', 23, 2)$$,
+      'd2000000-0000-4000-8000-000000000002', current_setting('test.day1')::date, 23, 2)$$,
   '22023', 'A booking must end by midnight',
   'a hold at a location open all day still ends by midnight');
 select extensions.throws_ok(
@@ -182,30 +188,30 @@ select extensions.throws_ok(
   'a hold cannot start in the past');
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'd2000000-0000-4000-8000-000000000001', date '2099-06-01', 9, 1)$$,
+      'd2000000-0000-4000-8000-000000000001', current_setting('test.day1')::date, 9, 1)$$,
   '55000', 'This court is out of service. Pick another court.',
   'a court out of service cannot be held');
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 9, 1)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 9, 1)$$,
   'P0002', 'That court is not at this location',
   'a court must belong to the location named');
 select extensions.throws_ok(
   $$select public.hold_court_booking('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc',
-      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbe', date '2099-06-01', 9, 1)$$,
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbe', current_setting('test.day1')::date, 9, 1)$$,
   '22023', 'This club is not taking bookings',
   'the club named must be the club the request is for');
 select set_config('request.headers', '{"x-club-id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}', true);
 select extensions.throws_ok(
   $$select public.hold_court_booking('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc',
-      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbe', date '2099-06-01', 9, 1)$$,
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbe', current_setting('test.day1')::date, 9, 1)$$,
   '42501', 'Join this club before booking a court',
   'naming a club in the header does not let a non-member book there');
 select set_config('request.headers', '', true);
 select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000006', true);
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 9, 1)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 9, 1)$$,
   '42501', 'Platform accounts cannot book courts',
   'a platform superadmin cannot hold a court, even with a club row');
 
@@ -228,7 +234,7 @@ select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000009
 select extensions.lives_ok(
   $$select set_config('test.h9', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-01', 20, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day1')::date, 20, 1)).id::text, true)$$,
   'someone else can hold the lapsed hour');
 reset role;
 select extensions.is(
@@ -244,7 +250,7 @@ select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000002
 select extensions.lives_ok(
   $$select set_config('test.h2b', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', date '2099-06-01', 14, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', current_setting('test.day1')::date, 14, 1)).id::text, true)$$,
   'the player holds again after their hold lapsed');
 reset role;
 select extensions.is(
@@ -289,12 +295,12 @@ select extensions.throws_ok(
 select extensions.lives_ok(
   $$select set_config('test.h2c', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', date '2099-06-01', 15, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', current_setting('test.day1')::date, 15, 1)).id::text, true)$$,
   'the player holds Lagao Court B at 3 PM');
 select extensions.lives_ok(
   $$select set_config('test.h2d', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', date '2099-06-01', 16, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', current_setting('test.day1')::date, 16, 1)).id::text, true)$$,
   'starting again holds 4 PM instead');
 reset role;
 select extensions.is(
@@ -313,7 +319,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000009', true);
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', date '2099-06-03', 9, 1)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.day3')::date, 9, 1)$$,
   '42501', 'Your account at this club is on hold. Ask the desk.',
   'a suspended member cannot hold a court');
 reset role;
@@ -389,7 +395,7 @@ select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000009
 select extensions.lives_ok(
   $$select set_config('test.h9b', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', date '2099-06-02', 10, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', current_setting('test.day2')::date, 10, 1)).id::text, true)$$,
   'a new hold sweeps the club''s lapsed holds again');
 reset role;
 select extensions.ok(
@@ -489,7 +495,8 @@ select extensions.ok(
           where n.user_id = 'd1000000-0000-4000-8000-000000000001'
             and n.club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
             and n.title = 'Booking confirmed'
-            and n.body = 'The club confirmed your GCash payment. Lagao Court A, Jun 1, 6:00 PM to 8:00 PM is booked.'),
+            and n.body = 'The club confirmed your GCash payment. Lagao Court A, '
+                         || to_char(current_setting('test.day1')::date, 'Mon FMDD') || ', 6:00 PM to 8:00 PM is booked.'),
   'the player is told the booking is confirmed, in Philippine time');
 
 set local role authenticated;
@@ -540,14 +547,16 @@ select extensions.ok(
           where n.user_id = 'd1000000-0000-4000-8000-000000000009'
             and n.club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
             and n.title = 'Payment not confirmed'
-            and n.body = 'The club could not confirm your GCash payment for Lagao Court B, Jun 2, 10:00 AM to 11:00 AM, so those hours were released. Reason: No payment received'),
+            and n.body = 'The club could not confirm your GCash payment for Lagao Court B, '
+                         || to_char(current_setting('test.day2')::date, 'Mon FMDD')
+                         || ', 10:00 AM to 11:00 AM, so those hours were released. Reason: No payment received'),
   'the player is told the payment was not confirmed, and why');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000002', true);
 select extensions.lives_ok(
   $$select set_config('test.h2e', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', date '2099-06-02', 10, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae', current_setting('test.day2')::date, 10, 1)).id::text, true)$$,
   'the rejected hours can be held again');
 select extensions.lives_ok(
   $$select public.submit_booking_payment(nullif(current_setting('test.h2e', true), '')::uuid, 'ABC123XYZ')$$,
@@ -561,7 +570,7 @@ select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000008
 select extensions.lives_ok(
   $$select set_config('test.h8', (public.hold_court_booking(
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc',
-      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbe', date '2099-06-01', 18, 2)).id::text, true)$$,
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbe', current_setting('test.day1')::date, 18, 2)).id::text, true)$$,
   'a second-club player holds a court there at the same hours');
 select set_config('request.jwt.claim.sub', 'd1000000-0000-4000-8000-000000000003', true);
 select extensions.throws_ok(

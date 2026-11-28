@@ -21,6 +21,7 @@ import { MemberBook } from './MemberBook'
 import { MemberPass } from './MemberPass'
 import { AdminBoard, ScheduleBoard, TvBoard } from './ScheduleBoard'
 import { AdminBookings, BookingsDesk } from './BookingsDesk'
+import { demoStore } from '../lib/demoStore'
 import { localRangeISO, ymdLocal } from '../types'
 
 const authState = vi.hoisted(() => ({
@@ -378,6 +379,28 @@ describe('admin pages', () => {
     await user.click(screen.getByRole('button', { name: 'Playing' }))
     await user.click(screen.getByRole('button', { name: 'End' }))
     expect(apiMock.endSession).toHaveBeenCalled()
+  })
+
+  it('shows why a floor walk-in was refused, keeps what was typed, and records nothing', async () => {
+    demoStore.reset()
+    const before = demoStore.get()
+    apiMock.createWalkIn.mockImplementation(async (input: Parameters<typeof demoStore.createWalkIn>[0]) => demoStore.createWalkIn(input))
+    const user = userEvent.setup()
+    render(<MemoryRouter><AdminOps /></MemoryRouter>)
+    expect(await screen.findByText('Currently playing')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Walk-in' }))
+    expect(screen.getByRole('spinbutton')).toHaveAttribute('min', '0')
+    await user.click(screen.getByPlaceholderText('Full name'))
+    await user.paste('a'.repeat(90))
+    await user.type(screen.getByPlaceholderText('Phone'), '09170001111')
+    await user.click(screen.getByRole('button', { name: 'Register' }))
+
+    expect(await screen.findByText('Full name is limited to 80 characters')).toBeInTheDocument()
+    expect(screen.queryByText('Walk-in registered')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Full name')).toHaveValue('a'.repeat(90))
+    expect(screen.getByPlaceholderText('Phone')).toHaveValue('09170001111')
+    expect(demoStore.get().walkins).toHaveLength(before.walkins.length)
+    expect(demoStore.get().transactions).toHaveLength(before.transactions.length)
   })
 
   it('renders transactions and users', async () => {

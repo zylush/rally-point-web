@@ -16,7 +16,7 @@ const REQUESTS_PER_DAY = 5
 const MEMBERSHIP_TYPES: MembershipType[] = ['basic', 'standard', 'premium']
 
 /** Mirrors private.tidy_name: one space between words; control, zero-width and direction characters dropped. */
-function tidyName(text: string | null | undefined) {
+export function tidyName(text: string | null | undefined) {
   return (text ?? '')
     .replace(/\s+/g, ' ')
     .replace(/[\p{Cc}\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/gu, '')

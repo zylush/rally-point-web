@@ -1,5 +1,8 @@
 import type { Booking, BookingStatus, CourtDayAvailability, CourtSession, PaymentMethod } from '../../types'
-import { BOOKING_HOLD_MINUTES, CONFIRM_PAYMENT_MINUTES, courtRateFor, fmtDateTime, localRangeISO, timeSlot, venueHours } from '../../types'
+import {
+  BOOKING_HOLD_MINUTES, BOOKING_WINDOW_DAYS, CONFIRM_PAYMENT_MINUTES, MAX_PAYMENTS_WAITING, courtRateFor, fmtDateTime, localRangeISO,
+  timeSlot, venueHours, ymdLocal,
+} from '../../types'
 import { makePaymentRef } from '../payments'
 import { activeClubId, clubRoleFor } from './access'
 import { hydrateBooking, isSlotFree, todayISO, uid } from './common'
@@ -173,6 +176,20 @@ export const bookingOperations = {
     if (opts.checkoutHold && member?.status === 'suspended') {
       throw new Error('Your account at this club is on hold. Ask the desk.')
     }
+    // Mirrors hold_court_booking (20261128100000_booking_hold_limits.sql): online holds go up to
+    // BOOKING_WINDOW_DAYS days ahead, and a player with MAX_PAYMENTS_WAITING sent payments the club
+    // has not decided on yet holds nothing more. Desk bookings and unpaid holds do not count.
+    if (opts.checkoutHold) {
+      if (opts.dateYmd > ymdLocal(new Date(Date.now() + BOOKING_WINDOW_DAYS * 86400000))) {
+        throw new Error(`You can book up to ${BOOKING_WINDOW_DAYS} days ahead. Pick an earlier date.`)
+      }
+      const waiting = db.bookings.filter((row) => row.club_id === court.club_id && row.member_id === opts.member_id
+        && row.status === 'pending_payment' && row.hold_expires_at != null && !!row.payment_submitted_at).length
+      if (waiting >= MAX_PAYMENTS_WAITING) {
+        throw new Error(`You have ${waiting} ${waiting === 1 ? 'payment' : 'payments'} waiting for the club to check. `
+          + 'You can book again once the club confirms or rejects one.')
+      }
+    }
     // Mirrors hold_court_booking: one unpaid checkout per player per club, so starting again
     // (after leaving checkout or a refresh) gives back the previous hold. A sent payment and
     // desk bookings (no hold_expires_at) are never touched.
@@ -247,6 +264,11 @@ export const bookingOperations = {
     const db = load()
     const b = ownBooking(db, opts.booking_id)
     if (!b) throw new Error('Booking not found')
+    // Mirrors 20261128100800_suspended_member_payments.sql: a member on hold cannot pay for hours
+    // held before that, as they cannot hold new ones. Staff can still decide a payment already sent.
+    if (db.members.find((m) => m.id === b.member_id)?.status === 'suspended') {
+      throw new Error('Your account at this club is on hold. Ask the desk.')
+    }
     if (b.payment_submitted_at) {
       throw new Error(b.status === 'pending_payment' ? PAYMENT_SENT : 'This booking is not waiting for payment')
     }

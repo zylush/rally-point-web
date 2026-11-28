@@ -4,5 +4,25 @@
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "dist",
   "git": { "deploymentEnabled": { "gh-pages": false } },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://iclrvvsiwypxlwrwgqia.supabase.co https://tuttbvwnlndcstmmxybb.supabase.co; font-src 'self'; connect-src 'self' https://iclrvvsiwypxlwrwgqia.supabase.co wss://iclrvvsiwypxlwrwgqia.supabase.co https://tuttbvwnlndcstmmxybb.supabase.co wss://tuttbvwnlndcstmmxybb.supabase.co; frame-src https://www.openstreetmap.org; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+        },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), bluetooth=(), midi=(), accelerometer=(), gyroscope=(), magnetometer=(), display-capture=(), xr-spatial-tracking=()"
+        },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+      ]
+    }
+  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

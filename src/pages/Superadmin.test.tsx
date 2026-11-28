@@ -52,7 +52,7 @@ describe('SuperadminPage', () => {
     renderSection('overview')
     expect(await screen.findByRole('heading', { name: 'Platform overview' })).toBeInTheDocument()
     const totals = screen.getByRole('region', { name: 'Platform totals' })
-    expect(within(totals).getByText('Platform revenue')).toBeInTheDocument()
+    expect(within(totals).getByText('Commission revenue')).toBeInTheDocument()
     expect(within(totals).getByText('Active clubs')).toBeInTheDocument()
     expect(within(totals).getByText('2')).toBeInTheDocument()
     expect(screen.getByText(/not collected money/)).toBeInTheDocument()

@@ -344,7 +344,7 @@ function Overview({
       </div>
       <section aria-label="Platform totals" className="enter-rise grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Platform revenue"
+          label="Commission revenue"
           value={peso(stats.totalCommissionsEarned)}
           icon={Coins}
           tone="ok"

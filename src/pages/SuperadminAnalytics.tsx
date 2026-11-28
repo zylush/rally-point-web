@@ -134,7 +134,7 @@ function Figures({ data }: { data: PlatformAnalytics }) {
 
       <section aria-label="Period figures" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Platform revenue"
+          label="Commission revenue"
           value={peso(cur.commission)}
           icon={Landmark}
           tone="ok"

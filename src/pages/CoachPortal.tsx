@@ -271,7 +271,6 @@ export function CoachPortal() {
                     <p className="text-body text-slate-700">{fmtDateTime(request.starts_at)} – {fmtDateTime(request.ends_at)}</p>
                     <p className="text-body text-slate-600">{request.student_count} player(s) · {peso(request.quoted_amount)} · {request.status.replace('_', ' ')}</p>
                     {request.message ? <p className="mt-2 whitespace-pre-wrap text-body text-slate-700">Note: {request.message}</p> : null}
-                    {request.player_email ? <p className="mt-1 text-body text-slate-600">{request.player_email}</p> : null}
                   </div>
                   {request.status === 'requested' ? (
                     <>

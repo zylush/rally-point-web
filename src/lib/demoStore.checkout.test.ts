@@ -224,7 +224,7 @@ describe('demo GCash checkout (mirrors the member_gcash_checkout functions)', ()
     expect(demoStore.staffConfirmBookingPayment(sent.id).status).toBe('confirmed')
   })
 
-  it('holds up to 30 days ahead, and holds nothing more while 2 sent payments wait for the club', () => {
+  it('holds up to 30 days ahead, and holds nothing more while 4 sent payments wait for the club', () => {
     // Mirrors hold_court_booking (20261128100000_booking_hold_limits.sql).
     const inDays = (days: number) => ymdLocal(new Date(Date.now() + days * 86400000))
     expect(() => hold(9, 'court_2', inDays(31))).toThrow('You can book up to 30 days ahead. Pick an earlier date.')
@@ -237,8 +237,13 @@ describe('demo GCash checkout (mirrors the member_gcash_checkout functions)', ()
     hold(10)
     const second = hold(11)
     demoStore.submitBookingPayment({ booking_id: second.id, reference: 'WAIT000002' })
-    const waiting = 'You have 2 payments waiting for the club to check. You can book again once the club confirms or rejects one.'
-    expect(() => hold(12)).toThrow(waiting)
+    demoStore.submitBookingPayment({ booking_id: hold(12).id, reference: 'WAIT000003' })
+    // With 3 payments waiting the player can still hold; sending that fourth payment reaches the limit.
+    const fourth = hold(13)
+    expect(fourth.status).toBe('pending_payment')
+    demoStore.submitBookingPayment({ booking_id: fourth.id, reference: 'WAIT000004' })
+    const waiting = 'You have 4 payments waiting for the club to check. You can book again once the club confirms or rejects one.'
+    expect(() => hold(14)).toThrow(waiting)
     expect(stored(first.id)?.status).toBe('pending_payment')
 
     // A sent payment never runs out, so it still counts once the club is late to check it.
@@ -249,13 +254,13 @@ describe('demo GCash checkout (mirrors the member_gcash_checkout functions)', ()
         row.confirm_by = new Date(Date.now() - 1800000).toISOString()
       }
     })
-    expect(() => hold(12)).toThrow(waiting)
+    expect(() => hold(14)).toThrow(waiting)
 
     // Once the club rejects (or confirms) one, the player can hold again.
     signIn(ADMIN)
     demoStore.staffRejectBookingPayment(second.id, 'No payment received')
     signIn(MEMBER)
-    expect(hold(12).status).toBe('pending_payment')
+    expect(hold(14).status).toBe('pending_payment')
   })
 
   it('reads a lapsed unpaid hold as released before anything sweeps it', () => {

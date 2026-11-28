@@ -676,6 +676,10 @@ describe('Tournaments pages & TV views (Phase 2)', () => {
     const dlg = await screen.findByRole('dialog')
     await user.type(within(dlg).getByLabelText(/Tournament title/i), 'Club Classic')
     await user.selectOptions(within(dlg).getByLabelText(/Location/i), 'v-1')
+    // Admins are told the notes are public before they write them.
+    expect(within(dlg).getByLabelText(/Notes/i)).toHaveAccessibleDescription(
+      'Everyone can see this on the public tournament page, so leave out anything private.',
+    )
     await user.type(within(dlg).getByLabelText(/Notes/i), 'Win by 2')
     await user.click(within(dlg).getByRole('button', { name: /Create tournament/i }))
     expect(await within(dlg).findByRole('alert')).toHaveTextContent('Server busy')

@@ -11,11 +11,11 @@
 -- at the top of the function body, so they are easy to change:
 --   * BOOKING_WINDOW_DAYS = 30: the date may be at most 30 days after today in the venue's time
 --     zone (venues are held to Asia/Manila). The booking screen offers the next 7 days.
---   * MAX_PAYMENTS_WAITING = 2: a new hold is refused while the player already has 2 bookings in
---     this club whose payment was sent and is still waiting for the club to confirm or reject it.
---     Desk bookings, unpaid holds and other clubs do not count. The player's own online bookings
---     are locked before counting, so a payment sent for their unpaid hold at that same moment is
---     counted too.
+--   * MAX_PAYMENTS_WAITING = 4 (the owner's number, 2026-11-28): a new hold is refused while the
+--     player already has 4 bookings in this club whose payment was sent and is still waiting for
+--     the club to confirm or reject it. Desk bookings, unpaid holds and other clubs do not count.
+--     The player's own online bookings are locked before counting, so a payment sent for their
+--     unpaid hold at that same moment is counted too.
 -- A sent payment still never lapses (the player paid real money; the club decides), so nothing
 -- is released automatically: the player can book again once the club confirms or rejects one.
 -- create or replace keeps the grants (signed-in callers only); the owner is set below. The
@@ -36,7 +36,7 @@ declare
   -- BOOKING_WINDOW_DAYS: a booking date is at most this many days after today (venue time).
   c_booking_window_days constant integer := 30;
   -- MAX_PAYMENTS_WAITING: sent payments a player may have waiting for this club at once.
-  c_max_payments_waiting constant integer := 2;
+  c_max_payments_waiting constant integer := 4;
   v_user uuid := auth.uid();
   v_club uuid := private.current_club_id();
   v_member public.members;

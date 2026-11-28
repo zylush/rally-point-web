@@ -355,9 +355,13 @@ export function RecordMatchModal({ open, onClose, onRecord }: RecordMatchModalPr
               className="input"
               maxLength={200}
               placeholder="e.g. Open play round 3"
+              aria-describedby="match-notes-hint"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
             />
+            <p id="match-notes-hint" className="text-caption text-slate-600 mt-1">
+              Everyone can see this on the public leaderboard, so leave out anything private.
+            </p>
           </div>
 
           {error ? <p role="alert" className="text-body font-semibold text-red-700">{error}</p> : null}

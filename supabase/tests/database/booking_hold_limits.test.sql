@@ -2,12 +2,12 @@ begin;
 set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions, pg_catalog;
-select extensions.plan(23);
+select extensions.plan(27);
 
 -- Booking hold limits (20261128100000_booking_hold_limits.sql): a hold is at most 30 days ahead
--- (Philippine time), and a player may have at most 2 sent payments waiting for the club before
--- holding more hours. Desk bookings, unpaid holds and other clubs do not count, and a sent
--- payment still never lapses.
+-- (Philippine time), and a player with 4 sent payments waiting for the club holds no more hours
+-- (with 3 waiting they still can). Desk bookings, unpaid holds and other clubs do not count, and
+-- a sent payment still never lapses.
 --
 -- Fixture. Signing up gives every new account a Gensan membership row.
 --   user 1: Gensan player who books online; also a player at the synthetic second club
@@ -16,7 +16,7 @@ select extensions.plan(23);
 -- Places come from supabase/seed.sql: Gensan Lagao (...aaac) with Lagao Court A (...aaad) and
 -- B (...aaae); the second club's Synthetic Main (...bbbc) with Synthetic Court A (...bbbe).
 -- Days count from today in Philippine time; test.d7 is a week ahead.
--- Booking ids are kept in test.* settings: desk, h30, ha, hb, hc, hd and he.
+-- Booking ids are kept in test.* settings: desk, h30, ha, hb, hc, hf, hg, hd and he.
 insert into auth.users (id, email, raw_user_meta_data)
 select ('e2000000-0000-4000-8000-00000000000' || n)::uuid, 'hold-limit-' || n || '@fixture.invalid',
        jsonb_build_object('full_name', 'Hold Limit User ' || n)
@@ -87,7 +87,7 @@ select extensions.lives_ok(
   'a hold exactly 30 days ahead is allowed');
 
 -- ---------------------------------------------------------------------------
--- At most 2 sent payments waiting for the club
+-- At most 4 sent payments waiting for the club
 -- ---------------------------------------------------------------------------
 select extensions.lives_ok(
   $$select set_config('test.ha', (public.hold_court_booking(
@@ -110,25 +110,42 @@ select extensions.lives_ok(
 select extensions.lives_ok(
   $$select public.submit_booking_payment(nullif(current_setting('test.hc', true), '')::uuid, 'LIMIT00002')$$,
   'user 1 sends a second payment: 2 payments waiting');
+select extensions.lives_ok(
+  $$select set_config('test.hf', (public.hold_court_booking(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 13, 1)).id::text, true)$$,
+  'with 2 payments waiting, user 1 can hold 1 PM');
+select extensions.lives_ok(
+  $$select public.submit_booking_payment(nullif(current_setting('test.hf', true), '')::uuid, 'LIMIT00003')$$,
+  'and sends a third payment: 3 payments waiting');
+select extensions.lives_ok(
+  $$select set_config('test.hg', (public.hold_court_booking(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 14, 1)).id::text, true)$$,
+  'with 3 payments waiting, user 1 can still hold 2 PM');
+select extensions.lives_ok(
+  $$select public.submit_booking_payment(nullif(current_setting('test.hg', true), '')::uuid, 'LIMIT00004')$$,
+  'and sends a fourth payment: 4 payments waiting');
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 13, 1)$$,
-  '55000', 'You have 2 payments waiting for the club to check. You can book again once the club confirms or rejects one.',
-  'a third hold is refused while 2 payments wait for the club');
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 15, 1)$$,
+  '55000', 'You have 4 payments waiting for the club to check. You can book again once the club confirms or rejects one.',
+  'a fifth hold is refused while 4 payments wait for the club');
 reset role;
 select extensions.is(
   (select string_agg(b.status::text || ':' || coalesce(a.status, 'none'), ',' order by b.start_at)
    from public.bookings b
    left join public.court_allocations a on a.source = 'booking' and a.source_id = b.id
    where b.club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and b.member_id = current_setting('test.member1')::uuid),
-  'pending_payment:reserved,pending_payment:held,cancelled:cancelled,pending_payment:held,cancelled:cancelled',
-  'the refused hold left nothing behind; the desk booking and both sent payments keep their hours');
+  'pending_payment:reserved,pending_payment:held,cancelled:cancelled,pending_payment:held,pending_payment:held,'
+  || 'pending_payment:held,cancelled:cancelled',
+  'the refused hold left nothing behind; the desk booking and all four sent payments keep their hours');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000002', true);
 select extensions.lives_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 13, 1)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 15, 1)$$,
   'another player can still hold: the limit is per player');
 select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000001', true);
 select set_config('request.headers', '{"x-club-id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}', true);
@@ -146,8 +163,8 @@ where id = nullif(current_setting('test.ha', true), '')::uuid;
 set local role authenticated;
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 14, 1)$$,
-  '55000', 'You have 2 payments waiting for the club to check. You can book again once the club confirms or rejects one.',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 16, 1)$$,
+  '55000', 'You have 4 payments waiting for the club to check. You can book again once the club confirms or rejects one.',
   'an overdue payment still counts, because a sent payment never lapses');
 
 -- ---------------------------------------------------------------------------
@@ -161,15 +178,15 @@ select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000001
 select extensions.lives_ok(
   $$select set_config('test.hd', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 14, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 16, 1)).id::text, true)$$,
   'after a rejection user 1 can hold again');
 select extensions.lives_ok(
-  $$select public.submit_booking_payment(nullif(current_setting('test.hd', true), '')::uuid, 'LIMIT00003')$$,
-  'and send that payment: 2 payments waiting again');
+  $$select public.submit_booking_payment(nullif(current_setting('test.hd', true), '')::uuid, 'LIMIT00005')$$,
+  'and send that payment: 4 payments waiting again');
 select extensions.throws_ok(
   $$select public.hold_court_booking('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 15, 1)$$,
-  '55000', 'You have 2 payments waiting for the club to check. You can book again once the club confirms or rejects one.',
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 17, 1)$$,
+  '55000', 'You have 4 payments waiting for the club to check. You can book again once the club confirms or rejects one.',
   'the limit holds again');
 select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000003', true);
 select extensions.lives_ok(
@@ -179,7 +196,7 @@ select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000001
 select extensions.lives_ok(
   $$select set_config('test.he', (public.hold_court_booking(
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac',
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 15, 1)).id::text, true)$$,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad', current_setting('test.d7')::date, 17, 1)).id::text, true)$$,
   'after a confirmation user 1 can hold again');
 reset role;
 select extensions.is(

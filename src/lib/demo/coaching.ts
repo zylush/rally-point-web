@@ -322,7 +322,6 @@ export const coachingOperations = {
       coach_name: coach.full_name,
       player_user_id: profile.id,
       player_name: profile.full_name,
-      player_email: profile.email,
       starts_at: slot.starts_at,
       ends_at: slot.ends_at,
       lesson_type: slot.lesson_type,
@@ -345,8 +344,10 @@ export const coachingOperations = {
     const coachIds = new Set((db.clubCoaches ?? [])
       .filter((row) => !!canActAsCoach(db, row.id))
       .map((row) => row.id))
+    // Mirrors coach_list_my_requests: never the player's email, even on a request saved before that
+    // rule (owner decision, 2026-11-28: coaches talk to players in the request's conversation).
     return (db.coachBookingRequests ?? []).filter((row) => !!row.coach_id && coachIds.has(row.coach_id))
-      .map((row) => ({ ...row }))
+      .map((row) => ({ ...row, player_email: null }))
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
   },
 

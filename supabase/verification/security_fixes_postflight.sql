@@ -2,14 +2,14 @@
 -- Run against the target after the nine migrations 20261128100000_booking_hold_limits.sql to
 -- 20261128100800_suspended_member_payments.sql. Every row with required = true must have ok = true.
 -- The database fixes from the security review of 2026-11-28: online holds at most 30 days ahead and
--- at most 2 sent payments waiting per player and club; a locked sign-in stays locked for the right
+-- at most 4 sent payments waiting per player and club; a locked sign-in stays locked for the right
 -- password; a club admin needs a confirmed email and is never a platform account; at most 3 coach
 -- requests waiting per player and none while on hold; staff notes on a member stay with the club's
 -- admins; desk walk-in amounts and text are checked; a support inquiry inserted through the API
 -- starts unanswered; the coach side works only for an active coach at an open club, with limited
--- lesson threads; a member on hold cannot send a GCash payment. Eighteen functions are redefined,
--- and three private helpers and one trigger are new; no table, policy or table grant changes, and
--- nothing in the reservation-write pause changes.
+-- lesson threads and no player emails; a member on hold cannot send a GCash payment. Eighteen
+-- functions are redefined, and three private helpers and one trigger are new; no table, policy or
+-- table grant changes, and nothing in the reservation-write pause changes.
 -- Each source check looks for the new lines (one line each, so it holds for LF and CRLF files).
 -- Rows with required = false count rows stored before the fixes, which the migrations leave as they
 -- are; ok is true when the count is 0. They give counts only (never names, emails, phones or ids)
@@ -81,7 +81,7 @@ with paused_tables(name) as (
     (select count(*) from (
        select 1 from public.bookings b
        where b.status = 'pending_payment' and b.hold_expires_at is not null and b.payment_submitted_at is not null
-       group by b.club_id, b.member_id having count(*) > 2) x) as players_over_payment_cap,
+       group by b.club_id, b.member_id having count(*) > 4) x) as players_over_payment_cap,
     (select count(*) from (
        select 1 from public.coach_booking_requests r
        where r.status = 'requested'
@@ -151,11 +151,11 @@ with paused_tables(name) as (
          coalesce((
            select strpos(body, 'c_booking_window_days constant integer := 30;') > 0
                   and strpos(body, 'p_date > (now() at time zone v_venue.timezone)::date + c_booking_window_days') > 0
-                  and strpos(body, 'c_max_payments_waiting constant integer := 2;') > 0
+                  and strpos(body, 'c_max_payments_waiting constant integer := 4;') > 0
                   and strpos(body, 'v_waiting >= c_max_payments_waiting') > 0
                   and strpos(body, 'v_waiting >= c_max_payments_waiting') < strpos(body, 'insert into public.bookings')
            from src where name = 'hold_court_booking'), false),
-         'hold_court_booking takes a date at most 30 days ahead and refuses a new hold while 2 sent payments wait'
+         'hold_court_booking takes a date at most 30 days ahead and refuses a new hold while 4 sent payments wait'
   union all
   select 8, 'locked_login_stays_locked', true,
          coalesce((
@@ -252,7 +252,17 @@ with paused_tables(name) as (
            where k.name = 'coach_can_act' and m.name = 'coach_send_request_message' and l.name = 'coach_list_request_messages'), false),
          'the eight coach-side functions need an active coach at an open club; a lesson thread takes at most 200 messages'
   union all
-  select 15, 'suspended_members_cannot_pay', true,
+  -- Owner decision (2026-11-28): coaches talk to players in the request's conversation. The request
+  -- list keeps its player_email column (the API shape) but returns null in it and reads no email.
+  select 15, 'coach_requests_without_player_email', true,
+         coalesce((
+           select strpos(body, 'p.full_name, null::text, s.starts_at') > 0
+                  and strpos(body, '.email') = 0
+           from src where name = 'coach_list_my_requests'), false)
+         and coalesce(pg_get_function_result(to_regprocedure('public.coach_list_my_requests()')) like '%player_email text,%', false),
+         'coach_list_my_requests gives a coach the player''s name but never their email: player_email stays for the API shape, always null'
+  union all
+  select 16, 'suspended_members_cannot_pay', true,
          coalesce((
            select strpos(body, 'private.own_booking_for_update(p_booking_id)') > 0
                   and strpos(body, 'private.own_booking_for_update(p_booking_id)') < strpos(body, 'm.status = ''suspended''')
@@ -260,7 +270,7 @@ with paused_tables(name) as (
            from src where name = 'submit_booking_payment'), false),
          'submit_booking_payment refuses a member on hold before any payment is recorded'
   union all
-  select 16, 'negative_walkin_charges', false,
+  select 17, 'negative_walkin_charges', false,
          (select walkin_charges_negative = 0 and walkin_records_negative = 0 from stored),
          (select walkin_charges_negative::text || ' walk-in charges below 0 pesos and ' || walkin_records_negative::text
                  || ' walk-in records below 0; ' || walkin_charges_over_cap::text || ' charges above 100,000 pesos; '
@@ -270,23 +280,23 @@ with paused_tables(name) as (
   -- An inquiry inserted already answered is visible only when its answer is not later than the
   -- inquiry, it is dated ahead, or its responder holds no admin role at the club. One with a later
   -- answer time and a real admin named as responder cannot be told apart from a real answer.
-  select 17, 'inquiries_inserted_answered', false,
+  select 18, 'inquiries_inserted_answered', false,
          (select inquiries_answered_at_once = 0 and inquiries_dated_ahead = 0 and inquiries_answered_by_non_admin = 0 from stored),
          (select inquiries_answered_at_once::text || ' inquiries answered no later than they were raised, '
                  || inquiries_dated_ahead::text || ' dated ahead, ' || inquiries_answered_by_non_admin::text
                  || ' answered by an account with no admin role at the club; ' || inquiries::text || ' inquiries in all'
           from stored)
   union all
-  select 18, 'platform_accounts_with_club_roles', false,
+  select 19, 'platform_accounts_with_club_roles', false,
          (select platform_accounts_with_club_role = 0 from stored),
          (select platform_accounts_with_club_role::text || ' platform accounts hold an active club role, '
                  || platform_accounts_as_club_admin::text || ' of them as admin (the release leaves these rows as they are)'
           from stored)
   union all
-  select 19, 'rows_over_new_limits', false,
+  select 20, 'rows_over_new_limits', false,
          (select players_over_payment_cap = 0 and players_over_coach_request_cap = 0
                  and online_bookings_past_window = 0 and payments_waiting_from_suspended = 0 from stored),
-         (select players_over_payment_cap::text || ' players with more than 2 payments waiting, '
+         (select players_over_payment_cap::text || ' players with more than 4 payments waiting, '
                  || players_over_coach_request_cap::text || ' with more than 3 coach requests waiting, '
                  || online_bookings_past_window::text || ' online bookings more than 30 days ahead, '
                  || payments_waiting_from_suspended::text || ' payments waiting from members on hold'

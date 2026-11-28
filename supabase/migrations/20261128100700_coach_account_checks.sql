@@ -12,7 +12,9 @@
 -- The coach side of these eight functions now requires it. Each is its latest definition
 -- (20261124110000_rent_a_coach.sql) copied unchanged except the lines marked below.
 --   * coach_list_my_requests, coach_list_my_slots: a coach who lost access sees an empty list.
---     player_email stays for active coaches (whether coaches should see it is an owner decision).
+--     coach_list_my_requests also gives no coach the player's email any more (owner decision,
+--     2026-11-28: coaches talk to players in the request's conversation). player_email is always
+--     null, kept only for the API shape (the same columns, which create or replace requires).
 --   * coach_respond_to_booking_request, coach_set_booking_slot_open, coach_upsert_booking_slot,
 --     coach_set_booking_policy: refused with each function's existing plain message.
 --   * coach_send_request_message, coach_list_request_messages: the player side works as before.
@@ -228,8 +230,10 @@ returns table (
 )
 language sql stable security definer set search_path = ''
 as $$
+  -- player_email is always null (owner decision, 2026-11-28): coaches talk to players in the
+  -- request's conversation. The column stays only for the API shape.
   select r.id, s.id, r.club_id, cl.name, c.id, c.full_name, r.player_user_id,
-         p.full_name, p.email, s.starts_at, s.ends_at, s.lesson_type, s.pricing_model,
+         p.full_name, null::text, s.starts_at, s.ends_at, s.lesson_type, s.pricing_model,
          s.rate, r.student_count, r.quoted_amount, r.message, r.status, r.created_at
   from public.coach_booking_requests r
   join public.coach_booking_slots s on s.id = r.slot_id and s.club_id = r.club_id

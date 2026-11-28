@@ -747,6 +747,14 @@ describe('staging releases', () => {
     expect(securityFixesRelease.migrations.map(text).join('\n').match(/\bcreate (or replace )?trigger\b/gi)).toHaveLength(1)
     expect(text('20261128100600_support_inquiry_insert_guard.sql'))
       .toMatch(/create trigger support_inquiries_insert_guard\s+before insert on public\.support_inquiries\s+for each row/)
+    // Owner decisions (2026-11-28): a player may have 4 sent payments waiting, and no coach gets a
+    // player's email (coach_list_my_requests keeps its player_email column for the API shape, always null).
+    expect(body(text('20261128100000_booking_hold_limits.sql'), 'public.hold_court_booking'))
+      .toContain('c_max_payments_waiting constant integer := 4;')
+    const coachRequests = body(text('20261128100700_coach_account_checks.sql'), 'public.coach_list_my_requests')
+    expect(coachRequests).toContain('player_name text, player_email text,')
+    expect(coachRequests).toContain('p.full_name, null::text, s.starts_at')
+    expect(coachRequests).not.toContain('.email')
     const postflight = contents.get('supabase/verification/security_fixes_postflight.sql')?.toString('utf8') ?? ''
     expect([...postflight.matchAll(/select \d+, '([a-z_]+)'/g)].map(match => match[1])).toEqual([...securityFixesChecks])
     for (const name of securityFixesRelease.migrations) expect(postflight).toContain(`'${name.slice(0, 14)}'`)

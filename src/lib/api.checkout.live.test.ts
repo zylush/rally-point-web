@@ -241,7 +241,7 @@ describe('checkout errors (live)', () => {
     const hold = () => api.createBooking({ court_id: live.court.id, member_id: 'm', dateYmd: '2099-09-20', startHour: 9, hours: 1, user_id: 'u' })
     fail({ code: '22023', message: 'You can book up to 30 days ahead. Pick an earlier date.' })
     await expect(hold()).rejects.toThrow('You can book up to 30 days ahead. Pick an earlier date.')
-    const waiting = 'You have 2 payments waiting for the club to check. You can book again once the club confirms or rejects one.'
+    const waiting = 'You have 4 payments waiting for the club to check. You can book again once the club confirms or rejects one.'
     fail({ code: '55000', message: waiting })
     const holding = hold()
     await expect(holding).rejects.toBeInstanceOf(Error)

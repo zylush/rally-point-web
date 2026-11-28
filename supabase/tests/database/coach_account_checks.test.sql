@@ -5,8 +5,8 @@ set local search_path = public, extensions, pg_catalog;
 select extensions.plan(35);
 
 -- Coach accounts (20261128100700_coach_account_checks.sql): only an active coach at an open club
--- works as a coach. Players keep their side of a conversation, threads close with the request,
--- and a thread holds at most 200 messages.
+-- works as a coach, and no coach gets a player's email. Players keep their side of a
+-- conversation, threads close with the request, and a thread holds at most 200 messages.
 --
 -- Fixture (every account has a confirmed email; signing up makes each a Gensan member):
 --   user 1: account of Coach Gone at Gensan, whom the club later removes
@@ -192,13 +192,15 @@ select extensions.is((select count(*)::int from public.coach_list_my_requests())
   'once the club is active again, the coach sees the request again');
 
 -- ---------------------------------------------------------------------------
--- An active coach: player emails stay, and conversations close with the request
+-- An active coach: player names but no emails, and conversations close with the request
 -- ---------------------------------------------------------------------------
+-- Owner decision (2026-11-28): coaches talk to players in the request's conversation, so
+-- player_email is always null; the column stays only for the API shape.
 select set_config('request.jwt.claim.sub', 'e9000000-0000-4000-8000-000000000006', true);
-select extensions.is(
-  (select string_agg(player_email, ',') from public.coach_list_my_requests()
-   where request_id = current_setting('test.r3')::uuid),
-  'coach-check-2@fixture.invalid', 'an active coach still sees the player''s email on a request');
+select extensions.ok(
+  (select count(*) = 2 and bool_and(player_email is null) and bool_and(player_name = 'Coach Check User 2')
+   from public.coach_list_my_requests()),
+  'an active coach sees the player''s name on each request, but never their email');
 select extensions.is((public.coach_respond_to_booking_request(current_setting('test.r3')::uuid, false)).status,
   'declined', 'the coach declines one request');
 select extensions.throws_ok(

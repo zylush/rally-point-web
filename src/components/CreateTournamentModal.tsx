@@ -262,9 +262,13 @@ export function CreateTournamentModal({ open, onClose, onCreate }: CreateTournam
             className="input min-h-12"
             placeholder="First to 11, rally scoring"
             maxLength={240}
+            aria-describedby="tournament-notes-hint"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
+          <p id="tournament-notes-hint" className="text-caption text-slate-600 mt-1">
+            Everyone can see this on the public tournament page, so leave out anything private.
+          </p>
         </div>
 
         <div className="space-y-2 border-t border-line pt-3">

@@ -711,14 +711,15 @@ export const flatBookingFeeRelease = Object.freeze({
 })
 
 // Staging at 44 migrations (flat booking fee applied) plus the nine database fixes from the security
-// review of 2026-11-28, one migration per fix: online holds at most 30 days ahead and at most 2 sent
+// review of 2026-11-28, one migration per fix: online holds at most 30 days ahead and at most 4 sent
 // payments waiting per player and club; a locked sign-in stays locked for the right password (new
 // private auth_rate_limit_status); a club admin needs a confirmed email and is never a platform
 // account; at most 3 coach requests waiting per player and none while on hold; staff notes stay with
 // the club's admins; desk walk-in amounts and text are checked; a support inquiry inserted through
 // the API starts unanswered (new BEFORE INSERT trigger on public.support_inquiries); the coach side
 // works only for an active coach at an open club (new private coach_can_act), with limited lesson
-// threads; a member on hold cannot send a GCash payment. Eighteen functions are redefined in place
+// threads, and gives no coach a player's email (player_email stays, always null); a member on hold
+// cannot send a GCash payment. Eighteen functions are redefined in place
 // (create or replace keeps their grants); no table, policy or table grant changes. The
 // reservation-write pause is unchanged: hold_court_booking and submit_booking_payment are two of the
 // five checked member functions and keep writing only through themselves, the nine paused booking

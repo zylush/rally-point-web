@@ -145,7 +145,8 @@ export const securityFixesChecks = Object.freeze([
   'ledger_has_security_fixes', 'reservation_writes_still_paused', 'changed_functions_keep_settings',
   'changed_functions_signed_in_only', 'login_hook_for_auth_only', 'new_helpers_private', 'hold_window_and_payment_cap',
   'locked_login_stays_locked', 'club_admins_confirmed_not_platform', 'coach_requests_capped', 'member_notes_admins_only',
-  'walkin_entries_checked', 'inquiry_insert_guard_enabled', 'coach_side_active_coach_only', 'suspended_members_cannot_pay',
+  'walkin_entries_checked', 'inquiry_insert_guard_enabled', 'coach_side_active_coach_only',
+  'coach_requests_without_player_email', 'suspended_members_cannot_pay',
   'negative_walkin_charges', 'inquiries_inserted_answered', 'platform_accounts_with_club_roles', 'rows_over_new_limits',
 ])
 

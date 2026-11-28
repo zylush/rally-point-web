@@ -408,6 +408,10 @@ describe('Leaderboard pages & public views', () => {
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Winning team score must be higher than the losing team score.')
 
     await user.selectOptions(within(dialog).getByLabelText('Court (optional)'), 'c-1')
+    // Scorers are told the note is public before they write it.
+    expect(within(dialog).getByLabelText('Note (optional)')).toHaveAccessibleDescription(
+      'Everyone can see this on the public leaderboard, so leave out anything private.',
+    )
     await user.type(within(dialog).getByLabelText('Note (optional)'), 'Doubles league')
     await user.click(within(dialog).getByRole('button', { name: 'Team B won' }))
 

@@ -126,6 +126,24 @@ describe('rent-a-coach demo', () => {
       .toThrow('Coaching request not found')
   })
 
+  it('gives the coach the player’s name but never their email', () => {
+    // Mirrors coach_list_my_requests (20261128100700_coach_account_checks.sql). Owner decision
+    // (2026-11-28): coaches talk to players in the request's conversation.
+    const coachSlot = slot()
+    signIn(memberLogin)
+    const request = demoStore.memberRequestCoachSlot({ slot: coachSlot, student_count: 1, message: '' })
+    expect(demoStore.get().coachBookingRequests?.find((row) => row.request_id === request.request_id))
+      .not.toHaveProperty('player_email')
+
+    signIn(coachLogin)
+    expect(demoStore.coachListMyRequests()).toMatchObject([{ player_name: 'Mia Member', player_email: null }])
+    // Not even for a request saved with an email before this rule.
+    const db = demoStore.get()
+    for (const row of db.coachBookingRequests ?? []) row.player_email = 'member@brinely.info'
+    demoStore.set(db)
+    expect(JSON.stringify(demoStore.coachListMyRequests())).not.toContain('member@brinely.info')
+  })
+
   it('stops a removed coach, or one whose club is suspended, from working as a coach', () => {
     // Mirrors private.coach_can_act (20261128100700_coach_account_checks.sql).
     const coachSlot = slot()

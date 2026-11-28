@@ -230,6 +230,7 @@ describe('SuperadminPage', () => {
     const user = userEvent.setup()
     renderSection('clubs')
     const davao = await screen.findByRole('article', { name: 'Rally Point Davao' })
+    await user.click(within(davao).getByText('Admins and invites'))
     await user.type(within(davao).getByLabelText('Add an admin by email'), 'future.owner@example.invalid')
     await user.click(within(davao).getByRole('button', { name: 'Add admin' }))
 

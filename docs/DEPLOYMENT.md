@@ -2,20 +2,21 @@
 
 This runbook covers how bRineLy is hosted, what each setting is for, and how a change goes live. bRineLy is a static site: Vercel builds and serves the React app, and the browser talks straight to Supabase (database, sign-in and photo storage). There is no server of our own.
 
-There are two environments:
+There are three environments:
 
 | Environment | Deploys from | Supabase project | Data | Address |
 | --- | --- | --- | --- | --- |
-| Preview | every branch and pull request except `main` | staging, `Rally-Point-Database` (`iclrvvsiwypxlwrwgqia`) | test clubs and synthetic test accounts | the Vercel preview link, with a "Test site" banner |
+| Staging | `staging`, in the separate Vercel project `brinely-staging` | staging, `Rally-Point-Database` (`iclrvvsiwypxlwrwgqia`) | test clubs and synthetic test accounts | `https://brinely-staging.vercel.app` (or the name Vercel gives the project), open to anyone, with a "Test site" banner |
+| Preview | every other branch and pull request, in project `brinely` | staging, `Rally-Point-Database` (`iclrvvsiwypxlwrwgqia`) | test clubs and synthetic test accounts | the Vercel preview link, with a "Test site" banner |
 | Production | `main` | `brinely-production` (`tuttbvwnlndcstmmxybb`) | real clubs and players only | https://brinely.info (also `brinely.vercel.app`) |
 
-Each environment has its own database, sign-in users and Storage. Work is checked on a preview first, and merging into `main` puts it live.
+Each environment has its own database, sign-in users and Storage. Work is checked on a preview first, then on staging (the shared test site), and merging into `main` puts it live.
 
 ## 1. What runs where
 
 | Part | Where | Purpose |
 | --- | --- | --- |
-| Web app | Vercel project `brinely` | Builds `npm run build:vercel` into `dist/` and serves it, sending every address to `index.html` (`vercel.json`) |
+| Web app | Vercel projects `brinely` (production and previews) and `brinely-staging` (the `staging` branch) | Builds `npm run build:vercel` into `dist/` and serves it, sending every address to `index.html` (`vercel.json`) |
 | Database and API | Supabase (Postgres + PostgREST) | Tables, row-level security and checked `SECURITY DEFINER` functions. The browser calls `/rest/v1/` with the publishable key |
 | Sign-in | Supabase Auth | Email and password, with email confirmation |
 | Photos | Supabase Storage, buckets `court-photos` and `member-photos` | Created by migrations, with their policies on `storage.objects` |
@@ -49,6 +50,21 @@ browser ──https──► Supabase: /rest/v1 (data), /auth/v1 (sign-in), /sto
 
 The `vercel` build mode (`vite.config.ts`) decides the database from `VERCEL_ENV`: production builds must use the production project and every other build must use staging. The build stops if the URL, the key or the base path doesn't match.
 
+### The staging project (`brinely-staging`)
+
+Vercel locks preview links behind a Vercel sign-in, so the shared test site is a second Vercel project whose *production* branch is `staging`. Its production address is open to anyone, like brinely.info.
+
+| Setting | Value |
+| --- | --- |
+| Repository | the same GitHub repository |
+| Build settings | from `vercel.json`, as above |
+| Production branch | `staging` |
+| Production variables | `BRINELY_TARGET=staging` and the **staging** publishable key as `VITE_SUPABASE_ANON_KEY`. Leave `VITE_SUPABASE_URL` unset (`.env.vercel` gives the staging URL) |
+
+Because Vercel builds that branch as production, `BRINELY_TARGET=staging` is what keeps it on the staging database and shows the "Test site" banner. The variable can only choose staging. Any other value stops the build, and if it is missing the build stops with "Production requires the approved brinely-production URL", so staging data never goes out labelled as live. Never set it in the `brinely` project.
+
+Optionally, in the `brinely` project, skip the `staging` branch (Settings → Git → Ignored Build Step) so it isn't built twice.
+
 ## 4. Variables
 
 Set these in Vercel → Settings → Environment Variables, separately for each environment.
@@ -58,6 +74,7 @@ Set these in Vercel → Settings → Environment Variables, separately for each 
 | `VITE_SUPABASE_URL` | `https://tuttbvwnlndcstmmxybb.supabase.co` | (from `.env.vercel`: `https://iclrvvsiwypxlwrwgqia.supabase.co`) | Set it for Production. Preview reads it from `.env.vercel` |
 | `VITE_SUPABASE_ANON_KEY` | production publishable key | staging publishable key | Must be a publishable key, or a legacy anon key for the same project |
 | `VITE_BASE` | leave unset | leave unset | `.env.vercel` sets `/` |
+| `BRINELY_TARGET` | never set in `brinely` | never set | Only in `brinely-staging`'s Production environment: `staging` |
 
 Anything starting with `VITE_` ends up in the browser bundle, so only browser-safe values belong here. The build also sets `VITE_DATA_TARGET` ("Production" or "Staging") itself, and that decides whether the "Test site" banner shows. Don't set it by hand.
 
@@ -68,8 +85,8 @@ For each project, under Authentication:
 | Setting | Production | Staging |
 | --- | --- | --- |
 | Confirm email | On (owner invites depend on it) | On |
-| Site URL | `https://brinely.info` | the staging address in use |
-| Redirect URLs | brinely.info, www.brinely.info and brinely.vercel.app | the preview addresses in use |
+| Site URL | `https://brinely.info` | `https://brinely-staging.vercel.app` (the staging project's address) |
+| Redirect URLs | brinely.info, www.brinely.info and brinely.vercel.app | the staging project's address and any preview addresses in use |
 | SMTP | Resend, sender `no-reply@brinely.info` (still to do) | Supabase default |
 
 Without custom SMTP, Supabase sends only a few emails an hour and only to team addresses, and it doesn't allow editing the email templates. Real players can't confirm their accounts until SMTP is set.
@@ -129,6 +146,8 @@ Keep the Google Workspace MX, SPF and DKIM records, `resend._domainkey` and `_do
 | What you see | Likely cause |
 | --- | --- |
 | Vercel build fails with "Production requires the approved brinely-production URL" | Production's `VITE_SUPABASE_URL` is missing or points at staging |
+| `brinely-staging` build fails with "Production requires the approved brinely-production URL" | `BRINELY_TARGET=staging` is missing from its Production variables |
+| Build fails with "BRINELY_TARGET may only be …" | The variable has any value other than `staging` (check spelling, case and spaces) |
 | Build fails with "… requires a browser-safe publishable key" | The key is missing, is a secret key, or belongs to the other project |
 | A page on the live site is empty or shows "could not load" after a merge | Its migration isn't on production yet (step 6) |
 | "Test site" banner on brinely.info | The deployment wasn't built as Production (`VERCEL_ENV`), so check which deployment the domain points at |

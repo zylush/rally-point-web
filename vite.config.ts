@@ -11,10 +11,15 @@ type Target = { label: 'Staging' | 'Production'; project: string; database: stri
 
 // `staging` keeps the old GitHub Pages path. `vercel` serves the domain root: Vercel's production
 // builds (brinely.info) must use the production project, every other Vercel build uses staging.
+// The separate staging Vercel project deploys the `staging` branch as *its* production, so it sets
+// BRINELY_TARGET=staging to stay on the staging database. The variable can only choose staging,
+// never production, and any other value stops the build.
 function targetFor(mode: string): Target | undefined {
   if (mode === 'staging') return { label: 'Staging', project: stagingProject, database: 'Rally-Point-Database', base: pagesBase }
   if (mode !== 'vercel') return undefined
-  return process.env.VERCEL_ENV === 'production'
+  const forced = process.env.BRINELY_TARGET ?? ''
+  if (forced !== '' && forced !== 'staging') throw new Error('BRINELY_TARGET may only be "staging" or unset.')
+  return process.env.VERCEL_ENV === 'production' && forced !== 'staging'
     ? { label: 'Production', project: productionProject, database: 'brinely-production', base: '/' }
     : { label: 'Staging', project: stagingProject, database: 'Rally-Point-Database', base: '/' }
 }

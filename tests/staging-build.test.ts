@@ -113,6 +113,43 @@ describe('staging build target', () => {
     })
   })
 
+  describe('staging Vercel project (production branch `staging`, BRINELY_TARGET=staging)', () => {
+    const production = 'tuttbvwnlndcstmmxybb'
+    beforeEach(() => {
+      vi.stubEnv('VERCEL_ENV', 'production')
+      vi.stubEnv('BRINELY_TARGET', 'staging')
+      env.VITE_SUPABASE_ANON_KEY = 'sb_publishable_test-key-not-a-real-credential'
+    })
+
+    it('builds against staging with the "Test site" banner, at the domain root', async () => {
+      const result = await settings('vercel')
+      expect(result.base).toBe('/')
+      expect(result.build?.outDir).toBe('dist')
+      expect(result.define?.['import.meta.env.VITE_DATA_TARGET']).toBe('"Staging"')
+    })
+
+    it.each([
+      ['VITE_SUPABASE_URL', `https://${production}.supabase.co`],
+      ['VITE_SUPABASE_ANON_KEY', token('anon', production)],
+      ['VITE_SUPABASE_ANON_KEY', token('service_role')],
+    ])('refuses the production database or an unsafe key (%s)', async (name, value) => {
+      env[name] = value
+      await expect(settings('vercel')).rejects.toThrow('Staging requires')
+    })
+
+    it('stops a production build that forgot the variable instead of using staging data as live', async () => {
+      vi.stubEnv('BRINELY_TARGET', '')
+      await expect(settings('vercel')).rejects.toThrow('Production requires')
+    })
+
+    it.each(['production', 'Staging', 'prod', ' staging', 'staging '])('rejects any other value (%s)', async (value) => {
+      vi.stubEnv('BRINELY_TARGET', value)
+      await expect(settings('vercel')).rejects.toThrow('BRINELY_TARGET may only be')
+      vi.stubEnv('VERCEL_ENV', 'preview')
+      await expect(settings('vercel')).rejects.toThrow('BRINELY_TARGET may only be')
+    })
+  })
+
   it('keeps the Pages staging build off the domain root', async () => {
     env.VITE_BASE = '/'
     await expect(settings()).rejects.toThrow('Staging requires')

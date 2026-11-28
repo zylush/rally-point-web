@@ -77,7 +77,8 @@ select extensions.lives_ok(
   'a club without an account row can still record a charge');
 select extensions.is(
   (select commission_rate::text from public.platform_commissions where transaction_id = 'c6000000-0000-4000-8000-000000000009'),
-  '5.00', 'the default rate is used when terms are missing');
+  -- Since the flat booking fee (20261127110000) missing terms mean no percentage, not 5%.
+  '0.00', 'no percentage is charged when terms are missing');
 
 update public.transactions set verification_status = 'verified' where id = 'c6000000-0000-4000-8000-000000000001';
 select extensions.is(

@@ -53,6 +53,7 @@ import {
 } from './pages/Tournaments'
 import { homeFor } from './lib/roleHome'
 import { PrivacyNoticePage } from './pages/PrivacyNoticePage'
+import { TermsPage } from './pages/TermsPage'
 import { ClubDetailPage, ClubDirectory } from './pages/Clubs'
 import { PublicCoachesPage } from './pages/Coaches'
 import { WelcomePage } from './pages/Welcome'
@@ -100,6 +101,7 @@ function AppRoutes() {
       <Routes key={activeClub?.club_id ?? 'no-club'}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyNoticePage />} />
+        <Route path="/terms" element={<TermsPage />} />
         {/* Find a court & court booking environment: open to visitors; payment asks them to sign in. */}
         <Route path="/clubs" element={<ClubDirectory />} />
         <Route path="/clubs/:slug" element={<ClubDetailPage />} />

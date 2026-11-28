@@ -681,6 +681,78 @@ describe('staging releases', () => {
     expect(postflight).toContain('= 44')
   })
 
+  it('builds the security fixes release on the 44-migration state, not approved, and re-runs every earlier check', async () => {
+    const { flatBookingFeeRelease, securityFixesRelease, releaseManifest, releases, verifyApplyGate } = await load()
+    const { securityFixesChecks } = await import('../scripts/club-platform-checks.mjs')
+    const { releaseApprovals } = await import('../scripts/staging-release-approvals.mjs')
+    expect(securityFixesRelease.baseVersions).toEqual([...flatBookingFeeRelease.baseVersions, '20261127110000'])
+    expect(securityFixesRelease.baseVersions).toHaveLength(44)
+    expect(securityFixesRelease.baseVersions.at(-1)).toBe('20261127110000')
+    expect(securityFixesRelease.migrations).toEqual(['20261128100000_booking_hold_limits.sql',
+      '20261128100100_login_lockout_valid_password.sql', '20261128100200_admin_assign_confirmed_email.sql',
+      '20261128100300_coach_request_limits.sql', '20261128100400_member_notes_private.sql',
+      '20261128100500_desk_walkin_checks.sql', '20261128100600_support_inquiry_insert_guard.sql',
+      '20261128100700_coach_account_checks.sql', '20261128100800_suspended_member_payments.sql'])
+    expect(securityFixesRelease.stateCheck).toEqual({ file: 'flat_booking_fee_postflight.sql', kind: 'flatBookingFee' })
+    expect(securityFixesRelease.postChecks.map((check: { kind: string, ignore: string[] }) => [check.kind, [...check.ignore]]).slice(0, 3)).toEqual([
+      ['securityFixes', []],
+      ['flatBookingFee', ['ledger_has_flat_booking_fee']],
+      ['coachesCourtTypes', ['ledger_has_coaches_court_types']],
+    ])
+    // Every earlier postflight still runs, with the ignores the flat-fee release gave it.
+    expect(securityFixesRelease.postChecks.slice(2)).toEqual(flatBookingFeeRelease.postChecks.slice(1))
+    expect(securityFixesRelease.isolation).toEqual({ file: 'two_club_isolation_confirmed.sql', plan: 55 })
+    expect(securityFixesRelease.files).toContain('supabase/verification/two_club_isolation_confirmed.sql')
+    expect(securityFixesRelease.files).not.toContain('supabase/verification/two_club_isolation_flat_fee.sql')
+    expect(securityFixesRelease.files).not.toContain('supabase/verification/two_club_isolation.sql')
+    const earlier = Object.values(releases).filter(release => release !== securityFixesRelease)
+      .flatMap((release: { dirs: object, databases: object }) => [...Object.values(release.dirs), ...Object.values(release.databases)])
+    expect([...Object.values(securityFixesRelease.dirs), ...Object.values(securityFixesRelease.databases)]
+      .filter(name => earlier.includes(name))).toEqual([])
+
+    const { manifest, sha256, contents } = releaseManifest(securityFixesRelease)
+    expect(sha256).toMatch(/^[a-f0-9]{64}$/)
+    expect(manifest.files.map((file: { path: string }) => file.path)).toEqual([...securityFixesRelease.files])
+    // Only the owner approves, by this manifest's SHA-256; until then the apply gate refuses it.
+    const approvals: Record<string, string | null> = releaseApprovals
+    const approvedSha = approvals['security-fixes-20261128'] ?? null
+    expect(approvedSha).toBeNull()
+    expect(() => verifyApplyGate({ manifestSha256: sha256, approvedSha })).toThrow('not been approved')
+
+    const text = (name: string) => contents.get(`supabase/migrations/${name}`)?.toString('utf8') ?? ''
+    const body = (sql: string, name: string) => {
+      const start = sql.indexOf(`create or replace function ${name}(`)
+      return start < 0 ? '' : sql.slice(start, sql.indexOf('$$;', start) + 3)
+    }
+    const paused = /\b(insert into|update|delete from)\s+public\.(bookings|court_sessions|open_plays|open_play_signups|court_allocations|courts)\b/i
+    const charges = /\b(insert into|update|delete from)\s+public\.transactions\b/i
+    for (const name of securityFixesRelease.migrations) {
+      const sql = text(name)
+      expect(sql.length).toBeGreaterThan(0)
+      // Bookings are written only inside the two checked member functions, as before.
+      const outside = sql.replace(body(sql, 'public.hold_court_booking'), '').replace(body(sql, 'public.submit_booking_payment'), '')
+      expect(outside).not.toMatch(paused)
+      // Charges only by the desk walk-in function, as before.
+      expect(sql.replace(body(sql, 'public.create_desk_walkin'), '')).not.toMatch(charges)
+      // create or replace keeps every grant: nothing is granted or opened to visitors, and no table,
+      // policy or view changes.
+      expect(sql).not.toMatch(/^\s*grant\b/im)
+      expect(sql).not.toMatch(/\bto\s+anon\b/i)
+      expect(sql).not.toMatch(/\b(create|alter|drop)\s+(table|policy|view)\b/i)
+    }
+    expect(body(text('20261128100000_booking_hold_limits.sql'), 'public.hold_court_booking')).toMatch(paused)
+    expect(body(text('20261128100800_suspended_member_payments.sql'), 'public.submit_booking_payment')).toMatch(/\bupdate public\.bookings\b/)
+    expect(body(text('20261128100500_desk_walkin_checks.sql'), 'public.create_desk_walkin').match(/insert into public\.transactions\b/g)).toHaveLength(1)
+    // One new trigger, on support inquiries; none on auth.users.
+    expect(securityFixesRelease.migrations.map(text).join('\n').match(/\bcreate (or replace )?trigger\b/gi)).toHaveLength(1)
+    expect(text('20261128100600_support_inquiry_insert_guard.sql'))
+      .toMatch(/create trigger support_inquiries_insert_guard\s+before insert on public\.support_inquiries\s+for each row/)
+    const postflight = contents.get('supabase/verification/security_fixes_postflight.sql')?.toString('utf8') ?? ''
+    expect([...postflight.matchAll(/select \d+, '([a-z_]+)'/g)].map(match => match[1])).toEqual([...securityFixesChecks])
+    for (const name of securityFixesRelease.migrations) expect(postflight).toContain(`'${name.slice(0, 14)}'`)
+    expect(postflight).toContain('= 53')
+  })
+
   it('hashes the release definition and every file, and returns the bytes it hashed', async () => {
     const { releaseManifest } = await load()
     const { dir, release } = releaseFixture()

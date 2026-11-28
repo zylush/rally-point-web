@@ -710,6 +710,60 @@ export const flatBookingFeeRelease = Object.freeze({
     dryRun: 'rally_staging_backup_20261128_flat_fee_r1_dryrun' }),
 })
 
+// Staging at 44 migrations (flat booking fee applied) plus the nine database fixes from the security
+// review of 2026-11-28, one migration per fix: online holds at most 30 days ahead and at most 2 sent
+// payments waiting per player and club; a locked sign-in stays locked for the right password (new
+// private auth_rate_limit_status); a club admin needs a confirmed email and is never a platform
+// account; at most 3 coach requests waiting per player and none while on hold; staff notes stay with
+// the club's admins; desk walk-in amounts and text are checked; a support inquiry inserted through
+// the API starts unanswered (new BEFORE INSERT trigger on public.support_inquiries); the coach side
+// works only for an active coach at an open club (new private coach_can_act), with limited lesson
+// threads; a member on hold cannot send a GCash payment. Eighteen functions are redefined in place
+// (create or replace keeps their grants); no table, policy or table grant changes. The
+// reservation-write pause is unchanged: hold_court_booking and submit_booking_payment are two of the
+// five checked member functions and keep writing only through themselves, the nine paused booking
+// functions and the paused tables' grants are not touched, and create_desk_walkin writes walk-ins
+// and charges, not reservations. No trigger is added to auth.users, so the capture's sign-up trigger
+// step holds. Not approved: the apply refuses it until the owner's approval of its manifest SHA-256
+// is recorded.
+const securityFixesMigrations = Object.freeze(['20261128100000_booking_hold_limits.sql',
+  '20261128100100_login_lockout_valid_password.sql', '20261128100200_admin_assign_confirmed_email.sql',
+  '20261128100300_coach_request_limits.sql', '20261128100400_member_notes_private.sql',
+  '20261128100500_desk_walkin_checks.sql', '20261128100600_support_inquiry_insert_guard.sql',
+  '20261128100700_coach_account_checks.sql', '20261128100800_suspended_member_payments.sql'])
+export const securityFixesRelease = Object.freeze({
+  id: 'security-fixes-20261128',
+  title: 'Security review fixes',
+  baseVersions: Object.freeze([...flatBookingFeeRelease.baseVersions, '20261127110000'].sort()),
+  migrations: securityFixesMigrations,
+  // The SQL that runs and the code that runs it. Approval pins all of these bytes.
+  files: Object.freeze([...securityFixesMigrations.map(name => `supabase/migrations/${name}`),
+    'supabase/verification/security_fixes_postflight.sql',
+    'supabase/verification/two_club_isolation_confirmed.sql',
+    ...flatBookingFeeRelease.files.filter(path => (path.startsWith('supabase/verification/') || path.startsWith('scripts/'))
+      && path !== 'supabase/verification/two_club_isolation_flat_fee.sql')]),
+  stateCheck: Object.freeze({ file: 'flat_booking_fee_postflight.sql', kind: 'flatBookingFee' }),
+  postChecks: Object.freeze([
+    Object.freeze({ file: 'security_fixes_postflight.sql', kind: 'securityFixes', ignore: Object.freeze([]) }),
+    // Earlier postflights count 22 to 44 migrations; this release brings staging to 53.
+    Object.freeze({ file: 'flat_booking_fee_postflight.sql', kind: 'flatBookingFee',
+      ignore: Object.freeze(['ledger_has_flat_booking_fee']) }),
+    ...flatBookingFeeRelease.postChecks.slice(1),
+  ]),
+  // platform_assign_club_admin now makes only an account with a confirmed email a club admin, so this
+  // release (and later ones) use the copy whose fixture accounts are confirmed; the earlier copies stay
+  // frozen for the releases that pinned them.
+  isolation: Object.freeze({ file: 'two_club_isolation_confirmed.sql', plan: 55 }),
+  dirs: Object.freeze({
+    capture: 'docs/release-private/staging-backup-20261128-security-r1',
+    restore: 'docs/release-private/staging-backup-restore-20261128-security-r1',
+    dryRun: 'docs/release-private/security-fixes-staging-dryrun-20261128-r1',
+    apply: 'docs/release-private/security-fixes-staging-apply-20261128-r1',
+  }),
+  databases: Object.freeze({ restore: 'rally_staging_backup_20261128_security_r1_restore',
+    dryRun: 'rally_staging_backup_20261128_security_r1_dryrun' }),
+})
+
 export const releases = Object.freeze({ [advisorFixesRelease.id]: advisorFixesRelease,
   [advisorFollowupRelease.id]: advisorFollowupRelease, [courtMarketplaceRelease.id]: courtMarketplaceRelease,
   [courtPhotosRelease.id]: courtPhotosRelease, [clubProfileRelease.id]: clubProfileRelease,
@@ -720,7 +774,8 @@ export const releases = Object.freeze({ [advisorFixesRelease.id]: advisorFixesRe
   [leaderboardTournamentsRelease.id]: leaderboardTournamentsRelease,
   [tournamentFixesRelease.id]: tournamentFixesRelease,
   [coachesCourtTypesRelease.id]: coachesCourtTypesRelease,
-  [flatBookingFeeRelease.id]: flatBookingFeeRelease })
+  [flatBookingFeeRelease.id]: flatBookingFeeRelease,
+  [securityFixesRelease.id]: securityFixesRelease })
 
 export function getRelease(id) {
   assert.ok(Object.hasOwn(releases, id ?? ''), `Unknown release: ${id}. Known: ${Object.keys(releases).join(', ')}`)

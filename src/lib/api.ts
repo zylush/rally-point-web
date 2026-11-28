@@ -2110,35 +2110,28 @@ export const api = {
       )
     },
 
-    /** Sends a booking email card ('booking_submitted' or 'booking_confirmed') via the Resend Edge Function (or simulates cleanly in demo mode). */
+    /**
+     * Emails the signed-in player about one of their own bookings through the
+     * send-booking-email Edge Function. Only the booking and its club are sent: the function
+     * reads the booking as this player, writes the email from what the database says
+     * (confirmed by the club, or payment sent and waiting for the club) and sends it only to
+     * the account's own email address. `recipientEmail` is only for the note shown on screen.
+     * Demo mode sends nothing and just shows the note.
+     */
     async sendBookingConfirmationEmail(opts: {
       booking: Booking
-      clubName: string
-      venueName?: string
       recipientEmail: string
-      kind?: 'booking_submitted' | 'booking_confirmed'
     }): Promise<{ sent: boolean; preview: string }> {
       const timeWindow = `${fmtDateTime(opts.booking.start_at)} – ${fmtTime(opts.booking.end_at)} (${opts.booking.hours}h)`
       const preview = `Receipt sent to ${opts.recipientEmail} for ${opts.booking.court?.name ?? 'Court'} · ${timeWindow}`
       if (isDemoMode) return { sent: true, preview }
       try {
-        const { error } = await supabase!.functions.invoke('send-booking-email', {
-          body: {
-            kind: opts.kind ?? 'booking_confirmed',
-            bookingId: opts.booking.id,
-            clubName: opts.clubName,
-            venueName: opts.venueName ?? null,
-            courtName: opts.booking.court?.name ?? 'Court',
-            startAt: opts.booking.start_at,
-            endAt: opts.booking.end_at,
-            hours: opts.booking.hours,
-            amount: opts.booking.amount,
-            paymentRef: opts.booking.payment_ref ?? null,
-            recipientEmail: opts.recipientEmail,
-          },
+        const { data, error } = await supabase!.functions.invoke('send-booking-email', {
+          body: { bookingId: opts.booking.id, clubId: opts.booking.club_id ?? requireActiveClubId() },
         })
         if (error) return { sent: false, preview }
-        return { sent: true, preview }
+        // The function answers { sent: false } while email is not set up, so only a real send counts.
+        return { sent: (data as { sent?: unknown } | null)?.sent === true, preview }
       } catch {
         return { sent: false, preview }
       }

@@ -749,12 +749,12 @@ describe('member booking and pass pages', () => {
       expect(screen.getByText(/These 2 hours now show as Booked\.\s+No refunds\./)).toBeInTheDocument()
       expect(await screen.findByText(RECEIPT)).toBeInTheDocument()
       expect(apiMock.sendBookingConfirmationEmail).toHaveBeenCalledTimes(1)
-      expect(apiMock.sendBookingConfirmationEmail).toHaveBeenCalledWith(expect.objectContaining({
-        // The receipt carries the GCash reference the player sent.
-        booking: expect.objectContaining({ id: twoHourBooking.id, hours: 2, payment_ref: REFERENCE }),
+      // Only the booking and the account's own address: the email service reads the club,
+      // location and GCash reference from the database itself.
+      expect(apiMock.sendBookingConfirmationEmail).toHaveBeenCalledWith({
+        booking: expect.objectContaining({ id: twoHourBooking.id, hours: 2 }),
         recipientEmail: memberUser.email,
-        venueName: venue.name,
-      }))
+      })
 
       const availCallsBeforeReturn = apiMock.availability.mock.calls.length
       const memberCallsBeforeReturn = apiMock.memberForUser.mock.calls.length
@@ -871,10 +871,10 @@ describe('member booking and pass pages', () => {
     expect(await screen.findByText('Booking confirmed')).toBeInTheDocument()
     expect(await screen.findByText(RECEIPT)).toBeInTheDocument()
     expect(apiMock.sendBookingConfirmationEmail).toHaveBeenCalledTimes(1)
-    expect(apiMock.sendBookingConfirmationEmail).toHaveBeenCalledWith(expect.objectContaining({
-      clubName: 'Rally Point Davao',
+    expect(apiMock.sendBookingConfirmationEmail).toHaveBeenCalledWith({
+      booking: expect.objectContaining({ id: booking.id }),
       recipientEmail: memberUser.email,
-    }))
+    })
   })
 
   it('carries on into checkout with the saved pick when the screen reloads after signing in', async () => {

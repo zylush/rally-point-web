@@ -11,7 +11,8 @@ import {
 /*
  * All bRineLy email cards (sign-up auth, booking email, booking confirmation, password reset)
  * keep the quiet court look (solid navy header, hairlines, sentence case) and escape every
- * value the client sends.
+ * value they show: club, location and court names are typed by club admins. The request
+ * handling (who may ask, which booking) is in tests/send-booking-email-handler.test.ts.
  */
 const payload: BookingEmailPayload = {
   bookingId: 'b-1',
@@ -87,7 +88,7 @@ describe('booking confirmation email', () => {
     expect(resetTemplate).toContain('no-reply@brinely.info')
   })
 
-  it('escapes every value the client sends', () => {
+  it('escapes every value it shows', () => {
     const { html } = buildBookingEmail({
       ...payload,
       clubName: '<b>Club</b> & "Co"',
@@ -122,8 +123,11 @@ describe('booking confirmation email', () => {
 
   it('defaults to the bRineLy no-reply@brinely.info sender, still overridable by RESEND_FROM_EMAIL', () => {
     expect(DEFAULT_FROM_EMAIL).toBe('bRineLy <no-reply@brinely.info>')
-    const source = readFileSync('supabase/functions/send-booking-email/index.ts', 'utf8')
-    expect(source).toContain("Deno.env.get('RESEND_FROM_EMAIL')?.trim() || DEFAULT_FROM_EMAIL")
-    expect(source).not.toContain('resend.dev')
+    // index.ts hands Deno.env.get to the handler as `env`.
+    const handler = readFileSync('supabase/functions/send-booking-email/handler.ts', 'utf8')
+    expect(handler).toContain("env('RESEND_FROM_EMAIL')?.trim() || DEFAULT_FROM_EMAIL")
+    const index = readFileSync('supabase/functions/send-booking-email/index.ts', 'utf8')
+    expect(index).toContain('env: (name) => Deno.env.get(name)')
+    for (const source of [handler, index]) expect(source).not.toContain('resend.dev')
   })
 })

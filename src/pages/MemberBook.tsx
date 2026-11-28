@@ -786,21 +786,15 @@ export function MemberBook() {
 
   /**
    * Emails the receipt once the club has confirmed a booking. Each booking is sent once, and
-   * a failure never undoes the booking.
+   * a failure never undoes the booking. The email service reads the booking itself (club,
+   * location, GCash reference) and sends it only to this account's own address.
    */
   async function sendConfirmationEmail(done: Booking) {
     if (!user?.email || emailedRef.current.has(done.id)) return
     emailedRef.current.add(done.id)
     if (typeof api.sendBookingConfirmationEmail !== 'function') return
     try {
-      const venueObj = venues.find((v) => v.id === (done.venue_id ?? venueId))
-      const receipt = await api.sendBookingConfirmationEmail({
-        // The receipt shows the GCash reference the player sent.
-        booking: { ...done, payment_ref: done.payment_ref ?? done.payment_reference ?? null },
-        clubName: clubName ?? activeClub?.name ?? 'bRineLy',
-        venueName: venueObj?.name,
-        recipientEmail: user.email,
-      })
+      const receipt = await api.sendBookingConfirmationEmail({ booking: done, recipientEmail: user.email })
       if (receipt?.sent && receipt.preview) setEmailReceipt({ bookingId: done.id, text: receipt.preview })
     } catch {
       // Email receipt failures never roll back a confirmed booking.

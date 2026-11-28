@@ -2,11 +2,13 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import { isDemoMode, supabase } from '../lib/supabase'
 import { demoStore } from '../lib/demoStore'
+import { clearCachedPasses } from '../lib/passCache'
 import { api } from '../lib/api'
 import {
   CLUB_UNAVAILABLE_EVENT,
@@ -15,13 +17,27 @@ import {
   rememberClub,
   setActiveClubId,
 } from '../lib/clubContext'
-import type { MyClub, Profile } from '../types'
-import { AuthContext } from './AuthContext'
+import type { MyClub, OwnerClub, Profile } from '../types'
+import { AuthContext, type SignUpResult } from './AuthContext'
 
 interface Access {
   profile: Profile
   clubs: MyClub[]
   activeClub: MyClub | null
+  /** Clubs the person owns through an owner invite (any status). */
+  ownerClubs: OwnerClub[]
+}
+
+/**
+ * A plain message for a court owner who cannot use the app yet: their only club
+ * is still being set up, or a sign-up landed them in their own club's admin
+ * screens. It replaces the generic "profile is not ready" error.
+ */
+class OwnerNotice extends Error {}
+
+function ownerNames(clubs: OwnerClub[]) {
+  const names = clubs.map((club) => club.name)
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 /**
@@ -30,20 +46,37 @@ interface Access {
  * from profiles.role. Returns null when the person has no access anywhere.
  */
 async function loadAccess(identity: Profile, preferredClubId?: string | null): Promise<Access | null> {
-  const [clubs, platform] = await Promise.all([api.myClubs(identity.id), api.platformAccess(identity.id)])
+  // The owner check runs with the other lookups, while the session is certainly
+  // still open. It takes up any owner invites for a confirmed email; it never
+  // fails the sign-in (it answers "no owner clubs" when it cannot tell).
+  const [ownerClubs, firstClubs, platform] = await Promise.all([
+    api.claimOwnerClubs(),
+    api.myClubs(identity.id),
+    api.platformAccess(identity.id),
+  ])
   if (platform === 'superadmin') {
     // Platform accounts work in the platform portal only, with no club context.
     setActiveClubId(null)
-    return { profile: { ...identity, role: 'superadmin' }, clubs: [], activeClub: null }
+    return { profile: { ...identity, role: 'superadmin' }, clubs: [], activeClub: null, ownerClubs: [] }
   }
+  // An invite taken up just now for an open club: read the club list once more.
+  const clubs = ownerClubs.some((owned) => owned.status === 'active' && !firstClubs.some((club) => club.club_id === owned.club_id))
+    ? await api.myClubs(identity.id)
+    : firstClubs
   const activeClub = chooseActiveClub(clubs, identity.id, preferredClubId)
   if (!activeClub) {
     setActiveClubId(null)
+    const waiting = ownerClubs.filter((club) => club.status === 'provisioning')
+    if (waiting.length) {
+      throw new OwnerNotice(
+        `Your owner account is ready. ${ownerNames(waiting)} ${waiting.length === 1 ? 'is' : 'are'} still being set up. You can log in as soon as bRineLy opens ${waiting.length === 1 ? 'it' : 'them'}.`,
+      )
+    }
     return null
   }
   setActiveClubId(activeClub.club_id)
   rememberClub(identity.id, activeClub.club_id)
-  return { profile: { ...identity, role: activeClub.role }, clubs, activeClub }
+  return { profile: { ...identity, role: activeClub.role }, clubs, activeClub, ownerClubs }
 }
 
 async function fetchIdentity(userId: string): Promise<Profile | null> {
@@ -56,9 +89,15 @@ async function fetchIdentity(userId: string): Promise<Profile | null> {
 const profileSetupError =
   'Your club profile is not ready. Please try again or contact staff.'
 
+/** The owner's own message when there is one; otherwise the usual setup error. */
+function accessError(error: unknown) {
+  return error instanceof OwnerNotice ? error : new Error(profileSetupError)
+}
+
 const invalidClubLinkError = 'This club link is not valid. Ask the club for a new link.'
 
 async function clearUnauthorizedSession() {
+  clearCachedPasses()
   if (!supabase) return
   try {
     const { error } = await supabase.auth.signOut()
@@ -126,7 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh()
     if (!isDemoMode && supabase) {
-      const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+        // Signed out in another tab, or the session ended: drop this phone's saved QR codes.
+        if (event === 'SIGNED_OUT') clearCachedPasses()
         void refresh()
       })
       return () => sub.subscription.unsubscribe()
@@ -143,7 +184,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     if (isDemoMode) {
       const identity = demoStore.login(email, password)
-      const access = await loadAccess(identity)
+      let access: Access | null
+      try {
+        access = await loadAccess(identity)
+      } catch (error) {
+        demoStore.logout()
+        applyAccess(null)
+        throw accessError(error)
+      }
       if (!access) {
         demoStore.logout()
         applyAccess(null)
@@ -163,15 +211,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!access) throw new Error(profileSetupError)
       applyAccess(access)
       return access.profile
-    } catch {
+    } catch (error) {
       applyAccess(null)
       await clearUnauthorizedSession()
-      throw new Error(profileSetupError)
+      throw accessError(error)
     }
   }, [applyAccess])
 
+  // The club a pending sign-up came from, so confirming the code opens that club.
+  // It only picks among the person's trusted clubs; it never grants access.
+  const pendingSignup = useRef<{ email: string; clubId?: string } | null>(null)
+
+  /** After a new account has a session: load trusted access and accept only a member. */
+  const finishMemberSignup = useCallback(
+    async (userId: string, preferredClubId?: string) => {
+      try {
+        const identity = await fetchIdentity(userId)
+        const access = identity ? await loadAccess(identity, preferredClubId) : null
+        if (access && access.profile.role !== 'member') {
+          // Sign-up only ever opens a member's screens. An owner whose club is
+          // already open is told to log in, which opens their admin screens.
+          const owned = access.ownerClubs.find((club) => club.club_id === access.activeClub?.club_id)
+          if (owned) throw new OwnerNotice(`Your owner account is ready. Log in to manage ${owned.name}.`)
+        }
+        if (!access || access.profile.role !== 'member') throw new Error(profileSetupError)
+        applyAccess(access)
+        return access.profile
+      } catch (error) {
+        applyAccess(null)
+        await clearUnauthorizedSession()
+        throw accessError(error)
+      }
+    },
+    [applyAccess],
+  )
+
   const signUpMember = useCallback(
-    async (input: { email: string; password: string; full_name: string; phone?: string; clubSlug?: string }) => {
+    async (input: {
+      email: string
+      password: string
+      full_name: string
+      phone?: string
+      clubSlug?: string
+    }): Promise<SignUpResult> => {
       const email = input.email.trim().toLowerCase()
       const full_name = input.full_name.trim()
       if (!full_name) throw new Error('Please enter your name')
@@ -190,10 +272,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           phone: input.phone?.trim() || undefined,
           clubSlug,
         })
-        const access = await loadAccess(identity, joining?.id)
+        let access: Access | null
+        try {
+          access = await loadAccess(identity, joining?.id)
+        } catch (error) {
+          demoStore.logout()
+          throw accessError(error)
+        }
         if (!access) throw new Error(profileSetupError)
         applyAccess(access)
-        return access.profile
+        return { status: 'signed_in', profile: access.profile }
       }
       if (!supabase) throw new Error('Supabase not configured')
 
@@ -209,27 +297,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error
       if (!data.user) throw new Error('Sign-up failed')
 
-      // If email confirmation is ON, session may be null
+      // With email confirmation on there is no session yet: the person types
+      // the code from the email, then verifySignupCode signs them in.
       if (!data.session) {
-        throw new Error(
-          'Check your email to confirm your account, then log in. (Or turn off email confirm in Supabase Auth for instant join.)',
-        )
+        pendingSignup.current = { email, clubId: joining?.id }
+        return { status: 'needs_code', email }
       }
 
-      try {
-        const identity = await fetchIdentity(data.user.id)
-        const access = identity ? await loadAccess(identity, joining?.id) : null
-        if (!access || access.profile.role !== 'member') throw new Error(profileSetupError)
-        applyAccess(access)
-        return access.profile
-      } catch {
-        applyAccess(null)
-        await clearUnauthorizedSession()
-        throw new Error(profileSetupError)
-      }
+      pendingSignup.current = null
+      const profile = await finishMemberSignup(data.user.id, joining?.id)
+      return { status: 'signed_in', profile }
     },
-    [applyAccess],
+    [applyAccess, finishMemberSignup],
   )
+
+  const verifySignupCode = useCallback(
+    async (rawEmail: string, rawCode: string) => {
+      if (isDemoMode) throw new Error('Sign-up codes are not used in the demo')
+      if (!supabase) throw new Error('Supabase not configured')
+      const email = rawEmail.trim().toLowerCase()
+      const token = rawCode.replace(/\D/g, '')
+      const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'signup' })
+      if (error) throw error
+      const uid = data.user?.id ?? data.session?.user?.id
+      if (!uid) throw new Error('No user returned')
+      const pending = pendingSignup.current
+      const clubId = pending?.email === email ? pending.clubId : undefined
+      pendingSignup.current = null
+      return finishMemberSignup(uid, clubId)
+    },
+    [finishMemberSignup],
+  )
+
+  const resendSignupCode = useCallback(async (rawEmail: string) => {
+    if (isDemoMode) throw new Error('Sign-up codes are not used in the demo')
+    if (!supabase) throw new Error('Supabase not configured')
+    const { error } = await supabase.auth.resend({ type: 'signup', email: rawEmail.trim().toLowerCase() })
+    if (error) throw error
+  }, [])
 
   const joinClub = useCallback(
     async (slug: string, options?: { asPlayer?: boolean }) => {
@@ -270,7 +375,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
   }, [])
 
+  const signInWithGoogle = useCallback(async () => {
+    if (isDemoMode) {
+      throw new Error('Google sign-in is available in live mode. Use a quick demo account or email below.')
+    }
+    if (!supabase) throw new Error('Supabase not configured')
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href },
+    })
+    if (error) throw error
+  }, [])
+
   const signOut = useCallback(async () => {
+    // The next person on a shared phone must not see this person's QR codes.
+    clearCachedPasses()
     if (isDemoMode) {
       demoStore.logout()
       applyAccess(null)
@@ -290,12 +409,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       switchClub,
       joinClub,
       signIn,
+      signInWithGoogle,
       signUpMember,
+      verifySignupCode,
+      resendSignupCode,
       resetPassword,
       signOut,
       refresh,
     }),
-    [user, loading, clubs, activeClub, switchClub, joinClub, signIn, signUpMember, resetPassword, signOut, refresh],
+    [user, loading, clubs, activeClub, switchClub, joinClub, signIn, signInWithGoogle, signUpMember, verifySignupCode, resendSignupCode, resetPassword, signOut, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

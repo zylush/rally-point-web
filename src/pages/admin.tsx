@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Clock3, Pencil, Plus, Search, UserPlus, Users } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Clock3, Pencil, Plus, Search, UserPlus } from 'lucide-react'
 import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
 import { BackButton } from '../components/BackButton'
 import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import { stagger } from '../lib/motion'
 import { isDemoMode } from '../lib/supabase'
 import type {
   Court,
   CourtSession,
-  DashboardStats,
   Member,
   MembershipType,
   MemberStatus,
@@ -40,43 +38,6 @@ function RowShapes({ count, pill = false }: { count: number; pill?: boolean }) {
         </div>
       ))}
     </>
-  )
-}
-
-/** A big number with its small label above, as in the admin home stat cards. */
-function StatShape() {
-  return (
-    <>
-      <SkeletonLine size="caption" className="w-20" />
-      <div className="mt-1 flex h-9 items-center">
-        <div className="skeleton h-7 w-16" />
-      </div>
-    </>
-  )
-}
-
-function AdminHomeLoading() {
-  return (
-    <LoadingShapes label="Loading admin home…">
-      <div className="space-y-4" aria-hidden>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="skeleton col-span-2 h-[93px] rounded-[18px]!" />
-          <div className="card p-4"><StatShape /></div>
-          <div className="card p-4"><StatShape /></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {Array.from({ length: 7 }, (_, key) => (
-            <SkeletonBlock key={key} className="h-12 w-full rounded-[16px]!" />
-          ))}
-        </div>
-        <div className="card p-4">
-          <div className="mb-1 flex h-12 items-center">
-            <SkeletonLine size="subtitle" className="w-40" />
-          </div>
-          <RowShapes count={5} />
-        </div>
-      </div>
-    </LoadingShapes>
   )
 }
 
@@ -117,94 +78,7 @@ function MemberFormLoading() {
   )
 }
 
-export function AdminHome() {
-  const { user } = useAuth()
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [txs, setTxs] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    void (async () => {
-      const [s, t] = await Promise.all([api.stats(), api.transactions()])
-      setStats(s)
-      setTxs(t.slice(0, 5))
-      setLoading(false)
-    })()
-  }, [])
-
-  return (
-    <AppShell role="admin">
-      <AppHeader title="Admin home" subtitle={user?.full_name} right={<SignOutButton />} />
-      <main className="safe-bottom px-4 pt-4 space-y-4">
-        {loading || !stats ? (
-          <AdminHomeLoading />
-        ) : (
-          <>
-            <section className="enter-rise grid grid-cols-2 gap-3">
-              <div className="stat-card col-span-2">
-                <p className="text-teal-100 text-xs font-bold uppercase">{isDemoMode ? 'Revenue today' : 'Recorded charges today'}</p>
-                <p className="text-3xl font-extrabold mt-1">{peso(stats.revenue_today)}</p>
-              </div>
-              <div className="card p-4">
-                <p className="text-xs font-bold uppercase text-slate-400">Members</p>
-                <p className="text-3xl font-extrabold mt-1">{stats.members}</p>
-              </div>
-              <div className="card p-4">
-                <p className="text-xs font-bold uppercase text-slate-400">Active now</p>
-                <p className="text-3xl font-extrabold mt-1">{stats.active_now}</p>
-              </div>
-            </section>
-
-            <div className="enter-rise grid grid-cols-2 gap-3" style={stagger(1)}>
-                          <Link to="/admin/members" className="btn-secondary text-sm">
-                            <Users size={16} /> Members
-                          </Link>
-                          <Link to="/admin/ops" className="btn-primary text-sm">
-                            Floor ops
-                          </Link>
-                          <Link to="/admin/board" className="btn-secondary text-sm">
-                            Schedule board
-                          </Link>
-                          <Link to="/admin/open" className="btn-secondary text-sm">
-                            Open play
-                          </Link>
-                          <Link to="/admin/bookings" className="btn-secondary text-sm">
-                            Bookings
-                          </Link>
-                          <Link to="/admin/users" className="btn-secondary text-sm">
-                            Users
-                          </Link>
-                          <Link to="/admin/venues" className="btn-secondary text-sm">
-                            Venues & courts
-                          </Link>
-                        </div>
-
-            <section className="enter-rise card p-4" style={stagger(2)}>
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="font-extrabold">Latest transactions</h2>
-                <Link
-                  to="/admin/transactions"
-                  className="control-feedback px-2 text-xs font-bold text-brand-700 inline-flex items-center"
-                >
-                  All
-                </Link>
-              </div>
-              {txs.map((t) => (
-                <div key={t.id} className="list-row">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{t.description}</p>
-                    <p className="text-xs text-slate-400">{fmtDate(t.created_at)}</p>
-                  </div>
-                  <p className="font-bold text-sm">{peso(t.amount)}{!isDemoMode || t.verification_status === 'unverified' ? ' recorded' : ''}</p>
-                </div>
-              ))}
-            </section>
-          </>
-        )}
-      </main>
-      </AppShell>
-  )
-}
+export { AdminHome } from './AdminHome'
 
 export function AdminMembers() {
   const nav = useNavigate()
@@ -537,7 +411,7 @@ export function AdminOps() {
             </select>
           </section>
         ) : null}
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="text-tabs text-tabs-fill" role="group" aria-label="Floor ops">
           {(
             [
               ['playing', 'Playing'],
@@ -550,10 +424,8 @@ export function AdminOps() {
             <button
               key={k}
               type="button"
+              aria-pressed={tab === k}
               onClick={() => setTab(k)}
-              className={`shrink-0 px-3 py-2 rounded-full text-xs font-bold border ${
-                tab === k ? 'bg-brand-700 text-white border-brand-700' : 'bg-white text-slate-600 border-slate-200'
-              }`}
             >
               {label}
             </button>
@@ -575,19 +447,19 @@ export function AdminOps() {
               const playerLabel = names.length ? names.join(', ') : 'Guest'
 
               return (
-                <div key={s.id} className="list-row items-start">
-                  <div className="flex-1 min-w-0">
+                <div key={s.id} className="list-row flex-wrap items-start">
+                  <div className="flex-1 min-w-0 basis-full">
                     <p className="font-bold text-sm">{s.court?.name}</p>
                     <p className="text-xs text-slate-500">
                       {playerLabel} · until {fmtTime(s.end_at)}
                     </p>
                     <p className="text-xs font-semibold text-brand-800 mt-1">{peso(s.amount)}</p>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <button type="button" className="text-xs font-bold text-brand-700 px-2 py-1" onClick={() => void extend(s.id)}>
+                  <div className="flex w-full flex-wrap gap-2">
+                    <button type="button" className="btn-compact" onClick={() => void extend(s.id)}>
                       +1h
                     </button>
-                    <button type="button" className="text-xs font-bold text-slate-500 px-2 py-1" onClick={() => void end(s.id)}>
+                    <button type="button" className="btn-compact btn-compact-danger" onClick={() => void end(s.id)}>
                       End
                     </button>
                   </div>

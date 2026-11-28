@@ -8,9 +8,11 @@ const live = vi.hoisted(() => {
   const venueId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac'
   const rpcResults = new Map<string, { data: unknown; error: unknown }>()
   const upload = vi.fn(async (_path: string, _blob: Blob, _options: unknown) => ({ data: {}, error: null as unknown }))
-  const remove = vi.fn(async (_paths: string[]) => ({ data: [], error: null }))
+  // Like Storage: a delete answers with the files it deleted.
+  const remove = vi.fn(async (paths: string[]) => ({ data: paths.map((name) => ({ name })) as { name: string }[], error: null }))
+  const exists = vi.fn(async (_path: string) => ({ data: false, error: null }))
   const getPublicUrl = vi.fn((path: string) => ({ data: { publicUrl: `https://cdn.example/court-photos/${path}` } }))
-  const storageFrom = vi.fn(() => ({ upload, remove, getPublicUrl }))
+  const storageFrom = vi.fn(() => ({ upload, remove, exists, getPublicUrl }))
   const rpc = vi.fn(async (name: string) => rpcResults.get(name) ?? { data: null, error: null })
   const queryCalls: unknown[][] = []
   const from = vi.fn((table: string) => {
@@ -25,7 +27,7 @@ const live = vi.hoisted(() => {
     }
     return query
   })
-  return { clubId, courtId, venueId, rpcResults, upload, remove, getPublicUrl, storageFrom, rpc, from, queryCalls }
+  return { clubId, courtId, venueId, rpcResults, upload, remove, exists, getPublicUrl, storageFrom, rpc, from, queryCalls }
 })
 
 vi.mock('./supabase', () => ({
@@ -81,9 +83,18 @@ describe('court photos (live)', () => {
 
   it('removes a photo record, then its file', async () => {
     live.rpcResults.set('admin_remove_court_photo', { data: 'old/path.webp', error: null })
-    await api.removeCourtPhoto('photo-1')
+    await expect(api.removeCourtPhoto('photo-1')).resolves.toEqual({ fileLeftBehind: false })
     expect(live.rpc).toHaveBeenCalledWith('admin_remove_court_photo', { p_photo_id: 'photo-1' })
     expect(live.remove).toHaveBeenCalledWith(['old/path.webp'])
+  })
+
+  it('says so when Storage quietly refuses to delete the old file', async () => {
+    live.rpcResults.set('admin_remove_court_photo', { data: 'old/path.webp', error: null })
+    // Storage answers a refused delete with an empty list and no error; the file is still there.
+    live.remove.mockResolvedValueOnce({ data: [], error: null })
+    live.exists.mockResolvedValueOnce({ data: true, error: null })
+    await expect(api.removeCourtPhoto('photo-1')).resolves.toEqual({ fileLeftBehind: true })
+    expect(live.exists).toHaveBeenCalledWith('old/path.webp')
   })
 
   it('replaces a location cover and deletes the old file; null clears it', async () => {

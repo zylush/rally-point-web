@@ -1,0 +1,86 @@
+/*
+ * The faint, drifting pickleball symbols behind the public pages (CourtSymbolsBackdrop.tsx).
+ * Kept in its own file so other public-site work can add to index.css without clashing.
+ *
+ * Layering: the public frame isolates its own stacking context, and the field sits at
+ * z-index -1 inside it, so it paints over the canvas colour but under the header, every card,
+ * input and photo. Cards and inputs have solid surfaces, so the symbols only show on the bare
+ * canvas between them and never sit behind form text.
+ */
+.app-shell-public {
+  isolation: isolate;
+}
+
+.court-symbols {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  /* Phones: the shell is at most 430px wide and centred; match it. */
+  max-width: 430px;
+  margin-inline: auto;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--color-ink);
+  /* Low enough that body text on the canvas keeps its contrast. */
+  opacity: 0.07;
+}
+
+.court-symbols-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.court-symbol {
+  position: absolute;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(var(--cs-tilt, 0deg));
+  will-change: transform;
+  animation-name: court-symbol-drift;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+/* A sparse field on phones; the rest join on wider screens. */
+.court-symbol-wide {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .court-symbols {
+    max-width: none;
+  }
+
+  .court-symbol-wide {
+    display: block;
+  }
+}
+
+@keyframes court-symbol-drift {
+  from {
+    transform: translate(0, 0) rotate(var(--cs-tilt, 0deg));
+  }
+  to {
+    transform: translate(var(--cs-dx, 0px), var(--cs-dy, 0px))
+      rotate(calc(var(--cs-tilt, 0deg) + var(--cs-turn, 0deg)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .court-symbol {
+    animation: none !important;
+    will-change: auto;
+  }
+}
+
+@media print {
+  .court-symbols {
+    display: none;
+  }
+}

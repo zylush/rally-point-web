@@ -11,7 +11,7 @@ import { DEFAULT_CLUB_SLUG } from './tenant'
 export const CLUB_HEADER = 'x-club-id'
 
 /** Fired when the active club stops being available (for example, suspended). */
-export const CLUB_UNAVAILABLE_EVENT = 'rally-point:club-unavailable'
+export const CLUB_UNAVAILABLE_EVENT = 'brinely:club-unavailable'
 
 export function notifyClubUnavailable() {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(CLUB_UNAVAILABLE_EVENT))
@@ -32,7 +32,7 @@ export function requireActiveClubId(): string {
   return activeClubId
 }
 
-const memoryKey = (userId: string) => `rally_point_last_club:${userId}`
+const memoryKey = (userId: string) => `brinely_last_club:${userId}`
 
 /** Remembers the last club a person used on this device (a convenience only). */
 export function rememberClub(userId: string, clubId: string) {

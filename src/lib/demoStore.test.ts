@@ -45,19 +45,19 @@ describe('demoStore account and catalog behavior', () => {
     expect(demoStore.members()).toHaveLength(40)
     expect(demoStore.courts()).toHaveLength(4)
     expect(demoStore.users().map((user) => user.email)).toEqual([
-      'superadmin@rallypoint.local',
-      'admin@rallypoint.local',
-      'staff@rallypoint.local',
-      'member@rallypoint.local',
-      'davao.admin@rallypoint.local',
+      'superadmin@brinely.info',
+      'admin@brinely.info',
+      'staff@brinely.info',
+      'member@brinely.info',
+      'davao.admin@brinely.info',
     ])
     expect(demoStore.currentUser()).toBeNull()
 
-    expect(demoStore.login(' MEMBER@RALLYPOINT.LOCAL ', 'member123').role).toBe('member')
+    expect(demoStore.login(' MEMBER@BRINELY.INFO ', 'member123').role).toBe('member')
     expect(demoStore.currentUser()?.id).toBe('user_member')
     demoStore.logout()
     expect(demoStore.currentUser()).toBeNull()
-    expect(() => demoStore.login('member@rallypoint.local', 'wrong')).toThrow('Invalid email or password')
+    expect(() => demoStore.login('member@brinely.info', 'wrong')).toThrow('Invalid email or password')
   })
 
   it('registers a member only and keeps credentials out of storage', () => {
@@ -78,7 +78,7 @@ describe('demoStore account and catalog behavior', () => {
     expect(profile.role).toBe('member')
     expect(profile.full_name).toBe('New Player')
     expect(profile.phone).toBe('0917 000 0000')
-    expect(demoStore.memberByUser(profile.id)?.member_code).toMatch(/^RP-/)
+    expect(demoStore.memberByUser(profile.id)?.member_code).toMatch(/^BR-/)
     expect(demoStore.currentUser()?.id).toBe(profile.id)
     expect(JSON.stringify(localStorage)).not.toContain(submittedCredential)
     expect(() => demoStore.registerMember({
@@ -141,9 +141,9 @@ describe('demoStore account and catalog behavior', () => {
 
   it('rejects a credential whose seeded profile was removed', () => {
     const db = demoStore.get()
-    db.profiles = db.profiles.filter((profile) => profile.email !== 'member@rallypoint.local')
+    db.profiles = db.profiles.filter((profile) => profile.email !== 'member@brinely.info')
     demoStore.set(db)
-    expect(() => demoStore.login('member@rallypoint.local', 'member123')).toThrow('Invalid email or password')
+    expect(() => demoStore.login('member@brinely.info', 'member123')).toThrow('Invalid email or password')
   })
 
   it('finds and upserts members while keeping sorted catalog results', () => {
@@ -238,6 +238,75 @@ describe('demoStore booking and payment behavior', () => {
     demoStore.cancelBooking(booking.id, 'user_member')
   })
 
+  it('marks every hour of a paid booking as booked, and hours already over as passed', () => {
+    const date = futureDate()
+    const courtSlots = (dateYmd: string) => demoStore.availability(dateYmd).find((row) => row.court.id === 'court_2')?.slots ?? []
+    const at = (dateYmd: string, hour: number) => courtSlots(dateYmd).find((slot) => slot.startHour === hour)
+    expect(at(ymd(date), 15)).toEqual({ startHour: 15, label: '3:00 PM', available: true })
+    expect(at(ymd(date), 16)?.available).toBe(true)
+
+    const booking = demoStore.createBooking({
+      court_id: 'court_2',
+      member_id: 'mem_001',
+      dateYmd: ymd(date),
+      startHour: 15,
+      hours: 2,
+      user_id: 'user_member',
+    })
+    demoStore.confirmBookingPayment({ booking_id: booking.id, method: 'gcash', user_id: 'user_member' })
+
+    expect(at(ymd(date), 15)).toEqual({ startHour: 15, label: '3:00 PM', available: false, blocked: 'booked' })
+    expect(at(ymd(date), 16)).toEqual({ startHour: 16, label: '4:00 PM', available: false, blocked: 'booked' })
+
+    const yesterday = ymdLocal(new Date(Date.now() - 86400000))
+    expect(courtSlots(yesterday).every((slot) => !slot.available && (slot.blocked === 'passed' || slot.blocked === 'booked'))).toBe(true)
+    expect(courtSlots(yesterday).some((slot) => slot.blocked === 'passed')).toBe(true)
+  })
+
+  it('holds an online checkout for 15 minutes, then frees the hours and refuses payment', () => {
+    // Only the player who holds the hours can let them go.
+    demoStore.login('member@brinely.info', 'member123')
+    const date = futureDate()
+    const slotAt18 = () => demoStore.availability(ymd(date)).find((row) => row.court.id === 'court_2')?.slots.find((slot) => slot.startHour === 18)
+    const book = (checkoutHold?: boolean) => demoStore.createBooking({
+      court_id: 'court_2', member_id: 'mem_001', dateYmd: ymd(date), startHour: 18, hours: 1, user_id: 'user_member', checkoutHold,
+    })
+    const statusOf = (id: string) => demoStore.get().bookings.find((row) => row.id === id)?.status
+
+    const held = book(true)
+    const holdMs = new Date(held.hold_expires_at ?? 0).getTime() - Date.now()
+    expect(holdMs).toBeGreaterThan(14 * 60000)
+    expect(holdMs).toBeLessThanOrEqual(15 * 60000)
+    expect(slotAt18()?.blocked).toBe('booked')
+
+    // Time runs out: the hours are free again and the late payment is refused.
+    updateDb((db) => {
+      const row = db.bookings.find((item) => item.id === held.id)
+      if (row) row.hold_expires_at = new Date(Date.now() - 1000).toISOString()
+    })
+    expect(slotAt18()?.available).toBe(true)
+    // Every list agrees, even though nobody tried to pay or pressed Back.
+    expect(demoStore.myBookings('mem_001').find((row) => row.id === held.id)?.status).toBe('cancelled')
+    const chargesBefore = demoStore.get().transactions.length
+    expect(() => demoStore.confirmBookingPayment({ booking_id: held.id, method: 'gcash', user_id: 'user_member' }))
+      .toThrow('Your 15 minutes to pay ran out')
+    expect(statusOf(held.id)).toBe('cancelled')
+    expect(demoStore.get().transactions).toHaveLength(chargesBefore)
+
+    // Going back releases a hold at once.
+    const again = book(true)
+    demoStore.releaseBookingHold(again.id)
+    expect(statusOf(again.id)).toBe('cancelled')
+    expect(slotAt18()?.available).toBe(true)
+
+    // An unpaid desk booking has no checkout hold: it neither lapses nor is released.
+    const desk = book()
+    expect(desk.hold_expires_at).toBeUndefined()
+    demoStore.releaseBookingHold(desk.id)
+    expect(statusOf(desk.id)).toBe('pending_payment')
+    expect(slotAt18()?.blocked).toBe('booked')
+  })
+
   it('rejects invalid, occupied, and maintenance booking requests', () => {
     const date = futureDate()
     const base = {
@@ -251,8 +320,9 @@ describe('demoStore booking and payment behavior', () => {
     updateDb((db) => { db.courts.find((court) => court.id === 'court_2')!.status = 'maintenance' })
     expect(() => demoStore.createBooking({ ...base, court_id: 'court_2' })).toThrow('Court under maintenance')
     updateDb((db) => { db.courts.find((court) => court.id === 'court_2')!.status = 'available' })
-    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', hours: 0 })).toThrow('Book 1–3 hours')
-    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', hours: 4 })).toThrow('Book 1–3 hours')
+    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', hours: 0 })).toThrow('Pick at least 1 hour')
+    // There is no maximum length: a long booking is refused only where it runs past the club's hours.
+    expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', hours: 30 })).toThrow('Outside club hours')
     expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', startHour: 23, hours: 2 })).toThrow('Outside club hours')
     expect(() => demoStore.createBooking({ ...base, court_id: 'court_2', dateYmd: ymd(new Date(Date.now() - 86400000)), startHour: 6 })).toThrow('That time has already passed')
 
@@ -476,8 +546,8 @@ describe('demoStore staff and member operations', () => {
 describe('demoStore storage migration behavior', () => {
   it('repairs malformed legacy storage and preserves safe defaults', () => {
     localStorage.clear()
-    localStorage.setItem('rally_point_demo_v4', JSON.stringify({
-      profiles: [{ id: 'user_member', email: 'member@rallypoint.local', full_name: 'Mia', role: 'member', created_at: new Date().toISOString() }],
+    localStorage.setItem('brinely_demo_v4', JSON.stringify({
+      profiles: [{ id: 'user_member', email: 'member@brinely.info', full_name: 'Mia', role: 'member', created_at: new Date().toISOString() }],
       members: [{ id: 'mem_1', member_code: 'RP-1', full_name: 'Mia', membership_type: 'basic', status: 'active', join_date: '2026-01-01', expiry_date: '2026-12-31', created_at: new Date().toISOString() }],
       courts: [],
       sessions: [],
@@ -495,6 +565,6 @@ describe('demoStore storage migration behavior', () => {
     expect(db.reminders).toEqual([])
     expect(db.members[0].qr_token).toBe('QR_RP1')
     expect(db.sessionUserId).toBe('user_member')
-    expect(localStorage.getItem('rally_point_demo_v4')).not.toContain('passwords')
+    expect(localStorage.getItem('brinely_demo_v4')).not.toContain('passwords')
   })
 })

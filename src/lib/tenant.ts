@@ -2,8 +2,6 @@ import type { Club, Venue } from '../types'
 
 /** The club that sign-ups without a club link join (also used by the live app). */
 export const DEFAULT_CLUB_SLUG = 'rally-point-gensan'
-/** @deprecated Use DEFAULT_CLUB_SLUG. Kept for one release while callers move over. */
-export const RALLY_POINT_CLUB_SLUG = DEFAULT_CLUB_SLUG
 
 // Browser-local demo identities. They never grant access; they only label demo rows.
 export const DEMO_CLUB_ID = 'club_rally_point'

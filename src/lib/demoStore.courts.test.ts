@@ -43,6 +43,9 @@ describe('demo court management (mirrors admin_upsert_court)', () => {
     expect(out).toMatchObject({ status: 'maintenance', hourly_rate: 600 })
     const row = demoStore.availability(futureYmd(), DEMO_VENUE_ID).find((item) => item.court.id === courtB.id)
     expect(row?.slots.every((slot) => !slot.available)).toBe(true)
+    // Free hours say why they cannot be booked; hours booked earlier still read as booked.
+    expect(row?.slots.every((slot) => slot.blocked === 'out_of_service' || slot.blocked === 'booked')).toBe(true)
+    expect(row?.slots.some((slot) => slot.blocked === 'out_of_service')).toBe(true)
 
     expect(demoStore.upsertCourt({ id: courtB.id, venue_id: DEMO_VENUE_ID, name: 'Court B', hourly_rate: 600, in_service: true }).status)
       .toBe('available')

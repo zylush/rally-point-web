@@ -157,20 +157,26 @@ describe('Help inquiry workflow', () => {
     expect(sectionTitles()).toEqual(['Quick answers', 'Platform operations'])
   })
 
-  it('places a Privacy Notice link after Contact Us for members only', () => {
-    authState.user = null
-    const view = renderHelp()
-    const contact = screen.getByRole('heading', { name: 'Contact staff' }).closest('details')
-    const privacySection = screen.getByRole('heading', { name: 'Privacy Notice' }).closest('section')
+  it('places a Privacy Notice link after Contact Us for every role', () => {
+    const cases = [
+      { user: null, contactHeading: 'Contact staff' },
+      { user: staffUser, contactHeading: 'Contact admin' },
+      { user: adminUser, contactHeading: 'Contact superadmin' },
+      { user: superadminUser, contactHeading: 'Platform operations' },
+    ]
 
-    expect(contact).not.toBeNull()
-    expect(privacySection).not.toBeNull()
-    expect(contact!.compareDocumentPosition(privacySection!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Read the Privacy Notice' })).toHaveAttribute('href', '/privacy')
-    view.unmount()
-    authState.user = staffUser
-    renderHelp()
-    expect(screen.queryByRole('link', { name: 'Read the Privacy Notice' })).not.toBeInTheDocument()
+    for (const item of cases) {
+      authState.user = item.user
+      const view = renderHelp()
+      const contact = screen.getByRole('heading', { name: item.contactHeading }).closest('details')
+      const privacySection = screen.getByRole('heading', { name: 'Privacy Notice' }).closest('section')
+
+      expect(contact).not.toBeNull()
+      expect(privacySection).not.toBeNull()
+      expect(contact!.compareDocumentPosition(privacySection!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(screen.getByRole('link', { name: 'Read the Privacy Notice' })).toHaveAttribute('href', '/privacy')
+      view.unmount()
+    }
   })
 
   it('shows role-specific quick answers with links to existing destinations', async () => {
@@ -204,7 +210,7 @@ describe('Help inquiry workflow', () => {
     expect(api.inquiries).not.toHaveBeenCalled()
 
     await user.click(contactHeading)
-    expect(screen.getByRole('link', { name: /ops@rallypoint\.ph/ })).toBeVisible()
+    expect(screen.getByRole('link', { name: /ops@brinely\.info/ })).toBeVisible()
     expect(screen.getByRole('link', { name: /\+63 917 555 0199/ })).toBeVisible()
 
     expect(api.createInquiry).not.toHaveBeenCalled()

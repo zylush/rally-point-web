@@ -4,7 +4,6 @@ import {
   DEFAULT_CLUB_SLUG,
   DEMO_CLUB_ID,
   DEMO_DAVAO_CLUB_ID,
-  RALLY_POINT_CLUB_SLUG,
   chooseVenueId,
   demoClub,
   demoDavaoClub,
@@ -30,7 +29,6 @@ const venues: Venue[] = [
 describe('tenant identities', () => {
   it('names the default sign-up club and two separate demo clubs', () => {
     expect(DEFAULT_CLUB_SLUG).toBe('rally-point-gensan')
-    expect(RALLY_POINT_CLUB_SLUG).toBe(DEFAULT_CLUB_SLUG)
     expect(demoClub).toMatchObject({ id: DEMO_CLUB_ID, slug: DEFAULT_CLUB_SLUG, name: 'Rally Point Gensan', is_active: true })
     expect(demoDavaoClub).toMatchObject({ id: DEMO_DAVAO_CLUB_ID, slug: 'rally-point-davao', name: 'Rally Point Davao', is_active: true })
     expect(DEMO_DAVAO_CLUB_ID).not.toBe(DEMO_CLUB_ID)

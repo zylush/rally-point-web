@@ -4,11 +4,12 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { demoStore } from '../lib/demoStore'
 import { setActiveClubId } from '../lib/clubContext'
+import { ymdLocal } from '../types'
 import { SuperadminPage } from './Superadmin'
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: 'user_superadmin', email: 'superadmin@rallypoint.local', full_name: 'Morgan Superadmin', role: 'superadmin', created_at: '2026-01-01T00:00:00.000Z' },
+    user: { id: 'user_superadmin', email: 'superadmin@brinely.info', full_name: 'Morgan Superadmin', role: 'superadmin', created_at: '2026-01-01T00:00:00.000Z' },
     loading: false,
     demo: true,
     clubs: [],
@@ -18,7 +19,7 @@ vi.mock('../context/AuthContext', () => ({
   }),
 }))
 
-function renderSection(section: 'overview' | 'clubs' | 'ledger') {
+function renderSection(section: 'overview' | 'clubs' | 'ledger' | 'requests') {
   return render(
     <MemoryRouter>
       <SuperadminPage section={section} />
@@ -29,8 +30,22 @@ function renderSection(section: 'overview' | 'clubs' | 'ledger') {
 beforeEach(() => {
   setActiveClubId(null)
   demoStore.reset()
-  demoStore.login('superadmin@rallypoint.local', 'superadmin123')
+  demoStore.login('superadmin@brinely.info', 'superadmin123')
 })
+
+function askForCall() {
+  return demoStore.requestOwnerCall({
+    full_name: 'Ana Reyes',
+    club_name: 'Lagao Smash Courts',
+    city: 'General Santos City',
+    court_count: 4,
+    phone: '0917 555 0101',
+    email: 'ana.owner@example.invalid',
+    preferred_date: ymdLocal(new Date()),
+    preferred_time: 'evening',
+    message: 'Six indoor courts',
+  })
+}
 
 describe('SuperadminPage', () => {
   it('shows platform totals and every club, labelled as recorded rather than collected money', async () => {
@@ -64,9 +79,9 @@ describe('SuperadminPage', () => {
     await user.click(within(card).getByRole('button', { name: 'Activate' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Assign a club admin before activating this club')
 
-    await user.type(within(card).getByLabelText('Add an admin by email'), 'member@rallypoint.local')
+    await user.type(within(card).getByLabelText('Add an admin by email'), 'member@brinely.info')
     await user.click(within(card).getByRole('button', { name: 'Add admin' }))
-    expect(await screen.findByText('member@rallypoint.local is now an admin of Cebu Hub.')).toBeInTheDocument()
+    expect(await screen.findByText('member@brinely.info is now an admin of Cebu Hub.')).toBeInTheDocument()
 
     await user.click(within(screen.getByRole('article', { name: 'Cebu Hub' })).getByRole('button', { name: 'Activate' }))
     expect(await screen.findByText('Cebu Hub is now active.')).toBeInTheDocument()
@@ -164,5 +179,74 @@ describe('SuperadminPage', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('That link name is already used by another club')
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(screen.getByRole('dialog', { name: 'Set up a club' })).toBeInTheDocument()
+  })
+
+  it('lists owner call requests, marks one as called, and sets up its club with the owner invited', async () => {
+    askForCall()
+    const user = userEvent.setup()
+    renderSection('requests')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Owner requests' })).toBeInTheDocument()
+    const card = await screen.findByRole('article', { name: 'Lagao Smash Courts' })
+    expect(within(card).getByText('Ana Reyes')).toBeInTheDocument()
+    expect(within(card).getByText('Six indoor courts')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: /0917 555 0101/ })).toHaveAttribute('href', 'tel:09175550101')
+
+    await user.click(within(card).getByRole('button', { name: 'Mark as called' }))
+    expect(await screen.findByText('Marked Lagao Smash Courts as called.')).toBeInTheDocument()
+    expect(await screen.findByText('No new requests.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^Called/ }))
+    const called = await screen.findByRole('article', { name: 'Lagao Smash Courts' })
+    await user.click(within(called).getByRole('button', { name: 'Set up this club' }))
+    const dialog = screen.getByRole('dialog', { name: 'Set up a club' })
+    expect(within(dialog).getByLabelText('Club name')).toHaveValue('Lagao Smash Courts')
+    expect(within(dialog).getByLabelText('Link name')).toHaveValue('lagao-smash-courts')
+    expect(within(dialog).getByLabelText('Courts')).toHaveValue(4)
+    expect(within(dialog).getByLabelText('Owner’s email (optional)')).toHaveValue('ana.owner@example.invalid')
+    await user.click(within(dialog).getByRole('button', { name: 'Set up club' }))
+
+    expect(await screen.findByText(
+      'Lagao Smash Courts is set up. ana.owner@example.invalid becomes its admin after signing up with that email and confirming it. Then activate the club.',
+    )).toBeInTheDocument()
+    const club = demoStore.platformClubs().find((row) => row.name === 'Lagao Smash Courts')!
+    expect(club.status).toBe('provisioning')
+    expect(demoStore.clubOwnerInvites(club.club_id).map((invite) => invite.email)).toEqual(['ana.owner@example.invalid'])
+  })
+
+  it('checks the owner email before setting anything up', async () => {
+    const user = userEvent.setup()
+    renderSection('clubs')
+    await user.click(await screen.findByRole('button', { name: /Set up a club/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Set up a club' })
+    await user.type(within(dialog).getByLabelText('Club name'), 'Iloilo Courts')
+    // The browser accepts this address; the database would not, so the dialog stops it first.
+    await user.type(within(dialog).getByLabelText('Owner’s email (optional)'), 'owner@localhost')
+    await user.click(within(dialog).getByRole('button', { name: 'Set up club' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Enter the owner’s email like name@example.com')
+    expect(demoStore.platformClubs().some((club) => club.name === 'Iloilo Courts')).toBe(false)
+  })
+
+  it('invites an owner who has no account yet from the club card, shows the invite, and cancels it', async () => {
+    const user = userEvent.setup()
+    renderSection('clubs')
+    const davao = await screen.findByRole('article', { name: 'Rally Point Davao' })
+    await user.type(within(davao).getByLabelText('Add an admin by email'), 'future.owner@example.invalid')
+    await user.click(within(davao).getByRole('button', { name: 'Add admin' }))
+
+    expect(await screen.findByText(
+      'future.owner@example.invalid is invited. They become an admin of Rally Point Davao after signing up with that email and confirming it.',
+    )).toBeInTheDocument()
+    const invites = await screen.findByRole('list', { name: 'Rally Point Davao owner invites' })
+    expect(within(invites).getByText('future.owner@example.invalid')).toBeInTheDocument()
+
+    await user.click(within(invites).getByRole('button', { name: 'Cancel invite' }))
+    expect(await screen.findByText('The invite for future.owner@example.invalid is cancelled.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Rally Point Davao owner invites' })).not.toBeInTheDocument())
+  })
+
+  it('points the overview at new owner requests', async () => {
+    askForCall()
+    renderSection('overview')
+    expect(await screen.findByRole('link', { name: '1 court owner asked for a call' })).toHaveAttribute('href', '/superadmin/requests')
   })
 })

@@ -5,7 +5,7 @@ import { MAX_COURT_PHOTOS } from '../types'
 import { PHOTO_ACCEPT } from '../lib/photos'
 
 /** A file picker that looks like a big secondary button. */
-function PickPhotos({
+export function PickPhotos({
   label,
   multiple,
   disabled,

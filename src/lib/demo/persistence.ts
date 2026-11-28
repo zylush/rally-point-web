@@ -1,12 +1,14 @@
 import type { ClubAccount, ClubStaffRole, Court } from '../../types'
+import { isCourtType } from '../../types'
 import type { DemoDB, DemoPlatformRole } from './model'
 import { seed } from './seed'
+import { retireLapsedHolds } from './common'
 import { hasDemoPassword, normalizeDemoEmail } from './credentials'
 import { defaultClubAccount } from './commissions'
 import { DEMO_CLUB_ID, DEMO_VENUE_ID, demoClub } from '../tenant'
 
-const KEY = 'rally_point_demo_v4'
-const LEGACY_KEYS = ['rally_point_demo_v1', 'rally_point_demo_v2', 'rally_point_demo_v3']
+const KEY = 'brinely_demo_v4'
+const LEGACY_KEYS = ['rally_point_demo_v1', 'rally_point_demo_v2', 'rally_point_demo_v3', 'rally_point_demo_v4']
 
 export function resetStorage() {
   localStorage.removeItem(KEY)
@@ -80,6 +82,19 @@ export function normalizeStored(
     notifications: Array.isArray(withoutLegacy.notifications) ? withoutLegacy.notifications : [],
     inquiries: Array.isArray(withoutLegacy.inquiries) ? withoutLegacy.inquiries : [],
     walkins: Array.isArray(withoutLegacy.walkins) ? withoutLegacy.walkins : [],
+    clubTournaments: Array.isArray(withoutLegacy.clubTournaments) ? withoutLegacy.clubTournaments : defaults.clubTournaments,
+    clubTournamentPlayers: Array.isArray(withoutLegacy.clubTournamentPlayers)
+      ? withoutLegacy.clubTournamentPlayers
+      : defaults.clubTournamentPlayers,
+    clubTournamentTeams: Array.isArray(withoutLegacy.clubTournamentTeams)
+      ? withoutLegacy.clubTournamentTeams
+      : defaults.clubTournamentTeams,
+    clubTournamentMatches: Array.isArray(withoutLegacy.clubTournamentMatches)
+      ? withoutLegacy.clubTournamentMatches
+      : defaults.clubTournamentMatches,
+    clubTournamentScorers: Array.isArray(withoutLegacy.clubTournamentScorers)
+      ? withoutLegacy.clubTournamentScorers
+      : [],
   }
   if (
     db.clubRoles.some((role) => role.user_id === 'user_staff' && role.club_id === DEMO_CLUB_ID && role.role === 'staff' && role.is_active) &&
@@ -90,9 +105,13 @@ export function normalizeStored(
   // Rows saved without ownership take it from their court or member, then the default club.
   const courts = db.courts.map((court, index) => {
     const { branch_id: legacyBranch, ...rest } = court as Court & { branch_id?: unknown }
-    if (court.club_id && court.venue_id && legacyBranch === undefined) return court
+    // Saved before courts had a type, a court has none: it reads as not set. Anything other than
+    // indoor or outdoor is cleared to not set too.
+    const badType = court.court_type != null && !isCourtType(court.court_type)
+    if (court.club_id && court.venue_id && legacyBranch === undefined && !badType) return court
     return {
       ...rest,
+      ...(badType ? { court_type: null } : {}),
       club_id: court.club_id ?? DEMO_CLUB_ID,
       venue_id: court.venue_id ?? (db.venues[index < 2 ? 0 : 1]?.id ?? DEMO_VENUE_ID),
     }
@@ -115,7 +134,31 @@ export function normalizeStored(
   const reminders = db.reminders.map((reminder) => ({ ...reminder, club_id: reminder.club_id ?? DEMO_CLUB_ID }))
   const inquiries = db.inquiries.map((inquiry) => ({ ...inquiry, club_id: inquiry.club_id ?? DEMO_CLUB_ID }))
   const walkins = db.walkins.map((walkin) => ({ ...walkin, club_id: walkin.club_id ?? DEMO_CLUB_ID }))
-  const normalizedOwnership = { ...db, courts, members: membersWithOwnership, sessions, bookings, openPlays, openPlaySignups, checkins, transactions, notifications, reminders, inquiries, walkins }
+  const clubMatches = !Array.isArray(withoutLegacy.clubTournaments) && Array.isArray(db.clubMatches)
+    ? db.clubMatches.map((match) =>
+        match.id === 'match_01' && match.tournament_id == null
+          ? { ...match, tournament_id: 'tour_live_bracket' }
+          : match.id === 'match_03' && match.tournament_id == null
+            ? { ...match, tournament_id: 'tour_live_queue' }
+            : match,
+      )
+    : db.clubMatches
+  const normalizedOwnership = {
+    ...db,
+    courts,
+    members: membersWithOwnership,
+    sessions,
+    bookings,
+    openPlays,
+    openPlaySignups,
+    checkins,
+    transactions,
+    notifications,
+    reminders,
+    inquiries,
+    walkins,
+    ...(clubMatches ? { clubMatches } : {}),
+  }
   const members = normalizedOwnership.members.map((member) =>
     member.qr_token
       ? member
@@ -154,7 +197,12 @@ export function normalizeStored(
     !Array.isArray(withoutLegacy.openPlaySignups) ||
     !Array.isArray(withoutLegacy.reminders) ||
     !Array.isArray(withoutLegacy.inquiries) ||
-    db.inquiries.some((inquiry) => !inquiry.club_id)
+    db.inquiries.some((inquiry) => !inquiry.club_id) ||
+    !Array.isArray(withoutLegacy.clubTournaments) ||
+    !Array.isArray(withoutLegacy.clubTournamentPlayers) ||
+    !Array.isArray(withoutLegacy.clubTournamentTeams) ||
+    !Array.isArray(withoutLegacy.clubTournamentMatches) ||
+    !Array.isArray(withoutLegacy.clubTournamentScorers)
 
   return { db: normalizedDb, repaired }
 }
@@ -165,7 +213,9 @@ export function load(): DemoDB {
     if (raw) {
       const stored = JSON.parse(raw) as StoredDemo
       const { db, repaired } = normalizeStored(stored, hasDemoPassword)
-      if (repaired) save(db)
+      // Unpaid checkouts whose time ran out read as cancelled everywhere, even if the player just left.
+      const holdsRetired = retireLapsedHolds(db)
+      if (repaired || holdsRetired) save(db)
       return db
     }
   } catch {

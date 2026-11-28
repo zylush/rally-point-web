@@ -19,7 +19,7 @@ export const helpFaqs = [
   {
     question: 'How do I renew my membership?',
     answer:
-      'Open your Account or membership card and choose Renew. Contact staff if your membership details need correcting.',
+      'Open Account and choose Renew membership (or Become a member) for your club. Pay at the front desk or by the club\'s GCash, and staff will confirm it.',
   },
   {
     question: 'What are the club hours?',
@@ -34,7 +34,7 @@ type HelpAction = { label: string; to: string }
 const memberActions: Partial<Record<(typeof helpFaqs)[number]['question'], HelpAction>> = {
   'How do I book a court?': { label: 'Go to Book', to: '/member/book' },
   'How do I check in?': { label: 'Open My QR', to: '/member/pass' },
-  'How do I renew my membership?': { label: 'Open Account', to: '/member/profile' },
+  'How do I renew my membership?': { label: 'Open Account', to: '/member' },
 }
 
 export const signedInHelpFaqs: Record<

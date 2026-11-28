@@ -22,27 +22,38 @@
   --text-body--line-height: 22px;
   --text-caption: 12px;
   --text-caption--line-height: 16px;
-  --text-status: 10px;
-  --text-status--line-height: 13px;
-  --text-small: 10px;
-  --text-small--line-height: 13px;
-  --color-brand-50: #f0fdfa;
-  --color-brand-100: #ccfbf1;
-  --color-brand-200: #99f6e4;
-  --color-brand-300: #5eead4;
-  --color-brand-400: #2dd4bf;
-  --color-brand-500: #14b8a6;
-  --color-brand-600: #0d9488;
-  --color-brand-700: #0f766e;
-  --color-brand-800: #115e59;
-  --color-brand-900: #134e4a;
-  --color-ink: #0f172a;
-  --color-muted: #475569;
+  /* Nothing on the site is smaller than 12px: players span age groups. */
+  --text-status: 13px;
+  --text-status--line-height: 18px;
+  --text-small: 12px;
+  --text-small--line-height: 16px;
+  --text-display: 34px;
+  --text-display--line-height: 40px;
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 56px;
+  /* "Quiet court": the logo's navy and sky on a warm white page. brand-700 is the one accent. */
+  --color-brand-50: #f0f9ff;
+  --color-brand-100: #e0f2fe;
+  --color-brand-200: #bae6fd;
+  --color-brand-300: #7dd3fc;
+  --color-brand-400: #38bdf8;
+  --color-brand-500: #0ea5e9;
+  --color-brand-600: #0284c7;
+  --color-brand-700: #0369a1;
+  --color-brand-800: #075985;
+  --color-brand-900: #0b2a5b;
+  --color-ink: #0b2a5b;
+  --color-muted: #475467;
   --color-surface: #ffffff;
-  --color-canvas: #f8fafc;
-  --color-danger: #dc2626;
-  --color-warn: #d97706;
-  --color-ok: #16a34a;
+  --color-canvas: #fafaf7;
+  /* Hairlines are decoration only; input borders use the darker field colour (3:1 on white). */
+  --color-line: #e7e5e0;
+  --color-field: #8a8782;
+  --color-danger: #b91c1c;
+  --color-warn: #b45309;
+  --color-ok: #15803d;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
 }
 
 :root {
@@ -77,18 +88,21 @@ body,
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: #020617;
+  background: var(--color-canvas);
   color: var(--color-ink);
   overscroll-behavior-y: none;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
+/* In the base layer, like Tailwind's own reset, so font-semibold and text-* classes on controls still apply. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 }
 
 /* Mobile: phone content width. Desktop: full-width canvas with a readable rail. */
@@ -100,7 +114,7 @@ textarea {
   background: var(--color-surface);
   position: relative;
   overflow-x: clip;
-  box-shadow: 0 0 0 1px rgb(15 23 42 / 0.06);
+  box-shadow: 0 0 0 1px var(--color-line);
 }
 
 .app-shell-bleed {
@@ -119,21 +133,6 @@ textarea {
 }
 
 @media (min-width: 768px) {
-  body {
-    background:
-      radial-gradient(
-        ellipse 80% 50% at 20% -10%,
-        rgb(15 118 110 / 0.35),
-        transparent
-      ),
-      radial-gradient(
-        ellipse 60% 40% at 90% 100%,
-        rgb(88 28 135 / 0.2),
-        transparent
-      ),
-      #020617;
-  }
-
   .app-shell:not(.app-shell-bleed) {
     width: 100%;
     max-width: none;
@@ -182,9 +181,8 @@ textarea {
   max-width: 430px;
   transform: translateX(-50%);
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(12px);
-  border-top: 2px solid rgb(226 232 240);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-line);
   z-index: 40;
 }
 
@@ -210,10 +208,10 @@ textarea {
     overflow-y: auto;
     width: 240px;
     flex-shrink: 0;
-    background: linear-gradient(180deg, #0f172a 0%, #0b1224 55%, #0f766e 160%);
+    background: var(--color-ink);
     color: white;
     padding: 1.25rem 0.85rem;
-    border-right: 1px solid rgb(255 255 255 / 0.06);
+    border-right: 1px solid rgb(255 255 255 / 0.08);
   }
 
   .side-nav-link {
@@ -222,29 +220,29 @@ textarea {
     gap: 0.7rem;
     min-height: 52px;
     padding: 0.65rem 0.85rem;
-    border-radius: 14px;
+    border-radius: 10px;
     font-size: 1rem;
-    font-weight: 700;
-    color: rgb(226 232 240 / 0.88);
+    font-weight: 600;
+    color: rgb(255 255 255 / 0.82);
     text-decoration: none;
   }
   .side-nav-link.active {
-    background: rgb(20 184 166 / 0.28);
-    color: #ccfbf1;
-    box-shadow: inset 0 0 0 1px rgb(45 212 191 / 0.35);
+    background: rgb(255 255 255 / 0.1);
+    color: white;
+    box-shadow: inset 3px 0 0 var(--color-brand-400);
   }
 }
 
 .card {
   background: white;
-  border: 1.5px solid rgb(226 232 240);
-  border-radius: 18px;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
 }
 
 .stat-card {
-  background: linear-gradient(145deg, #0f766e, #115e59);
+  background: var(--color-ink);
   color: white;
-  border-radius: 18px;
+  border-radius: 12px;
   padding: 1.15rem 1.2rem;
 }
 
@@ -256,10 +254,10 @@ textarea {
   gap: 0.5rem;
   width: 100%;
   min-height: 54px;
-  border-radius: 16px;
+  border-radius: 10px;
   background: var(--color-brand-700);
   color: white;
-  font-weight: 800;
+  font-weight: 600;
   font-size: 1.05rem;
   border: none;
   cursor: pointer;
@@ -272,20 +270,20 @@ textarea {
   gap: 0.5rem;
   width: 100%;
   min-height: 54px;
-  border-radius: 16px;
+  border-radius: 10px;
   background: white;
-  color: var(--color-brand-800);
-  font-weight: 800;
+  color: var(--color-ink);
+  font-weight: 600;
   font-size: 1rem;
-  border: 2px solid rgb(203 213 225);
+  border: 1.5px solid var(--color-field);
   cursor: pointer;
 }
 
 .input {
   width: 100%;
   min-height: 54px;
-  border-radius: 14px;
-  border: 2px solid rgb(203 213 225);
+  border-radius: 10px;
+  border: 1.5px solid var(--color-field);
   padding-block: 0.8rem;
   padding-inline: 1rem;
   background: #fff;
@@ -293,19 +291,152 @@ textarea {
   font-size: 1.05rem;
 }
 .input:focus {
-  outline: 3px solid rgb(13 148 136 / 0.35);
-  border-color: var(--color-brand-600);
-  background: white;
+  outline: 3px solid rgb(3 105 161 / 0.3);
+  border-color: var(--color-brand-700);
+  background-color: white;
+}
+/*
+ * Drop-down lists: the same box as a text field, with one clear chevron set in from the edge and
+ * the chosen words lined up with the text in the fields above and below. The browser's own arrow
+ * sat tight against the border and pushed the words in further than a text field's.
+ */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.9rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230b2a5b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.95rem center;
+  background-size: 1.2rem;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+select.input:disabled {
+  background-color: var(--color-canvas);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+/* On the navy sidebar: a white chevron. */
+select.select-on-dark {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.6rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  background-size: 1.1rem;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+select.select-on-dark:focus-visible {
+  outline: 3px solid var(--color-brand-300);
+  outline-offset: 2px;
+}
+/* Windows high contrast drops background images: give the browser's own arrow back. */
+@media (forced-colors: active) {
+  select.input,
+  select.select-on-dark {
+    appearance: auto;
+    -webkit-appearance: auto;
+    background-image: none;
+    padding-right: 0.75rem;
+  }
 }
 .input-with-icon {
   padding-left: 2.85rem;
 }
 
+/*
+ * Defaults the big buttons were missing. They sit in the components layer, so a page's own
+ * utilities (`px-6`, `text-left`) still win. A narrow button (`w-auto`) or a label that wraps
+ * no longer runs into the border.
+ */
+@layer components {
+  .btn-primary,
+  .btn-secondary {
+    padding-inline: 1.25rem;
+    padding-block: 0.55rem;
+    text-align: center;
+    text-wrap: balance;
+    line-height: 1.25;
+  }
+
+  /*
+   * The small outlined action that sits inside a card or a row: Call, Contact, Book, Refresh, +1h.
+   * Same border, radius and weight as the big secondary button, sized to its words, 48px tall.
+   */
+  .btn-compact {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 48px;
+    padding-inline: 1rem;
+    border-radius: 10px;
+    border: 1.5px solid var(--color-field);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-size: var(--text-subtitle);
+    line-height: 1.25;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  /* For "End" and other actions that stop something: red words, a soft red border. */
+  .btn-compact-danger {
+    color: var(--color-danger);
+    border-color: #f87171;
+  }
+}
+
+/*
+ * A <details> heading row: the browser's small black triangle replaced by the same chevron as
+ * the drop-down lists, on the right, turning when the section is open. The words sit in the
+ * middle of the 48px row instead of at its top.
+ */
+.disclosure-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 48px;
+  cursor: pointer;
+  list-style: none;
+}
+.disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure-summary::after {
+  content: '';
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 1.25rem;
+  height: 1.25rem;
+  background-color: var(--color-muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform var(--interaction-duration) var(--interaction-easing);
+}
+details[open] > .disclosure-summary::after {
+  transform: rotate(180deg);
+}
+.disclosure-summary:focus-visible {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+@media (forced-colors: active) {
+  .disclosure-summary::after {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+}
+
 .label {
   display: block;
   font-size: 0.95rem;
-  font-weight: 700;
-  color: #1e293b;
+  font-weight: 600;
+  color: var(--color-ink);
   margin-bottom: 0.4rem;
 }
 
@@ -317,7 +448,7 @@ textarea {
   padding: 0.3rem 0.7rem;
   font-size: var(--text-status);
   line-height: var(--text-status--line-height);
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none; /* plain words, not shouty uppercase */
 }
@@ -334,8 +465,8 @@ textarea {
   color: #334155;
 }
 .pill-brand {
-  background: #ccfbf1;
-  color: #115e59;
+  background: var(--color-brand-100);
+  color: var(--color-brand-900);
 }
 
 .list-row {
@@ -343,7 +474,7 @@ textarea {
   align-items: center;
   gap: 0.75rem;
   padding: 1rem 0;
-  border-bottom: 1px solid rgb(241 245 249);
+  border-bottom: 1px solid var(--color-line);
   min-height: 56px;
 }
 .list-row:last-child {
@@ -358,8 +489,8 @@ textarea {
   gap: 0.35rem;
   padding: 1.05rem 1rem;
   min-height: 108px;
-  border-radius: 18px;
-  border: 1.5px solid rgb(226 232 240);
+  border-radius: 12px;
+  border: 1px solid var(--color-line);
   background: white;
   text-decoration: none;
   color: inherit;
@@ -367,23 +498,23 @@ textarea {
 .action-tile-icon {
   width: 44px;
   height: 44px;
-  border-radius: 14px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f0fdfa;
-  color: #0f766e;
+  background: var(--color-brand-50);
+  color: var(--color-brand-700);
 }
 .action-tile-title {
   font-size: var(--text-title);
   line-height: var(--text-title--line-height);
   font-weight: 500;
-  color: #0f172a;
+  color: var(--color-ink);
   margin-top: 0.25rem;
 }
 .action-tile-sub {
   font-size: var(--text-body);
-  color: #475569;
+  color: var(--color-muted);
   line-height: var(--text-body--line-height);
 }
 
@@ -399,6 +530,7 @@ button,
 .action-tile,
 .btn-primary,
 .btn-secondary,
+.btn-compact,
 .list-row:is(a, button) {
   min-height: 48px;
   touch-action: manipulation;
@@ -422,21 +554,25 @@ button {
   .bottom-nav a:hover,
   .list-row:is(a, button):hover {
     filter: brightness(0.96);
-    box-shadow: 0 3px 12px rgb(15 23 42 / 0.1);
   }
 
   .btn-primary:not(:disabled):hover {
     background-color: var(--color-brand-800);
   }
 
-  .btn-secondary:not(:disabled):hover {
+  .btn-secondary:not(:disabled):hover,
+  .btn-compact:not(:disabled):not(.btn-compact-danger):hover {
     background-color: var(--color-brand-50);
     border-color: var(--color-brand-400);
   }
 
+  .btn-compact-danger:not(:disabled):hover {
+    background-color: #fef2f2;
+    border-color: var(--color-danger);
+  }
+
   .action-tile:hover {
-    border-color: rgb(45 212 191 / 0.55);
-    box-shadow: 0 4px 14px rgb(15 118 110 / 0.12);
+    border-color: var(--color-brand-300);
   }
 
   .side-nav-link:hover {
@@ -452,6 +588,7 @@ button:active:not(:disabled):not([aria-busy='true']),
 .action-tile:active,
 .btn-primary:active:not(:disabled),
 .btn-secondary:active:not(:disabled),
+.btn-compact:active:not(:disabled),
 .list-row:is(a, button):active {
   filter: brightness(0.9);
   opacity: 0.94;
@@ -463,6 +600,7 @@ button:active:not(:disabled):not([aria-busy='true']),
 .action-tile:focus-visible,
 .btn-primary:focus-visible,
 .btn-secondary:focus-visible,
+.btn-compact:focus-visible,
 .control-feedback:focus-visible,
 button:focus-visible,
 .list-row:is(a, button):focus-visible {
@@ -486,7 +624,8 @@ button:disabled,
 button[aria-disabled='true'],
 .control-feedback[aria-disabled='true'],
 .btn-primary[aria-disabled='true'],
-.btn-secondary[aria-disabled='true'] {
+.btn-secondary[aria-disabled='true'],
+.btn-compact[aria-disabled='true'] {
   opacity: 0.55;
   cursor: not-allowed;
   filter: none;
@@ -507,15 +646,15 @@ button[aria-busy='true'],
   width: 1.6rem;
   height: 1.6rem;
   border-radius: 999px;
-  background: #0f766e;
+  background: var(--color-ink);
   color: white;
   font-size: 0.85rem;
-  font-weight: 800;
+  font-weight: 600;
   flex-shrink: 0;
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background: linear-gradient(90deg, #eeece7 25%, #f6f5f1 50%, #eeece7 75%);
   background-size: 200% 100%;
   animation: shimmer 1.2s infinite linear;
   border-radius: 8px;
@@ -576,25 +715,22 @@ button[aria-busy='true'],
   }
 }
 
-/* Club cards on Find a court: a small lift and photo zoom for mouse users only. */
+/* Club cards on Find a court: a slight photo zoom for mouse users only. */
 .club-card-media {
   transition: transform var(--media-zoom-duration) var(--interaction-easing);
 }
 @media (hover: hover) and (pointer: fine) {
-  .club-card:hover {
-    transform: translateY(-2px);
-  }
   .club-card:hover .club-card-media {
-    transform: scale(1.03);
+    transform: scale(1.02);
   }
 }
 
 /* Photos wait on a placeholder while they download, then fade in. A failed photo keeps a still placeholder. */
 .photo {
-  background-color: #e2e8f0;
+  background-color: #eeece7;
 }
 .photo[data-state='loading'] {
-  background-image: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-image: linear-gradient(90deg, #eeece7 25%, #f6f5f1 50%, #eeece7 75%);
   background-size: 200% 100%;
   animation: shimmer 1.2s infinite linear;
 }
@@ -618,19 +754,21 @@ button[aria-busy='true'],
   }
 }
 
+/* Fixed to the screen, like the bottom navigation, so a message shows wherever the page is scrolled. */
 .toast {
-  position: absolute;
-  left: 1rem;
-  right: 1rem;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(min(100%, 430px) - 2rem);
   bottom: calc(6.25rem + env(safe-area-inset-bottom, 0px));
   z-index: 50;
-  background: #0f172a;
+  background: var(--color-ink);
   color: white;
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 1rem 1.1rem;
   font-size: 1rem;
-  font-weight: 700;
-  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgb(11 42 91 / 0.18);
 }
 
 @media (min-width: 768px) {
@@ -642,6 +780,8 @@ button[aria-busy='true'],
     left: auto;
     right: 1.5rem;
     bottom: 1.5rem;
+    transform: none;
+    width: auto;
     max-width: 380px;
   }
 
@@ -670,6 +810,7 @@ button[aria-busy='true'],
   .action-tile:active,
   .btn-primary:active,
   .btn-secondary:active,
+  .btn-compact:active,
   .list-row:is(a, button):active {
     transform: none !important;
   }
@@ -701,5 +842,529 @@ button[aria-busy='true'],
   .court-lines > * {
     animation: none !important;
     stroke-dashoffset: 0 !important;
+  }
+}
+
+/*
+ * Public site ("quiet court"): plain header and footer, underlined text links, honest photo
+ * labels, choice chips and notices. Flat surfaces and hairlines; the photos carry the colour.
+ */
+.app-shell-public {
+  background: var(--color-canvas);
+}
+.site-header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-line);
+}
+.site-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding-inline: 0.75rem;
+  border-radius: 10px;
+  font-weight: 600;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+.site-nav-link[aria-current='page'] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--color-brand-400);
+  text-underline-offset: 6px;
+}
+.site-footer {
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-line);
+  color: var(--color-muted);
+}
+.text-link {
+  color: var(--color-brand-700);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.text-link:focus-visible,
+.site-nav-link:focus-visible {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: 3px;
+}
+/* A stand-in photo says so, so nobody mistakes it for the club's own venue. */
+.photo-label {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: 600;
+}
+/*
+ * Choice controls. Three shapes, each for one job:
+ * - .segmented: one joined bar for 2-4 short, either-or choices that change what the screen shows.
+ *   One outer border, hairline dividers (the 1px gaps show the bar's own background), the picked
+ *   part solid navy. Its parts are buttons (aria-pressed, role="tab" or role="radio") or labels
+ *   around a hidden radio.
+ * - .text-tabs: plain words with a navy underline under the picked one, for moving between the
+ *   sections of one page.
+ * - .day-strip / .day-card: a row of calendar days, the picked one solid navy.
+ * The focus ring sits inside each part, so a container that clips or scrolls never cuts it off.
+ */
+.segmented {
+  display: flex;
+  gap: 1px;
+  width: 100%;
+  max-width: 34rem;
+  border: 1.5px solid var(--color-field);
+  border-radius: 10px;
+  background: var(--color-line);
+  overflow: hidden;
+}
+/* Parts grow from their words, so a longer label gets a little more room instead of wrapping. */
+.segmented > :is(button, label) {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 52px;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+  cursor: pointer;
+}
+/* Fits its words instead of filling the row (a period switch beside other content). */
+.segmented-fit {
+  display: inline-flex;
+  width: auto;
+}
+.segmented-fit > :is(button, label) {
+  flex: 0 0 auto;
+  padding-inline: 1.1rem;
+}
+/* Four longer choices: two by two on phones (the gaps still draw the hairlines), one row when wider. */
+.segmented-wrap {
+  flex-wrap: wrap;
+}
+.segmented-wrap > :is(button, label) {
+  flex-basis: calc(50% - 1px);
+}
+@media (min-width: 640px) {
+  .segmented-wrap > :is(button, label) {
+    flex-basis: auto;
+  }
+}
+/* Long choices read better one per line: the same joined box, stacked. */
+.segmented-stack {
+  flex-direction: column;
+}
+.segmented-stack > :is(button, label) {
+  justify-content: flex-start;
+  padding-inline: 0.9rem;
+  text-align: left;
+  text-wrap: pretty;
+}
+.segmented > :is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], label:has(input:checked)) {
+  background: var(--color-brand-900);
+  color: #ffffff;
+}
+.segmented > :is(button, label):active:not(:disabled) {
+  transform: none;
+  opacity: 1;
+  filter: none;
+  background: var(--color-brand-100);
+}
+.segmented > :is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], label:has(input:checked)):active:not(:disabled) {
+  background: var(--color-brand-800);
+}
+.segmented > :is(button, label):focus-visible,
+.segmented > label:has(input:focus-visible) {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: -3px;
+}
+.segmented > :is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], label:has(input:checked)):is(:focus-visible, :has(input:focus-visible)) {
+  outline-color: var(--color-brand-300);
+}
+.segmented > :is(button:disabled, label:has(input:disabled)) {
+  cursor: not-allowed;
+}
+/* The dark TV board. */
+.segmented-dark {
+  border-color: #475569;
+  background: #334155;
+}
+.segmented-dark > :is(button, label) {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+.segmented-dark > :is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], label:has(input:checked)) {
+  background: var(--color-brand-600);
+  color: #ffffff;
+}
+.segmented-dark > :is(button, label):active:not(:disabled) {
+  background: #1e293b;
+}
+.segmented-dark > :is(button, label):focus-visible {
+  outline-color: var(--color-brand-300);
+}
+
+.text-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--color-line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.text-tabs > :is(button, a) {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  margin: 0;
+  padding: 0.35rem 0.75rem 0.15rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+/* Shares the row out when every tab fits; a row that is too long still scrolls instead of breaking words. */
+.text-tabs-fill > :is(button, a) {
+  flex: 1 1 auto;
+  padding-inline: 0.35rem;
+}
+/* On wider screens the tabs sit at their own width, lined up on the left. */
+@media (min-width: 640px) {
+  .text-tabs-fill > :is(button, a) {
+    flex: 0 0 auto;
+    padding-inline: 1rem;
+  }
+}
+.text-tabs > :is([aria-pressed='true'], [aria-selected='true'], [aria-current='page']) {
+  border-bottom-color: var(--color-brand-900);
+  color: var(--color-ink);
+  font-weight: 700;
+}
+.text-tabs > :is(button, a):active:not(:disabled) {
+  transform: none;
+  opacity: 1;
+  filter: none;
+  color: var(--color-ink);
+}
+.text-tabs > :is(button, a):focus-visible {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: -3px;
+}
+.text-tabs-dark {
+  border-bottom-color: #334155;
+}
+.text-tabs-dark > :is(button, a) {
+  color: #cbd5e1;
+}
+.text-tabs-dark > :is([aria-pressed='true'], [aria-selected='true'], [aria-current='page']) {
+  border-bottom-color: var(--color-brand-400);
+  color: #ffffff;
+}
+.text-tabs-dark > :is(button, a):active:not(:disabled) {
+  color: #ffffff;
+}
+.text-tabs-dark > :is(button, a):focus-visible {
+  outline-color: var(--color-brand-300);
+}
+
+/* Phones scroll the days sideways; the padding keeps each card's focus ring in view. */
+.day-strip {
+  display: flex;
+  gap: 0.5rem;
+  margin: -6px;
+  padding: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.day-card {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.6rem;
+  min-height: 76px;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1.5px solid var(--color-line);
+  border-radius: 10px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  line-height: 1.15;
+  cursor: pointer;
+}
+.day-card-name {
+  font-size: var(--text-status);
+  font-weight: 600;
+  color: var(--color-muted);
+}
+.day-card-date {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.day-card-month {
+  font-size: var(--text-status);
+  color: var(--color-muted);
+}
+.day-card[aria-pressed='true'] {
+  border-color: var(--color-brand-900);
+  background: var(--color-brand-900);
+  color: #ffffff;
+}
+.day-card[aria-pressed='true'] :is(.day-card-name, .day-card-month) {
+  color: var(--color-brand-100);
+}
+button.day-card:active:not(:disabled):not([aria-busy='true']) {
+  transform: none;
+}
+.day-card:focus-visible {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: 2px;
+}
+@media (min-width: 768px) {
+  .day-strip {
+    overflow-x: visible;
+  }
+  .day-card {
+    flex: 1 1 0;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .segmented > :is(button, label):not(:disabled):hover {
+    filter: none;
+    background: var(--color-brand-50);
+  }
+  .segmented > :is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], label:has(input:checked)):not(:disabled):hover {
+    background: var(--color-brand-800);
+  }
+  .segmented-dark > :is(button, label):not(:disabled):hover {
+    background: #1e293b;
+  }
+  .segmented-dark > :is([aria-pressed='true'], [aria-selected='true'], [aria-checked='true'], label:has(input:checked)):not(:disabled):hover {
+    background: var(--color-brand-700);
+  }
+  .text-tabs > :is(button, a):not(:disabled):hover {
+    filter: none;
+    color: var(--color-ink);
+    border-bottom-color: var(--color-brand-200);
+  }
+  .text-tabs > :is([aria-pressed='true'], [aria-selected='true'], [aria-current='page']):not(:disabled):hover {
+    border-bottom-color: var(--color-brand-900);
+  }
+  .text-tabs-dark > :is(button, a):not(:disabled):hover {
+    color: #ffffff;
+    border-bottom-color: #475569;
+  }
+  .text-tabs-dark > :is([aria-pressed='true'], [aria-selected='true'], [aria-current='page']):not(:disabled):hover {
+    border-bottom-color: var(--color-brand-400);
+  }
+  .day-card:not(:disabled):not([aria-pressed='true']):hover {
+    filter: none;
+    border-color: var(--color-brand-300);
+    background: var(--color-brand-50);
+  }
+}
+.notice {
+  border-radius: 12px;
+  border: 1px solid var(--color-line);
+  background: var(--color-brand-50);
+  color: var(--color-ink);
+  padding: 0.9rem 1rem;
+}
+.notice-warn {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+.notice-error {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #7f1d1d;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .text-link:hover {
+    color: var(--color-brand-900);
+  }
+  .site-nav-link:hover {
+    background-color: var(--color-brand-50);
+  }
+}
+
+/* Native radios and checkboxes in the brand accent, not the browser's own blue. */
+input[type='radio'],
+input[type='checkbox'] {
+  accent-color: var(--color-brand-700);
+}
+
+/* A main button that cannot be used yet is plainly grey, not a washed-out blue. */
+.btn-primary:disabled,
+.btn-primary[aria-disabled='true'] {
+  background: var(--color-line);
+  border-color: var(--color-line);
+  color: var(--color-muted);
+  opacity: 1;
+}
+
+/* Sky is the brand's "you are here / picked" mark: the active nav underline, picked chips and the picked time. */
+.picked-mark {
+  box-shadow: inset 0 -3px 0 var(--color-brand-400);
+}
+
+/*
+ * Call-day picker (CallDayPicker): 48px days in a month grid. Today has a ring and a dot; the
+ * chosen day is solid navy with the sky "picked" bar, like a picked chip. Days that cannot be
+ * chosen are grey and plain.
+ */
+.call-month-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-field);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.call-month-nav[aria-disabled='true'] {
+  border-color: var(--color-line);
+  color: var(--color-field);
+}
+.call-day-cell {
+  padding: 2px;
+  cursor: pointer;
+  outline: none;
+}
+.call-day-cell[aria-disabled='true'] {
+  cursor: default;
+}
+.call-day {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  border-radius: 10px;
+  color: var(--color-ink);
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color var(--interaction-duration) var(--interaction-easing),
+    color var(--interaction-duration) var(--interaction-easing);
+}
+.call-day-cell[aria-disabled='true'] .call-day {
+  color: var(--color-field);
+  font-weight: 400;
+}
+.call-day[data-today] {
+  box-shadow: inset 0 0 0 1.5px var(--color-brand-700);
+}
+.call-day[data-today]::after {
+  content: '';
+  position: absolute;
+  bottom: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-brand-700);
+}
+.call-day[data-chosen] {
+  background: var(--color-brand-900);
+  color: #ffffff;
+  box-shadow: inset 0 -3px 0 var(--color-brand-400);
+}
+.call-day[data-chosen][data-today]::after {
+  background: #ffffff;
+}
+.call-day-cell:focus-visible .call-day {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: 1px;
+}
+
+/* A large choice card around a hidden radio (the call's time of day). Picked: solid navy with the sky bar. */
+.choice-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 60px;
+  padding: 0.6rem 0.9rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-field);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--interaction-duration) var(--interaction-easing),
+    border-color var(--interaction-duration) var(--interaction-easing),
+    color var(--interaction-duration) var(--interaction-easing);
+}
+.choice-card-sub {
+  color: var(--color-muted);
+}
+.choice-card-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-field);
+  color: transparent;
+}
+.choice-card:has(input:checked) {
+  background: var(--color-brand-900);
+  border-color: var(--color-brand-900);
+  color: #ffffff;
+  box-shadow: inset 0 -3px 0 var(--color-brand-400);
+}
+.choice-card:has(input:checked) .choice-card-sub {
+  color: var(--color-brand-100);
+}
+.choice-card:has(input:checked) .choice-card-mark {
+  border-color: var(--color-brand-400);
+  background: var(--color-brand-400);
+  color: var(--color-brand-900);
+}
+.choice-card:has(input:focus-visible) {
+  outline: 3px solid var(--color-brand-700);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .call-day-cell:not([aria-disabled='true']):hover .call-day:not([data-chosen]) {
+    background: var(--color-brand-50);
+  }
+  .choice-card:not(:has(input:checked)):hover {
+    border-color: var(--color-brand-400);
+    background: var(--color-brand-50);
   }
 }

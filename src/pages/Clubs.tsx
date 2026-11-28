@@ -1,60 +1,55 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Clock, ImageOff, Images, MapPin, Navigation, Search } from 'lucide-react'
-import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { PublicFrame as Frame } from '../components/PublicFrame'
+import { ClubCard, ClubCardsLoading } from '../components/ClubCard'
+import { ClubImage } from '../components/ClubImage'
+import { OwnersStrip } from '../components/OwnersStrip'
+import { clubContactLinks, clubGrid, pesoKeep, plural, shortClubGrid } from '../lib/clubFormat'
 import { CourtArt } from '../components/CourtArt'
+import { ClubLeaderboardPreviewCard } from '../components/LeaderboardView'
+import { ClubTournamentsPreviewCard } from '../components/TournamentView'
+import { Photo } from '../components/Photo'
+import {
+  ClubAboutCard,
+  ClubAddonsCard,
+  ClubCoachesCard,
+  ClubContactLinks,
+  ClubGallery,
+  ClubPaymentCard,
+  ClubPoliciesCard,
+} from '../components/ClubProfileSections'
 import { LoadingShapes } from '../components/Skeleton'
 import { stagger } from '../lib/motion'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
-import type { PublicClubDetail, PublicClubListing } from '../types'
-import { openingHoursLabel, peso } from '../types'
+import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
+import type { ClubLeaderboardSnapshot, CourtType, PublicClubDetail, PublicClubListing, PublicClubProfile, TournamentSummary } from '../types'
+import { courtTypeLabel, isCourtType, openingHoursLabel } from '../types'
 import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
 
-const textLink = 'control-feedback inline-flex min-h-12 items-center gap-1 text-body font-semibold text-brand-800'
-
-const clubGrid = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
-
-/** Card-shaped placeholders in the same grid as the club list, so nothing jumps when clubs arrive. */
-function ClubCardsLoading() {
-  return (
-    <LoadingShapes label="Loading clubs…">
-      <div className="skeleton h-6 w-24" aria-hidden />
-      <ul className={clubGrid} aria-hidden>
-        {[0, 1, 2].map((key) => (
-          <li key={key} className="card overflow-hidden">
-            <div className="skeleton aspect-[16/9] rounded-none!" />
-            <div className="space-y-2 p-4">
-              <div className="skeleton h-6 w-3/4" />
-              <div className="skeleton h-5 w-1/2" />
-              <div className="skeleton h-5 w-2/3" />
-              <div className="skeleton h-5 w-3/5" />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </LoadingShapes>
-  )
-}
+const textLink = 'text-link inline-flex min-h-12 items-center gap-1 text-subtitle'
+/** Public-page buttons fill the width on phones and size to their words from small tablets up. */
+const fitButton = 'sm:w-auto! sm:px-6'
 
 /** The club page's shape (photo, summary, one location with two courts) while it loads. */
 function ClubDetailLoading() {
   return (
     <LoadingShapes label="Loading club…">
       <div className="space-y-4" aria-hidden>
-        <div className="skeleton aspect-[16/9] max-h-72 w-full rounded-[18px]!" />
+        <div className="skeleton aspect-[16/9] max-h-80 w-full rounded-[12px]!" />
         <div className="skeleton h-5 w-3/5" />
-        <div className="skeleton h-5 w-full" />
+        <div className="skeleton h-[54px] w-full rounded-[10px]! sm:w-48 lg:hidden" />
         <div className="card p-4 space-y-3">
           <div className="space-y-2">
             <div className="skeleton h-7 w-1/2" />
             <div className="skeleton h-5 w-2/3" />
             <div className="skeleton h-5 w-2/5" />
           </div>
-          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[0, 1].map((key) => (
-              <li key={key} className="overflow-hidden rounded-xl border border-slate-200">
-                <div className="skeleton aspect-[16/10] rounded-none!" />
+              <li key={key} className="overflow-hidden rounded-[10px] border border-line">
+                <div className="skeleton aspect-[16/7] rounded-none!" />
                 <div className="space-y-2 p-3">
                   <div className="skeleton h-6 w-3/4" />
                   <div className="skeleton h-5 w-1/2" />
@@ -62,122 +57,87 @@ function ClubDetailLoading() {
               </li>
             ))}
           </ul>
-          <div className="skeleton h-[48px] w-full rounded-[16px]!" />
+          <div className="skeleton h-[54px] w-full rounded-[10px]!" />
         </div>
       </div>
     </LoadingShapes>
   )
 }
 
-type PhotoState = 'loading' | 'loaded' | 'error'
-
-/**
- * A photo that waits on a grey placeholder while it downloads, then fades in.
- * `className` sizes the frame (aspect, height, rounding), so the space is held either way.
- * A photo that fails to load leaves the labelled placeholder, never a broken-image icon.
- */
-function Photo({ src, alt, className = '', lazy = false }: { src: string; alt: string; className?: string; lazy?: boolean }) {
-  const [status, setStatus] = useState<{ src: string; state: PhotoState }>({ src, state: 'loading' })
-  const state = status.src === src ? status.state : 'loading'
-  // A cached photo can finish before React sees its load event; catch that on mount.
-  // Errors come only from the error event: jsdom and not-yet-started lazy images also
-  // report complete with no size, so that alone does not mean the photo is broken.
-  const checkLoaded = useCallback((img: HTMLImageElement | null) => {
-    if (img?.complete && img.naturalWidth > 0) setStatus({ src, state: 'loaded' })
-  }, [src])
-
-  if (state === 'error') {
-    return (
-      <div role="img" aria-label={alt} data-state="error" className={`photo relative ${className}`}>
-        <ImageOff size={28} className="absolute inset-0 m-auto text-slate-500" aria-hidden />
-      </div>
-    )
-  }
-  return (
-    <div data-state={state} className={`photo relative overflow-hidden ${className}`}>
-      <img
-        ref={checkLoaded}
-        src={src}
-        alt={alt}
-        className="photo-img absolute inset-0 h-full w-full object-cover"
-        loading={lazy ? 'lazy' : undefined}
-        decoding="async"
-        onLoad={() => setStatus({ src, state: 'loaded' })}
-        onError={() => setStatus({ src, state: 'error' })}
-      />
-    </div>
-  )
-}
-
-/**
- * Signed-in people get the usual app header and menu. Visitors get the same
- * header layout with Log in and Sign up, and no club logo (this page is not one club's).
- */
-function Frame({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
-  const { user } = useAuth()
-  const body = <main className="safe-bottom px-4 pt-4 space-y-4">{children}</main>
-  if (user) {
-    return (
-      <AppShell role={user.role}>
-        <AppHeader title={title} subtitle={subtitle} right={<SignOutButton />} />
-        {body}
-      </AppShell>
-    )
-  }
-  return (
-    <div className="app-shell app-shell-desktop">
-      <header className="sticky top-0 z-30 bg-white/98 backdrop-blur border-b border-slate-200 pt-4 pb-3.5">
-        <div className="app-content-rail flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-caption font-bold text-brand-800 mb-1">Rally Point</p>
-            <h1 className="text-heading-2 font-semibold text-slate-900">{title}</h1>
-            {subtitle ? <p className="text-subtitle font-medium text-slate-600 mt-1">{subtitle}</p> : null}
-          </div>
-          <nav aria-label="Account" className="shrink-0 flex items-center gap-2">
-            <Link
-              to="/login"
-              className="control-feedback min-h-12 px-3 rounded-2xl border-2 border-slate-200 inline-flex items-center text-body font-semibold text-slate-700"
-            >
-              Log in
-            </Link>
-            <Link
-              to="/login"
-              state={{ mode: 'join' }}
-              className="control-feedback min-h-12 px-3 rounded-2xl bg-brand-700 inline-flex items-center text-body font-semibold text-white"
-            >
-              Sign up
-            </Link>
-          </nav>
-        </div>
-      </header>
-      {body}
-    </div>
-  )
-}
-
-function plural(count: number, one: string, many = `${one}s`) {
-  return `${count} ${count === 1 ? one : many}`
-}
-
-function rateLine(regular: number | null, member: number | null) {
-  if (regular == null) return 'No courts open for booking yet'
-  const from = `From ${peso(regular)} per hour`
-  return member != null && member < regular ? `${from} · Members from ${peso(member)}` : from
-}
-
 type PublicCourt = PublicClubDetail['venues'][number]['courts'][number]
+
+function courtBookPath(clubSlug: string, venueId: string, courtId?: string) {
+  const params = new URLSearchParams({ venue: venueId })
+  if (courtId) params.set('court', courtId)
+  return `/clubs/${clubSlug}/book?${params.toString()}`
+}
+
+/** A single browseable court card; clicking in-service courts goes straight into its booking environment. */
+function CourtCard({
+  clubSlug,
+  venueId,
+  court,
+  canBook = true,
+}: {
+  clubSlug: string
+  venueId: string
+  court: PublicCourt
+  canBook?: boolean
+}) {
+  const target = courtBookPath(clubSlug, venueId, court.id)
+  return (
+    <li className="flex flex-col overflow-hidden rounded-[10px] border border-line bg-white">
+      <CourtPictures court={court} />
+      <div className="flex flex-1 flex-col justify-between p-3">
+        <div>
+          <p className="text-subtitle font-semibold text-ink">{court.name}</p>
+          <CourtTypeLine type={court.court_type} />
+          {/* Courts open for booking say so with their price and Book button; only a closed court gets a label. */}
+          {court.in_service ? (
+            <>
+              <p className="text-subtitle font-normal text-muted">{pesoKeep(court.hourly_rate)} per hour</p>
+              {court.member_rate != null && court.member_rate < court.hourly_rate ? (
+                <p className="text-subtitle font-normal text-ink">Members {pesoKeep(court.member_rate)}</p>
+              ) : null}
+            </>
+          ) : (
+            <span className="pill pill-warn mt-2">Out of service</span>
+          )}
+        </div>
+        {court.in_service && canBook ? (
+          <Link
+            to={target}
+            aria-label={`Book ${court.name}`}
+            className="btn-compact mt-3 w-full"
+          >
+            {/* The card already names the court, so the button just says Book. */}
+            <span>Book</span>
+            <ChevronRight size={18} className="shrink-0" aria-hidden />
+          </Link>
+        ) : null}
+      </div>
+    </li>
+  )
+}
+
+/** "Indoor" or "Outdoor" under a court's name; nothing when the club has not set it. */
+function CourtTypeLine({ type }: { type: CourtType | null | undefined }) {
+  const label = courtTypeLabel(type)
+  return label ? <p className="text-subtitle font-normal text-muted">{label}</p> : null
+}
 
 /** A court's photos, swipeable when there are several; a sample drawing when there are none. */
 function CourtPictures({ court }: { court: PublicCourt }) {
   const photos = court.photos ?? []
   if (photos.length === 0) {
-    return <CourtArt seed={court.id} muted={!court.in_service} className="aspect-[16/10]" />
+    // The drawing is a stand-in, so it stays shorter than a real photo.
+    return <CourtArt seed={court.id} muted={!court.in_service} className="aspect-[16/7]" />
   }
   const several = photos.length > 1
   return (
     <div className={`relative ${court.in_service ? '' : 'grayscale opacity-70'}`}>
       <div
-        className="flex aspect-[16/10] snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] focus-visible:outline focus-visible:outline-3 focus-visible:outline-brand-600"
+        className="flex aspect-[16/10] snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] focus-visible:outline focus-visible:outline-3 focus-visible:outline-brand-700"
         {...(several ? { role: 'region', tabIndex: 0, 'aria-label': `Photos of ${court.name}. Swipe or use the arrow keys to see more.` } : {})}
       >
         {photos.map((url, index) => (
@@ -190,253 +150,477 @@ function CourtPictures({ court }: { court: PublicCourt }) {
           />
         ))}
       </div>
-      {several ? (
-        <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-slate-900/70 px-2 py-0.5 text-caption font-semibold text-white">
-          <Images size={14} aria-hidden /> {photos.length} photos
-        </span>
-      ) : null}
+      {several ? <span className="photo-label pointer-events-none">{photos.length} photos</span> : null}
     </div>
   )
 }
 
+/** Default club first, then alphabetical. */
+function byDefaultThenName(a: PublicClubListing, b: PublicClubListing) {
+  if (a.slug === DEFAULT_CLUB_SLUG && b.slug !== DEFAULT_CLUB_SLUG) return -1
+  if (b.slug === DEFAULT_CLUB_SLUG && a.slug !== DEFAULT_CLUB_SLUG) return 1
+  return a.name.localeCompare(b.name)
+}
+
+const COURT_TYPE_FILTERS: { value: '' | CourtType; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'indoor', label: 'Indoor' },
+  { value: 'outdoor', label: 'Outdoor' },
+]
+
+/** Whether a club has at least one in-service court of this type. */
+function hasCourtType(club: PublicClubListing, type: CourtType) {
+  return (type === 'indoor' ? club.indoor_courts : club.outdoor_courts) > 0
+}
+
+/**
+ * Find a court: every club taking bookings, filtered by name, city or court type. The filters
+ * live in the link (`?q=`, `?city=` and `?type=`), so a search from the landing page, a shared
+ * link and the back button all show the same list.
+ */
 export function ClubDirectory() {
   const [clubs, setClubs] = useState<PublicClubListing[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
-  const [city, setCity] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const query = searchParams.get('q') ?? ''
+  const city = searchParams.get('city') ?? ''
+  const typeParam = searchParams.get('type')
+  const courtType: '' | CourtType = isCourtType(typeParam) ? typeParam : ''
+
+  const setFilter = useCallback((name: 'q' | 'city' | 'type', value: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (value) next.set(name, value)
+      else next.delete(name)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
+  const clearFilters = () => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete('q')
+      next.delete('city')
+      next.delete('type')
+      return next
+    }, { replace: true })
+  }
+
+  const loadDirectory = useCallback(() => {
+    setError(null)
+    setReloadKey((n) => n + 1)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
+    setError(null)
     api.listPublicClubs()
       .then((rows) => { if (!cancelled) setClubs(rows) })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load clubs') })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load clubs')
+      })
     return () => { cancelled = true }
-  }, [])
+  }, [reloadKey])
 
   const cities = useMemo(
     () => [...new Set((clubs ?? []).flatMap((club) => club.cities))].sort(),
     [clubs],
   )
-  const shown = (clubs ?? []).filter((club) => {
-    const q = query.trim().toLowerCase()
+  const orderedClubs = useMemo(() => (clubs ? clubs.slice().sort(byDefaultThenName) : []), [clubs])
+  // The type choice appears once any club has said which of its courts are indoor or outdoor
+  // (or a shared link already picked one, so it can be changed back).
+  const showTypeFilter = Boolean(courtType) || (clubs ?? []).some((club) => club.indoor_courts > 0 || club.outdoor_courts > 0)
+
+  const q = query.trim().toLowerCase()
+  const filtering = Boolean(q || city || courtType)
+  const shown = orderedClubs.filter((club) => {
     const matchesQuery = !q || [club.name, club.address, ...club.cities].some((field) => field?.toLowerCase().includes(q))
-    return matchesQuery && (!city || club.cities.includes(city))
+    return matchesQuery && (!city || club.cities.includes(city)) && (!courtType || hasCourtType(club, courtType))
   })
+  // One or two clubs share their row with the owners tile instead of leaving a column empty.
+  const short = shortClubGrid(shown.length)
+  const clubItems = shown.map((club, index) => (
+    <li key={club.slug} className="enter-rise" style={stagger(index)}>
+      <ClubCard club={club} />
+    </li>
+  ))
 
   return (
-    <Frame title="Find a court" subtitle="Pick a club to see its courts and book">
-      <section className="enter-rise card p-4 grid grid-cols-1 sm:grid-cols-2 gap-3" aria-label="Search clubs">
-        <div>
+    <Frame
+      title="Find a court"
+      subtitle="Pickleball clubs you can book online."
+    >
+      {/* The same columns as the club cards below, so the search lines up with them. */}
+      <div role="search" aria-label="Search clubs" className={clubGrid}>
+        <div className="lg:col-span-2">
           <label className="label" htmlFor="club-search">Search</label>
           <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} aria-hidden />
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" size={18} aria-hidden />
             <input
               id="club-search"
+              type="search"
               className="input input-with-icon"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Club name or area"
+              onChange={(event) => setFilter('q', event.target.value)}
+              placeholder="Club name or city"
+              autoComplete="off"
             />
           </div>
         </div>
         <div>
           <label className="label" htmlFor="club-city">City</label>
-          <select id="club-city" className="input" value={city} onChange={(event) => setCity(event.target.value)}>
+          <select id="club-city" className="input" value={city} onChange={(event) => setFilter('city', event.target.value)}>
             <option value="">All cities</option>
             {cities.map((name) => <option key={name} value={name}>{name}</option>)}
+            {city && clubs && !cities.includes(city) ? <option value={city}>{city}</option> : null}
           </select>
         </div>
-      </section>
+        {showTypeFilter ? (
+          <div className="sm:col-span-2 lg:col-span-3" role="group" aria-labelledby="club-type-label">
+            <p id="club-type-label" className="label">Indoor or outdoor</p>
+            <div className="segmented">
+              {COURT_TYPE_FILTERS.map((option) => (
+                <button
+                  key={option.value || 'all'}
+                  type="button"
+                  aria-pressed={courtType === option.value}
+                  onClick={() => setFilter('type', option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-      {error ? <p role="alert" className="text-body text-red-700">{error}</p> : null}
-      {!clubs && !error ? <ClubCardsLoading /> : null}
-      {clubs ? (
-        <p className="enter-rise text-body font-normal text-slate-600" aria-live="polite">
-          {shown.length === 0 ? 'No clubs match. Try another name or city.' : plural(shown.length, 'club')}
-        </p>
+      {error ? (
+        <section role="alert" className="notice notice-error space-y-3">
+          <div>
+            <p className="text-body font-semibold">Could not load clubs</p>
+            {error !== 'Could not load clubs' ? <p className="text-body">{error}</p> : null}
+            <p className="text-body">Check your connection and try again.</p>
+          </div>
+          <button type="button" onClick={loadDirectory} className={`btn-secondary ${fitButton}`}>
+            Try again
+          </button>
+        </section>
       ) : null}
 
-      {/* Keyed by city so picking a city replays the entrance; typing a search does not. */}
-      <ul key={city || 'all'} className={clubGrid}>
-        {shown.map((club, index) => (
-          <li key={club.slug} className="enter-rise" style={stagger(index)}>
-            <Link to={`/clubs/${club.slug}`} className="control-feedback club-card card flex h-full flex-col overflow-hidden">
-              {club.cover_photo ? (
-                <Photo src={club.cover_photo} alt={`Photo of ${club.name}`} className="club-card-media block aspect-[16/9] w-full" lazy />
-              ) : (
-                <CourtArt seed={club.slug} className="club-card-media aspect-[16/9]" />
-              )}
-              <span className="flex flex-1 items-center gap-3 p-4">
-                <span className="flex-1 min-w-0">
-                  <span className="block text-subtitle font-semibold text-slate-900">{club.name}</span>
-                  {club.cities.length ? (
-                    <span className="block text-body font-normal text-slate-600">{club.cities.join(' · ')}</span>
-                  ) : null}
-                  <span className="block text-body font-normal text-slate-600">
-                    {plural(club.venue_count, 'location')} · {plural(club.court_count, 'court')}
-                  </span>
-                  <span className="block text-body font-semibold text-brand-800">{rateLine(club.min_rate, club.min_member_rate)}</span>
-                </span>
-                <ChevronRight className="text-slate-400 shrink-0" size={22} aria-hidden />
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {!clubs && !error ? <ClubCardsLoading /> : null}
+
+      {clubs ? (
+        <div className="space-y-3">
+          <p className="enter-rise text-subtitle font-normal text-muted" aria-live="polite">
+            {shown.length > 0
+              ? plural(shown.length, 'club')
+              : filtering
+                ? courtType
+                  ? `No clubs with ${courtType} courts match. Try another name, city or court type.`
+                  : 'No clubs match. Try another name or city.'
+                : 'No clubs are taking bookings yet.'}
+          </p>
+          {shown.length === 0 && filtering ? (
+            <button type="button" onClick={clearFilters} className={`btn-secondary ${fitButton}`}>
+              Clear search
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Keyed by city and type so picking one replays the entrance; typing a search does not. */}
+      {shown.length && short ? (
+        <div key={`${city || 'all'}:${courtType || 'all'}`} className={clubGrid}>
+          <ul className={short.list}>{clubItems}</ul>
+          <OwnersStrip className={short.tile} />
+        </div>
+      ) : (
+        <>
+          {shown.length ? <ul key={`${city || 'all'}:${courtType || 'all'}`} className={clubGrid}>{clubItems}</ul> : null}
+          <div className="pt-4">
+            <OwnersStrip />
+          </div>
+        </>
+      )}
     </Frame>
+  )
+}
+
+/**
+ * Today's hours, the price, the booking button and how to reach the club, beside the page on wide
+ * screens. Phones already show the hours, price and button above, so there it keeps only the
+ * contact links, and disappears when the club gave none.
+ */
+function ClubSideCard({
+  club,
+  fromRate,
+  bookPath,
+  info,
+}: {
+  club: PublicClubDetail
+  fromRate: number | null
+  bookPath: string | null
+  info: PublicClubProfile | null
+}) {
+  const several = club.venues.length > 1
+  const wideOnly = 'hidden lg:block'
+  return (
+    <aside aria-label="Booking summary" className="card p-5 space-y-4 lg:sticky lg:top-20">
+      {club.venues.length ? (
+        <div className={wideOnly}>
+          <h2 className="text-subtitle font-semibold text-ink">Hours today</h2>
+          <ul className="mt-1 space-y-0.5">
+            {club.venues.map((venue) => (
+              <li key={venue.id} className="text-subtitle text-muted">
+                {several ? `${venue.name}: ` : ''}{openingHoursLabel(venue.open_hour, venue.close_hour)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {fromRate != null ? (
+        <div className={wideOnly}>
+          <h2 className="text-subtitle font-semibold text-ink">Price</h2>
+          <p className="text-subtitle text-muted">From {pesoKeep(fromRate)} per hour</p>
+        </div>
+      ) : null}
+      {bookPath ? (
+        // Phones already have this button under the club's facts, just above this card.
+        <Link to={bookPath} className="btn-primary hidden! lg:inline-flex!">Book a court</Link>
+      ) : null}
+      <p className={`${wideOnly} text-subtitle text-muted`}>You pay the club by GCash. Staff confirm your booking.</p>
+      <ClubContactLinks profile={info} title="Contact" />
+    </aside>
   )
 }
 
 export function ClubDetailPage() {
   const { slug = '' } = useParams()
-  const { user, joinClub } = useAuth()
+  const { user } = useAuth()
   const nav = useNavigate()
   const [club, setClub] = useState<PublicClubDetail | null | undefined>(undefined)
-  const [error, setError] = useState<string | null>(null)
-  const [busyVenue, setBusyVenue] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  // The club's business profile is extra: the page still shows courts if it cannot load.
+  const [profile, setProfile] = useState<{ slug: string; data: PublicClubProfile } | null>(null)
+  const [leaderboard, setLeaderboard] = useState<{ slug: string; data: ClubLeaderboardSnapshot } | null>(null)
+  const [tournaments, setTournaments] = useState<{ slug: string; data: TournamentSummary[] } | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setClub(undefined)
+    setLoadError(null)
     api.publicClubDetail(slug)
       .then((detail) => { if (!cancelled) setClub(detail) })
-      .catch((e) => { if (!cancelled) { setClub(null); setError(e instanceof Error ? e.message : 'Could not load this club') } })
+      .catch((e) => {
+        if (!cancelled) setLoadError(e instanceof Error && e.message ? e.message : 'Check your connection and try again.')
+      })
+    if (typeof api.publicClubProfile === 'function') {
+      api.publicClubProfile(slug)
+        .then((data) => { if (!cancelled) setProfile(data ? { slug, data } : null) })
+        .catch(() => { if (!cancelled) setProfile(null) })
+    }
+    if (typeof api.publicClubLeaderboard === 'function') {
+      Promise.resolve(api.publicClubLeaderboard(slug, 'month', 'all', 5))
+        .then((data) => { if (!cancelled) setLeaderboard(data ? { slug, data } : null) })
+        .catch(() => { if (!cancelled) setLeaderboard(null) })
+    }
+    if (typeof api.listPublicClubTournaments === 'function') {
+      Promise.resolve(api.listPublicClubTournaments(slug, 4))
+        .then((data) => { if (!cancelled) setTournaments(data ? { slug, data } : null) })
+        .catch(() => { if (!cancelled) setTournaments(null) })
+    }
     return () => { cancelled = true }
-  }, [slug])
+  }, [slug, reloadKey])
 
-  async function book(venueId: string) {
-    if (!club) return
-    if (!user) {
-      nav('/login', { state: { returnTo: `/clubs/${club.slug}` } })
-      return
-    }
-    setBusyVenue(venueId)
-    setError(null)
-    try {
-      await joinClub(club.slug, { asPlayer: true })
-      nav('/member/book', { state: { venueId } })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start a booking here')
-    } finally {
-      setBusyVenue(null)
-    }
+  const back = <Link to="/clubs" className={`${textLink} -ml-1`}><ChevronLeft size={18} aria-hidden /> All clubs</Link>
+
+  if (loadError) {
+    return (
+      <Frame title="We could not load this club" back={back}>
+        <section role="alert" className="notice notice-error space-y-3">
+          <p className="text-subtitle">{loadError}</p>
+          <button type="button" onClick={() => setReloadKey((n) => n + 1)} className={`btn-secondary ${fitButton}`}>
+            Try again
+          </button>
+        </section>
+      </Frame>
+    )
   }
-
-  const back = <Link to="/clubs" className={textLink}><ChevronLeft size={18} aria-hidden /> All clubs</Link>
-
-  if (club === undefined) return <Frame title="Find a court">{back}<ClubDetailLoading /></Frame>
+  if (club === undefined) return <Frame title="Find a court" back={back}><ClubDetailLoading /></Frame>
   if (club === null) {
     return (
       <Frame title="This club is not taking bookings">
-        {back}
-        <p className="text-body text-slate-600">{error ?? 'Check the link, or pick another club from the list.'}</p>
+        <p className="text-subtitle text-muted">Check the link, or pick another club from the list.</p>
+        <Link to="/clubs" className={`btn-secondary ${fitButton}`}>See all clubs</Link>
       </Frame>
     )
   }
 
   const isPlatform = user?.role === 'superadmin'
+  // Club admins book as players (as on the booking page); only desk staff are turned away.
+  const isClubStaff = user?.role === 'staff'
+  const canBook = !isPlatform && !isClubStaff
+  // Only this club's profile: a slower answer for a previous club page is never shown here.
+  const info = profile?.slug === slug ? profile.data : null
   const courts = club.venues.flatMap((venue) => venue.courts)
+  const hasCourts = courts.length > 0
   const openRates = courts.filter((court) => court.in_service).map((court) => court.hourly_rate)
   const fromRate = openRates.length ? Math.min(...openRates) : null
-  // Same order as the club card: a location cover first, else a court's main photo.
-  const heroPhoto = club.venues.map((venue) => venue.cover_photo).find(Boolean)
-    ?? courts.map((court) => court.photos?.[0]).find(Boolean)
-    ?? null
+  const bookVenue = club.venues.find((venue) => venue.courts.some((court) => court.in_service))
+  const bookPath = canBook && bookVenue ? courtBookPath(club.slug, bookVenue.id) : null
+  // With several locations, each location card has its own directions link instead.
+  const clubDirections = club.venues.length === 1 ? directionsUrl(club.venues[0]) : null
+  // Location covers first, then court photos; ClubImage falls back to a labelled sample.
+  const heroPhotos = [
+    ...club.venues.map((venue) => venue.cover_photo),
+    ...courts.flatMap((court) => court.photos ?? []),
+  ]
+
+  const cannotBookNotice = isClubStaff ? (
+    <p className="notice text-subtitle" role="note">Staff accounts cannot book online. Log in with a player account to book.</p>
+  ) : isPlatform ? (
+    <p className="text-subtitle text-muted">Platform accounts can look but cannot book.</p>
+  ) : null
 
   return (
-    <Frame title={club.name} subtitle={placeLine(club) || undefined}>
-      {back}
+    <Frame title={club.name} subtitle={placeLine(club) || undefined} back={back}>
 
-      {heroPhoto ? (
-        <Photo src={heroPhoto} alt={`Photo of ${club.name}`} className="enter-rise block aspect-[16/9] max-h-72 w-full rounded-[18px]" />
-      ) : (
-        <CourtArt seed={club.slug} className="enter-rise aspect-[16/9] max-h-72 w-full rounded-[18px]" />
-      )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-x-8">
+        <div className="space-y-4 lg:col-start-1">
+          <ClubImage
+            photos={heroPhotos}
+            seed={club.slug}
+            alt={`Photo of ${club.name}`}
+            kind="club"
+            priority
+            sizes="(min-width: 1024px) 66vw, 100vw"
+            className="enter-rise block aspect-[16/9] max-h-80 w-full overflow-hidden rounded-[12px]"
+          />
 
-      <p className="text-body font-normal text-slate-600">
-        {plural(club.venues.length, 'location')} · {plural(courts.length, 'court')}
-        {fromRate != null ? ` · From ${peso(fromRate)} per hour` : ''}
-      </p>
-      <p className="text-body font-normal text-slate-600">
-        {user
-          ? `Booking here adds you to ${club.name} as a player. Membership is optional; members pay the member rate where a court has one.`
-          : 'Log in or create a free account to book. Membership is optional; members pay the member rate where a court has one.'}
-      </p>
-      {error ? <p role="alert" className="text-body text-red-700">{error}</p> : null}
+          <p className="text-subtitle font-normal text-muted">
+            {plural(club.venues.length, 'location')} · {plural(courts.length, 'court')}
+            {fromRate != null ? ` · From ${pesoKeep(fromRate)} per hour` : ''}
+          </p>
 
-      {club.venues.map((venue, venueIndex) => {
-        const bookable = venue.courts.some((court) => court.in_service)
-        const venuePlace = placeLine(venue)
-        const directions = directionsUrl(venue)
-        const mapUrl = mapEmbedUrl(venue)
-        return (
-          <section key={venue.id} className="enter-rise card p-4 space-y-3" style={stagger(venueIndex + 1)} aria-labelledby={`venue-${venue.id}`}>
-            {venue.cover_photo ? (
-              <Photo src={venue.cover_photo} alt={`Cover photo of ${venue.name}`} className="block aspect-[16/9] max-h-64 w-full rounded-xl" lazy />
-            ) : null}
-            <div>
-              <h2 id={`venue-${venue.id}`} className="text-title font-semibold text-slate-900">{venue.name}</h2>
-              {venuePlace ? (
-                <p className="text-body font-normal text-slate-600 flex items-start gap-1.5"><MapPin size={16} className="mt-[3px] shrink-0" aria-hidden /> {venuePlace}</p>
+          {hasCourts ? (
+            <>
+              {bookPath || clubDirections ? (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  {bookPath ? <Link to={bookPath} className={`btn-primary ${fitButton} lg:hidden!`}>Book a court</Link> : null}
+                  {clubDirections ? (
+                    <a className={textLink} href={clubDirections} target="_blank" rel="noopener noreferrer">Get directions</a>
+                  ) : null}
+                </div>
               ) : null}
-              <p className="text-body font-normal text-slate-600 flex items-center gap-1.5"><Clock size={16} className="shrink-0" aria-hidden /> {openingHoursLabel(venue.open_hour, venue.close_hour)}</p>
-              {directions ? (
-                <a className={textLink} href={directions} target="_blank" rel="noopener noreferrer">
-                  <Navigation size={16} aria-hidden /> Get directions
-                </a>
-              ) : null}
-            </div>
+              {cannotBookNotice}
+            </>
+          ) : (
+            <section className="notice space-y-3" aria-label="No courts listed">
+              <p className="text-subtitle font-semibold">This club has not listed its courts yet.</p>
+              <ClubContactLinks profile={info} />
+              <Link to="/clubs" className={textLink}>Find another club</Link>
+            </section>
+          )}
+        </div>
 
-            <h3 className="text-subtitle font-semibold text-slate-900">Courts</h3>
-            {venue.courts.length === 0 ? <p className="text-body text-slate-600">No courts listed yet.</p> : (
-              <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-                {venue.courts.map((court) => (
-                  <li key={court.id} className="overflow-hidden rounded-xl border border-slate-200">
-                    <CourtPictures court={court} />
-                    <div className="p-3">
-                      <p className="text-subtitle font-semibold text-slate-900">{court.name}</p>
-                      {court.in_service ? (
-                        <>
-                          <p className="text-body font-normal text-slate-600">{peso(court.hourly_rate)} per hour</p>
-                          {court.member_rate != null && court.member_rate < court.hourly_rate ? (
-                            <p className="text-body font-normal text-brand-800">Members {peso(court.member_rate)}</p>
-                          ) : null}
-                          <span className="pill pill-ok mt-2">Available</span>
-                        </>
-                      ) : (
-                        <span className="pill pill-warn mt-2">Out of service</span>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+        {hasCourts ? (
+          // On phones the card holds only the contact links, so it goes when there are none.
+          <div className={`lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-stretch ${clubContactLinks(info) ? '' : 'hidden lg:block'}`}>
+            <ClubSideCard club={club} fromRate={fromRate} bookPath={bookPath} info={info} />
+          </div>
+        ) : null}
 
-            {mapUrl ? (
-              <iframe
-                title={`Map of ${venue.name}`}
-                src={mapUrl}
-                className="w-full h-48 rounded-xl border border-slate-200"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-            ) : null}
+        <div className="space-y-4 lg:col-start-1">
+          {club.venues.map((venue, venueIndex) => {
+            const bookable = venue.courts.some((court) => court.in_service)
+            const venuePlace = placeLine(venue)
+            const directions = directionsUrl(venue)
+            const mapUrl = mapEmbedUrl(venue)
+            return (
+              <section key={venue.id} className="enter-rise card p-4 space-y-3 sm:p-5" style={stagger(venueIndex + 1)} aria-labelledby={`venue-${venue.id}`}>
+                {venue.cover_photo ? (
+                  <Photo src={venue.cover_photo} alt={`Cover photo of ${venue.name}`} className="block aspect-[16/9] max-h-64 w-full rounded-[10px]" lazy />
+                ) : null}
+                <div>
+                  <h2 id={`venue-${venue.id}`} className="text-heading-3 font-semibold text-ink">{venue.name}</h2>
+                  {venuePlace ? <p className="text-subtitle font-normal text-muted">{venuePlace}</p> : null}
+                  <p className="text-subtitle font-normal text-muted">{openingHoursLabel(venue.open_hour, venue.close_hour)}</p>
+                  {directions ? (
+                    <a className={textLink} href={directions} target="_blank" rel="noopener noreferrer">Get directions</a>
+                  ) : null}
+                </div>
 
-            {isPlatform ? null : (
-              <button
-                type="button"
-                className="btn-primary w-full"
-                disabled={!bookable || busyVenue !== null}
-                aria-busy={busyVenue === venue.id}
-                onClick={() => void book(venue.id)}
-              >
-                {busyVenue === venue.id ? 'Opening booking…' : bookable ? `Book a court at ${venue.name}` : 'No courts open for booking'}
-              </button>
-            )}
-          </section>
-        )
-      })}
-      {isPlatform ? <p className="text-body text-slate-600">Platform accounts can look but cannot book.</p> : null}
+                <h3 className="text-title font-semibold text-ink">Courts</h3>
+                {venue.courts.length === 0 ? <p className="text-subtitle text-muted">No courts listed yet.</p> : (
+                  <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {venue.courts.map((court) => (
+                      <CourtCard
+                        key={court.id}
+                        clubSlug={club.slug}
+                        venueId={venue.id}
+                        court={court}
+                        canBook={canBook}
+                      />
+                    ))}
+                  </ul>
+                )}
+
+                {mapUrl ? (
+                  <iframe
+                    title={`Map of ${venue.name}`}
+                    src={mapUrl}
+                    className="h-48 w-full rounded-[10px] border border-line"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : null}
+
+                {canBook && venue.courts.length > 0 ? (
+                  <button
+                    type="button"
+                    className={`btn-primary ${fitButton}`}
+                    disabled={!bookable}
+                    // Short on screen; the full name tells screen readers which location it books.
+                    aria-label={bookable ? `Book a court here at ${venue.name}` : undefined}
+                    onClick={() => nav(courtBookPath(club.slug, venue.id))}
+                  >
+                    {bookable ? 'Book a court here' : 'No courts open for booking'}
+                  </button>
+                ) : null}
+              </section>
+            )
+          })}
+
+          {info ? (
+            <>
+              <ClubAboutCard clubName={club.name} profile={info} index={club.venues.length + 1} />
+              <ClubGallery clubName={club.name} profile={info} index={club.venues.length + 2} />
+              <ClubAddonsCard profile={info} index={club.venues.length + 3} />
+              <ClubCoachesCard clubSlug={club.slug} profile={info} index={club.venues.length + 4} />
+              <ClubPaymentCard clubName={club.name} profile={info} index={club.venues.length + 5} />
+              <ClubPoliciesCard profile={info} index={club.venues.length + 6} />
+            </>
+          ) : null}
+          {typeof api.publicClubLeaderboard === 'function' ? (
+            <ClubLeaderboardPreviewCard
+              clubSlug={club.slug}
+              clubName={club.name}
+              snapshot={leaderboard?.slug === slug ? leaderboard.data : null}
+              index={club.venues.length + (info ? 7 : 1)}
+            />
+          ) : null}
+          {typeof api.listPublicClubTournaments === 'function' ? (
+            <ClubTournamentsPreviewCard
+              clubSlug={club.slug}
+              clubName={club.name}
+              tournaments={tournaments?.slug === slug ? tournaments.data : null}
+              index={club.venues.length + (info ? 8 : 2)}
+            />
+          ) : null}
+        </div>
+      </div>
     </Frame>
   )
 }

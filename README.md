@@ -2,7 +2,7 @@
 
 Mobile-first **court rental + membership** web app for pickleball (Figma UI/UX → production).
 
-**Owner-confirmed staging:** https://zylush.github.io/rally-point-web/
+**Live site:** https://brinely.info (Vercel, built from `main`, staging database)
 
 ## Stack
 Vite · React · TypeScript · Tailwind v4 · HashRouter · Supabase (demo fallback)
@@ -108,5 +108,6 @@ enforcement remains separately gated.
 ## Scripts
 - `npm run dev` — local
 - `npm run build` — production
-- `npm run deploy` — build + gh-pages
+- `npm run build:vercel` — the brinely.info build Vercel runs (staging database, domain root)
+- `npm run deploy` — legacy build + gh-pages; do not use (publishes the demo)
 - `npm run preview` — preview dist

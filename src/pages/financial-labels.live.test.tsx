@@ -4,7 +4,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../types'
 import LoginPage from './LoginPage'
-import { MemberHome, MemberPay, MemberTransactions } from './member'
+import { MemberTransactions } from './member'
+import { MemberAccount } from './MemberAccount'
 import { AdminHome, AdminTransactions } from './admin'
 
 const liveState = vi.hoisted(() => ({
@@ -21,6 +22,8 @@ const liveState = vi.hoisted(() => ({
   transactions: vi.fn(),
   stats: vi.fn(),
   payMembership: vi.fn(),
+  myMemberPasses: vi.fn(),
+  requestMembership: vi.fn(),
 }))
 
 vi.mock('../lib/supabase', () => ({ isDemoMode: false, supabase: null }))
@@ -43,6 +46,8 @@ vi.mock('../lib/api', () => ({
     transactions: liveState.transactions,
     stats: liveState.stats,
     payMembership: liveState.payMembership,
+    myMemberPasses: liveState.myMemberPasses,
+    requestMembership: liveState.requestMembership,
   },
 }))
 
@@ -61,6 +66,20 @@ const member = {
   qr_token: null,
   created_at: '2026-09-01T00:00:00.000Z',
 }
+const livePass = {
+  club_id: 'club-live',
+  club_slug: 'live-club',
+  club_name: 'Live Club',
+  member_id: 'membership-live',
+  member_code: 'RP-LIVE',
+  full_name: 'Mia Member',
+  membership_type: 'standard',
+  status: 'active',
+  expiry_date: '2026-09-01',
+  is_active_member: false,
+  qr_token: 'token-live',
+  request: null,
+}
 const charge = {
   id: 'charge-live',
   member_id: member.id,
@@ -78,11 +97,13 @@ beforeEach(() => {
   liveState.transactions.mockReset().mockResolvedValue([charge])
   liveState.stats.mockReset().mockResolvedValue({ members: 1, active_now: 0, revenue_today: 500, courts_occupied: 0 })
   liveState.payMembership.mockReset()
+  liveState.myMemberPasses.mockReset().mockResolvedValue([livePass])
+  liveState.requestMembership.mockReset().mockResolvedValue('request-live')
 })
 
 describe('live financial labels', () => {
   it('calls member activity recorded charges, not payments or online checkout', async () => {
-    render(<MemoryRouter><MemberHome /></MemoryRouter>)
+    render(<MemoryRouter><MemberAccount /></MemoryRouter>)
     expect(await screen.findByText('Recent charges')).toBeInTheDocument()
     expect(screen.getByText('Php 500.00 recorded')).toBeInTheDocument()
     expect(screen.queryByText('Quick actions')).not.toBeInTheDocument()
@@ -92,7 +113,7 @@ describe('live financial labels', () => {
 
   it('describes an empty live charge history without calling it a payment history', async () => {
     liveState.transactions.mockResolvedValue([])
-    render(<MemoryRouter><MemberHome /></MemoryRouter>)
+    render(<MemoryRouter><MemberAccount /></MemoryRouter>)
     expect(await screen.findByText('No charges recorded yet.')).toBeInTheDocument()
     expect(screen.queryByText('No payments yet.')).not.toBeInTheDocument()
   })
@@ -105,15 +126,14 @@ describe('live financial labels', () => {
     expect(screen.queryByText('Your payments')).not.toBeInTheDocument()
   })
 
-  it('keeps live renewal at the desk without suggesting an online payment was taken', async () => {
-    render(<MemoryRouter><MemberPay /></MemoryRouter>)
-    expect(await screen.findByText('RP-LIVE', { exact: false })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Renew at the desk' })).toBeInTheDocument()
-    expect(screen.getByText('Renewal price')).toBeInTheDocument()
-    expect(screen.getByText(/No payment is collected online/)).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Online payment' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Pay Php/ })).not.toBeInTheDocument()
+  it('asks the club to confirm a live renewal instead of taking an online payment', async () => {
+    const user = userEvent.setup()
+    render(<MemoryRouter><MemberAccount /></MemoryRouter>)
+    await user.click(await screen.findByRole('button', { name: 'Renew membership' }))
+    expect(liveState.requestMembership).toHaveBeenCalledWith('member-live', 'club-live')
     expect(liveState.payMembership).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /Pay Php/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/card number/i)).not.toBeInTheDocument()
   })
 
   it('labels the admin dashboard sum as recorded charges rather than collected revenue', async () => {
@@ -136,9 +156,9 @@ describe('live financial labels', () => {
     liveState.user = null
     const user = userEvent.setup()
     render(<MemoryRouter><LoginPage /></MemoryRouter>)
-    expect(screen.getByText('Availability · QR · open play')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Join as member', pressed: false }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Log in' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Sign up', pressed: false }))
     expect(screen.getByText('For players only. View availability, open play, and your QR pass.')).toBeInTheDocument()
-    expect(screen.queryByText(/book, pay, open play/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Book and pay for courts/)).not.toBeInTheDocument()
   })
 })

@@ -8,7 +8,7 @@ describe('demoStore inquiry workflow', () => {
   })
 
   it('keeps inquiries private to staff and persists one Admin reply with a staff notification', () => {
-    const staff = demoStore.login('staff@rallypoint.local', 'staff123')
+    const staff = demoStore.login('staff@brinely.info', 'staff123')
     const inquiry = demoStore.createInquiry({
       user_id: staff.id,
       category: 'booking',
@@ -28,7 +28,7 @@ describe('demoStore inquiry workflow', () => {
       }),
     ).toThrow('Only staff and admins can submit inquiries for their own account')
 
-    const admin = demoStore.login('admin@rallypoint.local', 'admin123')
+    const admin = demoStore.login('admin@brinely.info', 'admin123')
     expect(demoStore.allInquiries()).toHaveLength(1)
     const updated = demoStore.respondToInquiry({
       id: inquiry.id,
@@ -57,7 +57,7 @@ describe('demoStore inquiry workflow', () => {
       }),
     ).toThrow('This inquiry already has an Admin response')
 
-    demoStore.login('staff@rallypoint.local', 'staff123')
+    demoStore.login('staff@brinely.info', 'staff123')
     expect(demoStore.inquiriesForUser(staff.id)[0]).toMatchObject({
       response: 'I updated your access.',
       status: 'resolved',
@@ -69,7 +69,7 @@ describe('demoStore inquiry workflow', () => {
   })
 
   it('rejects member submissions and hides inquiries assigned to another club', () => {
-    const member = demoStore.login('member@rallypoint.local', 'member123')
+    const member = demoStore.login('member@brinely.info', 'member123')
     expect(() => demoStore.createInquiry({
       user_id: member.id,
       category: 'other',
@@ -89,7 +89,7 @@ describe('demoStore inquiry workflow', () => {
       created_at: new Date().toISOString(),
     })
     demoStore.set(db)
-    demoStore.login('admin@rallypoint.local', 'admin123')
+    demoStore.login('admin@brinely.info', 'admin123')
     expect(demoStore.allInquiries()).toEqual([])
     expect(() => demoStore.respondToInquiry({ id: 'outside-club', status: 'resolved' }))
       .toThrow('Inquiry not found')

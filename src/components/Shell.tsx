@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
+  BarChart3,
   Building2,
   CalendarDays,
   Coins,
@@ -7,29 +8,24 @@ import {
   HelpCircle,
   LayoutDashboard,
   LogOut,
+  PhoneCall,
   QrCode,
   Tv,
-  UserRound,
   Users,
 } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { ClubRole, Role } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { homeFor } from '../lib/roleHome'
-import { DEFAULT_CLUB_SLUG } from '../lib/tenant'
-import { RallyPointLogo } from './RallyPointLogo'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
+import { useModalDialog } from '../lib/useModalDialog'
+import { BrinelyLogo } from './BrinelyLogo'
 import { LoadingShapes, SkeletonBlock, SkeletonCard, SkeletonRows } from './Skeleton'
+import { SiteFooter } from './SiteFooter'
+import { SiteHeader } from './SiteHeader'
 
-/** Plain-language nav — short words players of any age recognize */
-const memberTabs = [
-  { to: '/member', end: true, label: 'Home', icon: Home },
-  { to: '/member/book', label: 'Book', icon: CalendarDays },
-  { to: '/member/open', label: 'Play', icon: Users },
-  { to: '/member/pass', label: 'My QR', icon: QrCode },
-  { to: '/member/profile', label: 'Account', icon: UserRound },
-  { to: '/member/help', label: 'Help', icon: HelpCircle },
-]
+// Players and members have no app menu: they use the public site and its account menu.
 
 const staffTabs = [
   { to: '/staff', end: true, label: 'Home', icon: LayoutDashboard },
@@ -40,8 +36,12 @@ const staffTabs = [
   { to: '/staff/help', label: 'Help', icon: HelpCircle },
 ]
 
-const adminTabs = [
+type NavTab = { to: string; end?: boolean; label: string; icon: typeof Home; sideOnly?: boolean }
+
+// Phones keep six tabs; Analytics is in the desktop menu and opens from Home on a phone.
+const adminTabs: NavTab[] = [
   { to: '/admin', end: true, label: 'Home', icon: LayoutDashboard },
+  { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, sideOnly: true },
   { to: '/admin/ops', label: 'Floor', icon: Home },
   { to: '/admin/board', label: 'Schedule', icon: Tv },
   { to: '/admin/open', label: 'Open play', icon: Users },
@@ -50,15 +50,23 @@ const adminTabs = [
 ]
 
 /**
- * The current logo artwork says "Gensan", so it is shown only for that club.
- * Other clubs and the platform portal get a neutral badge until they have their own.
+ * The bRineLy platform emblem shows when viewing platform screens (no active club).
+ * Clubs without their own uploaded logo show a clean initials badge.
  */
 function ClubMark({ size }: { size: 'small' | 'large' }) {
-  const { activeClub, user } = useAuth()
-  const showGensanLogo = activeClub ? activeClub.slug === DEFAULT_CLUB_SLUG : user?.role !== 'superadmin'
+  const { activeClub } = useAuth()
   const box = size === 'large' ? 'w-11 h-11' : 'w-8 h-8'
-  if (showGensanLogo) return <RallyPointLogo variant="mark" className={`${box} object-contain`} />
-  const words = (activeClub?.name ?? 'Rally Point').split(/\s+/).filter(Boolean)
+  if (!activeClub) return <BrinelyLogo variant="mark" className={`${box} object-contain`} />
+  return <ClubBadge name={activeClub.name} size={size} />
+}
+
+/**
+ * A club's initials badge, for any club by name (the sign-in dialog shows the club being
+ * booked, which need not be the active one). Decorative: the club's name is always shown beside it.
+ */
+export function ClubBadge({ name, size = 'small' }: { name: string; size?: 'small' | 'large' }) {
+  const box = size === 'large' ? 'w-11 h-11' : 'w-8 h-8'
+  const words = name.split(/\s+/).filter(Boolean)
   const initials = `${words[0]?.[0] ?? ''}${words.length > 1 ? words[words.length - 1][0] : ''}`.toUpperCase()
   return (
     <span
@@ -71,10 +79,12 @@ function ClubMark({ size }: { size: 'small' | 'large' }) {
 }
 
 // The platform portal only: superadmins have no club screens.
-const superadminTabs = [
+const superadminTabs: NavTab[] = [
   { to: '/superadmin', end: true, label: 'Overview', icon: LayoutDashboard },
+  { to: '/superadmin/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/superadmin/clubs', label: 'Clubs', icon: Building2 },
   { to: '/superadmin/ledger', label: 'Ledger', icon: Coins },
+  { to: '/superadmin/requests', label: 'Requests', icon: PhoneCall },
   { to: '/superadmin/help', label: 'Help', icon: HelpCircle },
 ]
 
@@ -93,11 +103,11 @@ export function ClubSwitcher({ tone = 'light', className = '' }: { tone?: 'light
   if (clubs.length < 2 || !activeClub) return null
   const selectClass =
     tone === 'dark'
-      ? 'w-full min-h-12 rounded-xl border border-white/25 bg-white/10 px-3 text-body font-semibold text-white'
+      ? 'select-on-dark w-full min-h-12 rounded-xl border border-white/25 bg-white/10 px-3 text-body font-semibold text-white'
       : 'input min-h-12 w-full'
   return (
     <label className={`block ${className}`}>
-      <span className={tone === 'dark' ? 'text-caption text-teal-200/90' : 'text-caption font-semibold text-slate-600'}>
+      <span className={tone === 'dark' ? 'text-caption text-brand-100' : 'text-caption font-semibold text-slate-600'}>
         Club
       </span>
       <select
@@ -106,8 +116,10 @@ export function ClubSwitcher({ tone = 'light', className = '' }: { tone?: 'light
         onChange={(event) => {
           const next = clubs.find((club) => club.club_id === event.target.value)
           if (!next) return
+          const stayHere = auth.user?.role === 'member' && next.role === 'member'
           auth.switchClub(next.club_id)
-          navigate(homeFor(next.role), { replace: true })
+          // A player stays on the page they are on; staff and admins go to their desk in that club.
+          if (!stayHere) navigate(homeFor(next.role), { replace: true })
         }}
       >
         {clubs.map((club) => (
@@ -120,19 +132,20 @@ export function ClubSwitcher({ tone = 'light', className = '' }: { tone?: 'light
   )
 }
 
-function tabsFor(role: Role) {
+function tabsFor(role: Role): NavTab[] {
   if (role === 'superadmin') return superadminTabs
   if (role === 'admin') return adminTabs
   if (role === 'staff') return staffTabs
-  return memberTabs
+  return []
 }
 
 export function SideNav({ role }: { role: Role }) {
   const { user, activeClub } = useAuth()
   const tabs = tabsFor(role)
-  const placeName = activeClub?.name ?? (role === 'superadmin' ? 'Rally Point platform' : 'Rally Point')
+  const placeName = activeClub?.name ?? (role === 'superadmin' ? 'bRineLy platform' : 'bRineLy')
+  // The 'member' account role is the player role; "member" alone means someone with a membership.
   const roleLabel =
-    role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin' : role === 'staff' ? 'Staff' : 'Member'
+    role === 'superadmin' ? 'Superadmin' : role === 'admin' ? 'Admin' : role === 'staff' ? 'Staff' : 'Player'
 
   return (
     <aside className="side-nav">
@@ -140,7 +153,7 @@ export function SideNav({ role }: { role: Role }) {
         <div className="flex items-center gap-2.5 mb-1">
           <ClubMark size="large" />
           <div>
-            <p className="text-caption font-normal text-teal-200/90">
+            <p className="text-caption font-normal text-brand-100">
               {placeName}
             </p>
             <p className="text-subtitle font-medium">{roleLabel}</p>
@@ -179,12 +192,18 @@ export function SideNav({ role }: { role: Role }) {
         <LogOut size={22} aria-hidden />
         Log out
       </SignOutAction>
+
+      {/* The platform's own mark, kept apart from the club's badge at the top. */}
+      <p className="mt-4 flex items-center gap-2 border-t border-white/10 px-2 pt-4 text-caption font-semibold text-brand-100">
+        <BrinelyLogo variant="mark" title="" className="h-6 w-6 shrink-0 object-contain" />
+        bRineLy
+      </p>
     </aside>
   )
 }
 
 export function BottomNav({ role }: { role: Role }) {
-  const tabs = tabsFor(role)
+  const tabs = tabsFor(role).filter((tab) => !tab.sideOnly)
   const cols =
     tabs.length >= 6
       ? 'grid-cols-6'
@@ -223,6 +242,16 @@ export function AppShell({
   role: Role
   children: ReactNode
 }) {
+  // Players and members: the public site's header (with the account menu) and footer.
+  if (role === 'member') {
+    return (
+      <div className="app-shell app-shell-desktop app-shell-public flex flex-col">
+        <SiteHeader />
+        {children}
+        <SiteFooter />
+      </div>
+    )
+  }
   return (
     <div className="app-shell">
       <SideNav role={role} />
@@ -245,9 +274,26 @@ export function AppHeader({
   left?: ReactNode
   right?: ReactNode
 }) {
-  const clubName = useAuth().activeClub?.name ?? 'Rally Point'
+  const { activeClub, user } = useAuth()
+  const clubName = activeClub?.name ?? 'bRineLy'
+  useDocumentTitle(title)
+  // On the public site (players and members) the page heading sits in the content, as on public pages.
+  if (user?.role === 'member') {
+    return (
+      <div className="app-content-rail pt-6 pb-2 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          {left ? <div className="shrink-0 mt-1">{left}</div> : null}
+          <div className="min-w-0">
+            <h1 className="text-heading-1 font-semibold text-ink">{title}</h1>
+            {subtitle ? <p className="mt-1 text-subtitle text-muted">{subtitle}</p> : null}
+          </div>
+        </div>
+        {right ? <div className="shrink-0">{right}</div> : null}
+      </div>
+    )
+  }
   return (
-    <header className="sticky top-0 z-30 bg-white/98 backdrop-blur border-b border-slate-200 pt-4 pb-3.5">
+    <header className="sticky top-0 z-30 bg-white border-b border-line pt-4 pb-3.5">
       <div className="app-content-rail flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
           {left ? <div className="shrink-0 mt-0.5">{left}</div> : null}
@@ -281,7 +327,7 @@ export function SignOutButton() {
 
   return (
     <SignOutAction
-      className="control-feedback min-h-12 min-w-12 px-3 rounded-2xl border-2 border-slate-200 flex items-center justify-center gap-1.5 text-slate-700 text-body font-bold md:hidden"
+      className="btn-compact min-w-12 px-3 md:hidden"
       iconOnly
     >
       <LogOut size={18} aria-hidden />
@@ -329,50 +375,13 @@ export function SignOutAction({
     }
   }
 
-  useEffect(() => {
-    if (!confirming) return
-
-    const trigger = opener.current
-    // Keep the page behind the dialog out of reach while it is open.
-    const appRoot = document.getElementById('root')
-    const wasInert = appRoot?.inert ?? false
-    if (appRoot) appRoot.inert = true
-    cancelButton.current?.focus()
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (signingOutRef.current) return
-        setSignOutError(null)
-        setConfirming(false)
-        return
-      }
-      if (event.key !== 'Tab') return
-
-      const buttons = dialog.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')
-      if (!buttons?.length) {
-        event.preventDefault()
-        return
-      }
-      const first = buttons[0]
-      const last = buttons[buttons.length - 1]
-      const active = document.activeElement
-      if (!dialog.current?.contains(active)) {
-        event.preventDefault()
-        ;(event.shiftKey ? last : first).focus()
-      } else if (event.shiftKey && active === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      if (appRoot) appRoot.inert = wasInert
-      if (trigger?.isConnected) trigger.focus()
-    }
-  }, [confirming])
+  // Keep the page behind the dialog out of reach while it is open.
+  useModalDialog(confirming, {
+    dialogRef: dialog,
+    initialFocusRef: cancelButton,
+    returnFocusRef: opener,
+    onEscape: closeDialog,
+  })
 
   return (
     <>
@@ -475,6 +484,22 @@ export function Toast({ message, fadingOut = false }: { message: string | null; 
       role="status"
     >
       {message}
+    </div>
+  )
+}
+
+/**
+ * A message that stays on screen until the person closes it (or the next one replaces it),
+ * for screens whose messages must not vanish before they are read. A problem is announced
+ * straight away.
+ */
+export function ClosableToast({ text, problem = false, onClose }: { text: string; problem?: boolean; onClose: () => void }) {
+  return (
+    <div className="toast flex items-start gap-2">
+      <p className="flex-1" role={problem ? 'alert' : 'status'}>{text}</p>
+      <button type="button" className="-my-3 -mr-2 min-h-12 shrink-0 rounded-xl px-3 font-semibold underline" onClick={onClose}>
+        Close
+      </button>
     </div>
   )
 }

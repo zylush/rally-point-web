@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Users } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ChevronRight, Shuffle, Trophy, Users } from 'lucide-react'
 import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
 import { LoadingShapes, SkeletonBlock, SkeletonCard, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
@@ -137,6 +138,32 @@ export function MemberOpenPlay() {
     <AppShell role="member">
       <AppHeader title="Open play" subtitle="Join a drop-in game — no private court needed" right={<SignOutButton />} />
       <main className="safe-bottom px-4 pt-4 space-y-3">
+        <Link
+          to="/member/leaderboard"
+          className="control-feedback card p-4 flex items-center gap-3 min-h-[64px]"
+        >
+          <span className="action-tile-icon shrink-0" aria-hidden>
+            <Trophy size={22} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-subtitle font-semibold text-ink">Club leaderboard</span>
+            <span className="block text-body text-slate-600">See your rank, points and recent matches</span>
+          </span>
+          <ChevronRight className="text-slate-400" size={20} aria-hidden />
+        </Link>
+        <Link
+          to="/member/tournaments"
+          className="control-feedback card p-4 flex items-center gap-3 min-h-[64px]"
+        >
+          <span className="action-tile-icon shrink-0" aria-hidden>
+            <Shuffle size={22} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-subtitle font-semibold text-ink">Club tournaments</span>
+            <span className="block text-body text-slate-600">Follow live brackets and random queue games</span>
+          </span>
+          <ChevronRight className="text-slate-400" size={20} aria-hidden />
+        </Link>
         {venues.length > 1 ? (
           <section className="card p-3">
             <label className="label" htmlFor="member-open-play-venue">Venue</label>
@@ -298,6 +325,32 @@ export function OpenPlayManage({ role }: { role: 'staff' | 'admin' }) {
         }
       />
       <main className="safe-bottom px-4 pt-4 space-y-3">
+        <Link
+          to={role === 'admin' ? '/admin/leaderboard' : '/staff/leaderboard'}
+          className="control-feedback card p-4 flex items-center gap-3 min-h-[64px]"
+        >
+          <span className="action-tile-icon shrink-0" aria-hidden>
+            <Trophy size={22} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-subtitle font-semibold text-ink">Leaderboard & match scoring</span>
+            <span className="block text-body text-slate-600">View club standings or record match results</span>
+          </span>
+          <ChevronRight className="text-slate-400" size={20} aria-hidden />
+        </Link>
+        <Link
+          to={role === 'admin' ? '/admin/tournaments' : '/staff/tournaments'}
+          className="control-feedback card p-4 flex items-center gap-3 min-h-[64px]"
+        >
+          <span className="action-tile-icon shrink-0" aria-hidden>
+            <Shuffle size={22} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-subtitle font-semibold text-ink">Tournaments & random queue</span>
+            <span className="block text-body text-slate-600">Run live brackets or draw random matchups</span>
+          </span>
+          <ChevronRight className="text-slate-400" size={20} aria-hidden />
+        </Link>
         {venues.length > 1 ? (
           <section className="card p-3">
             <label className="label" htmlFor="manage-open-play-venue">Venue</label>

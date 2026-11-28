@@ -1,20 +1,23 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { BackButton } from '../components/BackButton'
-import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
+import { AppHeader, AppShell, ClosableToast, SignOutButton } from '../components/Shell'
 import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { stagger } from '../lib/motion'
-import type { Court, CourtInput, CourtPhoto, Profile, Venue, VenueLocationInput } from '../types'
-import { openingHoursLabel, peso } from '../types'
+import type { Court, CourtInput, CourtPhoto, CourtType, PictureCleanup, Profile, Venue, VenueLocationInput } from '../types'
+import { courtTypeLabel, hourLabel, isCourtType, openingHoursLabel, peso } from '../types'
 import { directionsUrl, mapEmbedUrl, placeLine } from '../lib/maps'
+import { useFocusFirstField, useInlineForm } from '../lib/formFocus'
 import { CourtPhotosEditor, VenueCoverEditor } from './AdminPhotos'
+import { fileNote, sentence } from './adminProfileShared'
 
 const DEFAULT_COURT_RATE = 500
 
 /** Returns true when saved, so the form can close. */
 type SaveCourt = (input: CourtInput, busyKey: string) => Promise<boolean>
 type SaveLocation = (input: VenueLocationInput) => Promise<boolean>
+type SaveHours = (venue: Venue, openHour: number, closeHour: number) => Promise<boolean>
 
 /** Photo actions for venue covers and courts. */
 interface PhotoActions {
@@ -117,6 +120,21 @@ export function AdminVenues() {
     }
   }
 
+  const saveHours: SaveHours = async (venue, openHour, closeHour) => {
+    setBusy(`hours:${venue.id}`)
+    try {
+      await api.upsertVenue({ ...venue, open_hour: openHour, close_hour: closeHour })
+      setMessage(`Opening hours of ${venue.name} saved`)
+      await reload()
+      return true
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save the opening hours')
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const saveLocation: SaveLocation = async (input) => {
     setBusy(`location:${input.venue_id}`)
     try {
@@ -161,11 +179,11 @@ export function AdminVenues() {
     }
   }
 
-  async function runPhotoAction(key: string, action: () => Promise<void>, done: string) {
+  async function runPhotoAction(key: string, action: () => Promise<PictureCleanup | void>, done: string) {
     setBusy(key)
     try {
-      await action()
-      setMessage(done)
+      const note = fileNote((await action()) ?? { fileLeftBehind: false })
+      setMessage(note ? `${sentence(done)} ${note}` : done)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update the photo')
     } finally {
@@ -215,7 +233,7 @@ export function AdminVenues() {
         <form className="card p-4 space-y-3" onSubmit={createVenue}>
           <div>
             <h2 className="font-extrabold">Add a venue</h2>
-            <p className="text-xs text-slate-500 mt-1">Venues are open for booking 24 hours, in Philippine time. Deactivate instead of deleting history.</p>
+            <p className="text-xs text-slate-500 mt-1">A new venue takes bookings 24 hours, in Philippine time. Set its opening hours below. Deactivate instead of deleting history.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
@@ -244,6 +262,7 @@ export function AdminVenues() {
                 onToggleVenue={() => void toggleVenue(venue)}
                 onSaveCourt={saveCourt}
                 onSaveLocation={saveLocation}
+                onSaveHours={saveHours}
                 photoActions={photoActions}
               />
             ))}
@@ -281,7 +300,7 @@ export function AdminVenues() {
           </>
         )}
       </main>
-      {message ? <div className="toast" role="status">{message}</div> : null}
+      {message ? <ClosableToast text={message} onClose={() => setMessage(null)} /> : null}
     </AppShell>
   )
 }
@@ -351,6 +370,7 @@ function VenueCard({
   onToggleVenue,
   onSaveCourt,
   onSaveLocation,
+  onSaveHours,
   photoActions,
 }: {
   venue: Venue
@@ -361,9 +381,12 @@ function VenueCard({
   onToggleVenue: () => void
   onSaveCourt: SaveCourt
   onSaveLocation: SaveLocation
+  onSaveHours: SaveHours
   photoActions: PhotoActions
 }) {
   const [adding, setAdding] = useState(false)
+  const hoursForm = useInlineForm()
+  const hoursButtonId = `venue-${venue.id}-hours-change`
   const [photosOpenId, setPhotosOpenId] = useState<string | null>(null)
   const { photos } = photoActions
   const cover = photos?.find((photo) => photo.venue_id === venue.id && !photo.court_id) ?? null
@@ -384,9 +407,28 @@ function VenueCard({
             {venue.slug} · Philippine time · {openingHoursLabel(venue.open_hour, venue.close_hour)}{venue.is_active ? '' : ' · Inactive'}
           </p>
         </div>
-        <button type="button" className="btn-secondary text-sm" onClick={onToggleVenue} disabled={busy === venue.id}>
-          {venue.is_active ? `Deactivate ${venue.name}` : `Activate ${venue.name}`}
-        </button>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-bold text-slate-700">Opening hours</h3>
+        {hoursForm.editing === 'hours' ? (
+          <HoursForm
+            venue={venue}
+            saving={busy === `hours:${venue.id}`}
+            onCancel={hoursForm.close}
+            onSave={async (openHour, closeHour) => {
+              if (await onSaveHours(venue, openHour, closeHour)) hoursForm.close()
+            }}
+          />
+        ) : (
+          <div className="mt-1">
+            <p className="text-sm text-slate-700">{openingHoursLabel(venue.open_hour, venue.close_hour)}, Philippine time</p>
+            <button type="button" id={hoursButtonId} className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-800 underline"
+              onClick={() => hoursForm.open('hours', hoursButtonId)}>
+              Change opening hours
+            </button>
+          </div>
+        )}
       </div>
 
       <div>
@@ -458,6 +500,9 @@ function VenueCard({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold truncate">{court.name}</p>
+                    <p className="text-sm text-slate-600">
+                      {courtTypeLabel(court.court_type) ?? 'Indoor or outdoor not set'}
+                    </p>
                     <p className="text-sm text-slate-600">{peso(court.hourly_rate)} per hour</p>
                     {court.member_rate != null ? (
                       <p className="text-sm text-brand-800">Members {peso(court.member_rate)} per hour</p>
@@ -507,6 +552,14 @@ function VenueCard({
           Add a court to {venue.name}
         </button>
       )}
+
+      {/* Kept small and at the bottom so it is not hit by mistake; inactive venues get a plain Activate. */}
+      <div className="border-t border-line pt-3">
+        <button type="button" className={venue.is_active ? 'btn-compact btn-compact-danger' : 'btn-compact'}
+          onClick={onToggleVenue} disabled={busy === venue.id}>
+          {venue.is_active ? `Deactivate ${venue.name}` : `Activate ${venue.name}`}
+        </button>
+      </div>
     </section>
   )
 }
@@ -568,6 +621,66 @@ function LocationForm({
         <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
         <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving}>
           {saving ? 'Saving…' : 'Save location'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/** Whole hours, opening 12:00 AM to 11:00 PM and closing by midnight (bookings end by closing time). */
+function HoursForm({
+  venue,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  venue: Venue
+  saving: boolean
+  onCancel: () => void
+  onSave: (openHour: number, closeHour: number) => Promise<void>
+}) {
+  const [openHour, setOpenHour] = useState(venue.open_hour)
+  const [closeHour, setCloseHour] = useState(venue.close_hour)
+  const id = `venue-${venue.id}-hours`
+  const invalid = closeHour <= openHour
+  const formRef = useRef<HTMLFormElement>(null)
+  useFocusFirstField(formRef)
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!invalid) void onSave(openHour, closeHour)
+  }
+
+  return (
+    <form ref={formRef} className="mt-2 space-y-3" onSubmit={submit} aria-label={`Opening hours of ${venue.name}`}>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="label" htmlFor={`${id}-open`}>Opens</label>
+          <select id={`${id}-open`} className="input" value={openHour} onChange={(event) => setOpenHour(Number(event.target.value))}>
+            {Array.from({ length: 24 }, (_, hour) => <option key={hour} value={hour}>{hourLabel(hour)}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label" htmlFor={`${id}-close`}>Closes</label>
+          <select id={`${id}-close`} className="input" value={closeHour} onChange={(event) => setCloseHour(Number(event.target.value))}>
+            {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
+              <option key={hour} value={hour}>{hour === 24 ? 'Midnight (12:00 AM)' : hourLabel(hour)}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <button type="button" className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-800 underline" onClick={() => { setOpenHour(0); setCloseHour(24) }}>
+        Open 24 hours
+      </button>
+      <p className="text-xs text-slate-500">
+        Players can book only while you are open, and a booking must end by closing time. Closing after midnight is not
+        possible yet. Bookings already made stay.
+      </p>
+      {invalid ? <p className="text-sm font-semibold text-red-700" role="alert">Closing time must be after opening time.</p> : null}
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className="btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button type="submit" className="btn-primary" disabled={saving || invalid} aria-busy={saving}>
+          {saving ? 'Saving…' : 'Save hours'}
         </button>
       </div>
     </form>
@@ -637,6 +750,7 @@ function CourtForm({
   const [rate, setRate] = useState(String(court?.hourly_rate ?? DEFAULT_COURT_RATE))
   const [memberRate, setMemberRate] = useState(court?.member_rate != null ? String(court.member_rate) : '')
   const [inService, setInService] = useState(court ? court.status !== 'maintenance' : true)
+  const [courtType, setCourtType] = useState<'' | CourtType>(court?.court_type ?? '')
   const idPrefix = court ? `court-${court.id}` : `new-court-${venue.id}`
 
   function submit(event: FormEvent) {
@@ -648,6 +762,7 @@ function CourtForm({
       hourly_rate: Number(rate),
       member_rate: memberRate.trim() === '' ? null : Number(memberRate),
       in_service: inService,
+      court_type: courtType || null,
     })
   }
 
@@ -694,6 +809,19 @@ function CourtForm({
             onChange={(event) => setMemberRate(event.target.value)}
             placeholder="Same as hourly rate"
           />
+        </div>
+        <div>
+          <label className="label" htmlFor={`${idPrefix}-type`}>Indoor or outdoor</label>
+          <select
+            id={`${idPrefix}-type`}
+            className="input"
+            value={courtType}
+            onChange={(event) => setCourtType(isCourtType(event.target.value) ? event.target.value : '')}
+          >
+            <option value="">Not set</option>
+            <option value="indoor">Indoor</option>
+            <option value="outdoor">Outdoor</option>
+          </select>
         </div>
       </div>
       <label className="min-h-12 rounded-xl border border-slate-200 px-3 py-2 flex items-center gap-3 text-sm">

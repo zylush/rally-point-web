@@ -1,4 +1,5 @@
-import type { CheckIn, Member } from '../../types'
+import type { CheckIn, CheckInMember, CheckInResult, Member } from '../../types'
+import { hasActiveMembership } from '../../types'
 import { activeClubId } from './access'
 import { todayISO, uid } from './common'
 import { load, save } from './persistence'
@@ -15,7 +16,7 @@ export const checkInOperations = {
     }
     return m
   },
-  checkInByQr(payload: string, staffId?: string, venueId?: string) {
+  checkInByQr(payload: string, staffId?: string, venueId?: string): CheckInResult {
     const db = load()
     const clubId = activeClubId(db)
     // Member codes are unique only within a club, so lookups stay inside the active club.
@@ -31,6 +32,14 @@ export const checkInOperations = {
     }
     if (!member) throw new Error('QR not recognized')
     if (member.status !== 'active') throw new Error('Membership not active')
+    // What the desk needs to recognise the person: their photo, nickname and membership state.
+    const profile = member.user_id ? db.profiles.find((p) => p.id === member.user_id) : undefined
+    const scanned: CheckInMember = {
+      ...member,
+      nickname: profile?.nickname ?? null,
+      photo_url: profile?.photo_path ?? null,
+      is_active_member: hasActiveMembership(member),
+    }
     const row: CheckIn = {
       id: uid('ci'),
       club_id: member.club_id,
@@ -42,7 +51,7 @@ export const checkInOperations = {
     }
     db.checkins.unshift(row)
     save(db)
-    return { checkin: row, member }
+    return { checkin: row, member: scanned }
   },
   checkIn(memberId: string, staffId?: string, note?: string, venueId?: string) {
     const db = load()

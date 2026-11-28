@@ -9,7 +9,7 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     user: {
       id: 'u-staff',
-      email: 'staff@rallypoint.local',
+      email: 'staff@brinely.info',
       full_name: 'Sam Staff',
       role: 'staff',
     },
@@ -32,6 +32,9 @@ vi.mock('../lib/api', () => ({
     addMemberToSession: vi.fn(),
     checkIn: vi.fn(),
     checkInByQr: vi.fn(),
+    membershipRequests: vi.fn(),
+    approveMembershipRequest: vi.fn(),
+    declineMembershipRequest: vi.fn(),
   },
 }))
 
@@ -42,6 +45,7 @@ beforeEach(() => {
     id: assignedVenueId, club_id: 'rally', slug: 'assigned', name: 'Assigned venue',
     timezone: 'Asia/Manila', open_hour: 6, close_hour: 22, is_active: true,
   }])
+  vi.mocked(api.membershipRequests).mockResolvedValue([])
 })
 const mia: Member = {
   id: 'mem_001', user_id: 'u-member-1', member_code: 'RP-1001', full_name: 'Mia Member',
@@ -147,7 +151,7 @@ describe('StaffCheckIn', () => {
     const user = userEvent.setup()
     vi.mocked(api.checkInByQr).mockResolvedValue({
       checkin: { id: 'check-1', member_id: mia.id, checked_in_at: '2026-08-12T18:00:00.000Z', member: mia },
-      member: mia,
+      member: { ...mia, is_active_member: true },
     })
     render(<MemoryRouter><StaffCheckIn /></MemoryRouter>)
     const qr = screen.getByRole('textbox')
@@ -159,6 +163,38 @@ describe('StaffCheckIn', () => {
     expect(await screen.findByText('Checked in Mia Member')).toBeInTheDocument()
     expect(screen.getByText('Last check-in')).toBeInTheDocument()
     expect(qr).toHaveValue('')
+  })
+
+  it('shows the scanned member\'s photo, nickname and member status', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.checkInByQr).mockResolvedValue({
+      checkin: { id: 'check-1', member_id: mia.id, checked_in_at: '2026-08-12T18:00:00.000Z', member: mia },
+      member: { ...mia, nickname: 'Mimi', photo_url: 'https://example.invalid/mia.webp', is_active_member: true },
+    })
+    render(<MemoryRouter><StaffCheckIn /></MemoryRouter>)
+    await user.type(screen.getByRole('textbox'), 'RP-1001')
+    await user.click(screen.getByRole('button', { name: 'Check in via QR' }))
+
+    expect(await screen.findByText('Mia Member (Mimi)')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Photo of Mia Member' })).toHaveAttribute('src', 'https://example.invalid/mia.webp')
+    expect(screen.getByText('Member until Jan 1, 2027')).toBeInTheDocument()
+    expect(screen.queryByText('Player — regular rate')).not.toBeInTheDocument()
+  })
+
+  it('shows initials and the regular rate for a player without an active membership', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.checkInByQr).mockResolvedValue({
+      checkin: { id: 'check-2', member_id: jonah.id, checked_in_at: '2026-08-12T18:00:00.000Z', member: jonah },
+      member: { ...jonah, nickname: null, photo_url: null, is_active_member: false },
+    })
+    render(<MemoryRouter><StaffCheckIn /></MemoryRouter>)
+    await user.type(screen.getByRole('textbox'), 'RP-1002')
+    await user.click(screen.getByRole('button', { name: 'Check in via QR' }))
+
+    expect(await screen.findByText('Player — regular rate')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'No photo. Initials JC' })).toBeInTheDocument()
+    expect(screen.getAllByText('Jonah Cruz').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Member until/)).not.toBeInTheDocument()
   })
 
   it('shows QR errors without marking a check-in complete', async () => {
@@ -420,6 +456,23 @@ describe('StaffCourts', () => {
 
     expect(screen.getAllByRole('combobox')[0]).toHaveValue('court_b')
     expect(screen.getByRole('option', { name: /Court A/ })).toBeDisabled()
+  })
+
+  it('shows whether each court is indoor or outdoor, and nothing for a court that is not set', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.listCourts).mockResolvedValue([
+      { id: 'court_a', name: 'Court A', status: 'available', hourly_rate: 500, court_type: 'indoor' },
+      { id: 'court_b', name: 'Court B', status: 'available', hourly_rate: 500, court_type: 'outdoor' },
+      { id: 'court_c', name: 'Court C', status: 'available', hourly_rate: 500, court_type: null },
+    ])
+    render(<MemoryRouter><StaffCourts /></MemoryRouter>)
+    expect(await screen.findByText('Indoor')).toBeInTheDocument()
+    expect(screen.getByText('Outdoor')).toBeInTheDocument()
+    expect(screen.getByText('Court C').parentElement).not.toHaveTextContent(/Indoor|Outdoor/)
+
+    await user.click(screen.getByRole('button', { name: 'Rent' }))
+    expect(screen.getByRole('option', { name: /Court A · Indoor · available/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Court C · available/ })).toBeInTheDocument()
   })
 
   it('shows an empty floor when no live sessions remain', async () => {

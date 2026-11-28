@@ -1,21 +1,17 @@
-import { StrictMode, useEffect } from 'react'
+import { StrictMode } from 'react'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
+// GitHub Pages deep links are restored in main.tsx (restoreGhPagesRoute) before this renders.
 export function AppRoot() {
-  useEffect(() => {
-    const redirect = sessionStorage.getItem('ghpages-redirect')
-    if (redirect) {
-      sessionStorage.removeItem('ghpages-redirect')
-      // optional: map path redirects if we ever leave hash mode
-    }
-  }, [])
-
   return (
     <StrictMode>
-      <HashRouter>
-        <App />
-      </HashRouter>
+      <ErrorBoundary>
+        <HashRouter>
+          <App />
+        </HashRouter>
+      </ErrorBoundary>
     </StrictMode>
   )
 }

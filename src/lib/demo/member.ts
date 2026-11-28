@@ -5,7 +5,7 @@ import type { DemoDB } from './model'
 import { load, save } from './persistence'
 
 /** Next member code that is unused within one club (codes are unique per club). */
-export function nextMemberCode(db: DemoDB, clubId: string, prefix = 'RP-') {
+export function nextMemberCode(db: DemoDB, clubId: string, prefix = 'BR-') {
   const taken = new Set(db.members.filter((member) => member.club_id === clubId).map((member) => member.member_code))
   let n = 1000 + taken.size + 1
   while (taken.has(`${prefix}${n}`)) n++

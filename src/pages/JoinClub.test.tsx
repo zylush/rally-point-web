@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   user: null as Profile | null,
   clubs: [] as MyClub[],
   publicClub: null as PublicClub | null,
+  publicClubFails: false,
   joinClub: vi.fn(),
   switchClub: vi.fn(),
 }))
@@ -36,7 +37,12 @@ vi.mock('../context/AuthContext', () => ({
 }))
 
 vi.mock('../lib/api', () => ({
-  api: { publicClub: vi.fn(async () => state.publicClub) },
+  api: {
+    publicClub: vi.fn(async () => {
+      if (state.publicClubFails) throw new Error('Failed to fetch')
+      return state.publicClub
+    }),
+  },
 }))
 
 function Where() {
@@ -58,6 +64,7 @@ beforeEach(() => {
   state.user = null
   state.clubs = []
   state.publicClub = davao
+  state.publicClubFails = false
   state.joinClub.mockReset()
   state.switchClub.mockReset()
 })
@@ -67,12 +74,26 @@ describe('JoinClubPage', () => {
     state.publicClub = null
     renderJoin()
     expect(await screen.findByRole('heading', { name: 'This club link is not valid' })).toBeInTheDocument()
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('link', { name: 'Go to log in' })).toHaveAttribute('href', '/login')
+    expect(within(main).getByRole('link', { name: 'Find a court' })).toHaveAttribute('href', '/clubs')
+  })
+
+  it('tells a failed lookup apart from an invalid link and tries again', async () => {
+    state.publicClubFails = true
+    const user = userEvent.setup()
+    renderJoin()
+    expect(await screen.findByRole('heading', { name: 'We could not load this link' })).toBeInTheDocument()
+    expect(screen.queryByText('This club link is not valid')).not.toBeInTheDocument()
+    state.publicClubFails = false
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Joining Rally Point Davao')).toBeInTheDocument()
   })
 
   it('offers sign-up into the named club when nobody is signed in', async () => {
     renderJoin()
     expect(await screen.findByText('Joining Rally Point Davao')).toBeInTheDocument()
-    expect(screen.getByText('Create member account')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Create your player account' })).toBeInTheDocument()
   })
 
   it('lets a signed-in player confirm joining and lands them in the club', async () => {
@@ -81,9 +102,43 @@ describe('JoinClubPage', () => {
     state.joinClub.mockResolvedValue(davaoMembership)
     const user = userEvent.setup()
     renderJoin()
-    await user.click(await screen.findByRole('button', { name: 'Join Rally Point Davao' }))
+    expect(await screen.findByRole('heading', { name: 'Join Rally Point Davao?' })).toBeInTheDocument()
+    // No club photos yet, so the banner is a labelled sample.
+    expect(screen.getByText('Sample photo')).toBeInTheDocument()
+
+    const privacyLink = screen.getByRole('link', { name: 'Privacy Notice' })
+    expect(privacyLink).toHaveAttribute('href', '/privacy?club=rally-point-davao')
+    expect(privacyLink).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('button', { name: /Read the Privacy Notice/ })).toBeInTheDocument()
+
+    const checkbox = screen.getByRole('checkbox', { name: /I have read and understood the Privacy Notice/ })
+    expect(checkbox).toBeDisabled()
+    expect(checkbox).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Join Rally Point Davao' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Read to the end of the Privacy Notice first, then tick the box.')
+    const reader = screen.getByRole('region', { name: 'Privacy Notice text' })
+    expect(reader).toHaveFocus()
+    expect(within(reader).getByText(/ask the staff at Rally Point Davao/)).toBeInTheDocument()
+    expect(state.joinClub).not.toHaveBeenCalled()
+
+    Object.defineProperty(reader, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(reader, 'clientHeight', { configurable: true, value: 200 })
+    Object.defineProperty(reader, 'scrollTop', { configurable: true, writable: true, value: 790 })
+    fireEvent.scroll(reader)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(checkbox).toBeEnabled()
+    expect(checkbox).not.toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Join Rally Point Davao' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tick the box to confirm you have read the Privacy Notice.')
+    expect(checkbox).toHaveFocus()
+    expect(state.joinClub).not.toHaveBeenCalled()
+
+    await user.click(checkbox)
+    await user.click(screen.getByRole('button', { name: 'Join Rally Point Davao' }))
     expect(state.joinClub).toHaveBeenCalledWith('rally-point-davao')
-    expect(await screen.findByText('At /member')).toBeInTheDocument()
+    // Players land on the club's own page.
+    expect(await screen.findByText('At /clubs/rally-point-davao')).toBeInTheDocument()
   })
 
   it('shows join errors without leaving the page', async () => {
@@ -92,7 +147,10 @@ describe('JoinClubPage', () => {
     state.joinClub.mockRejectedValue(new Error('This club link is not valid'))
     const user = userEvent.setup()
     renderJoin()
-    await user.click(await screen.findByRole('button', { name: 'Join Rally Point Davao' }))
+    await user.click(await screen.findByRole('button', { name: /Read the Privacy Notice/ }))
+    await user.click(screen.getByRole('button', { name: 'Unlock checkbox' }))
+    await user.click(screen.getByRole('checkbox', { name: /I have read and understood the Privacy Notice/ }))
+    await user.click(screen.getByRole('button', { name: 'Join Rally Point Davao' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('This club link is not valid')
   })
 
@@ -103,13 +161,14 @@ describe('JoinClubPage', () => {
     renderJoin()
     await user.click(await screen.findByRole('button', { name: 'Go to Rally Point Davao' }))
     expect(state.switchClub).toHaveBeenCalledWith('club-davao')
-    expect(await screen.findByText('At /member')).toBeInTheDocument()
+    // Players land on the club's own page.
+    expect(await screen.findByText('At /clubs/rally-point-davao')).toBeInTheDocument()
   })
 
   it('tells platform accounts they cannot join clubs', async () => {
     state.user = { ...player, role: 'superadmin' }
     renderJoin()
-    expect(await screen.findByText(/cannot join as members/)).toBeInTheDocument()
+    expect(await screen.findByText(/cannot join a club as a player/)).toBeInTheDocument()
     expect(state.joinClub).not.toHaveBeenCalled()
   })
 })

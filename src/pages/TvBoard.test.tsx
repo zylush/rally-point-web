@@ -96,4 +96,21 @@ describe('TV board', () => {
     expect(await screen.findByText('2 courts · 0 bookings today')).toBeInTheDocument()
     expect(screen.getByText(/Main Hall · Live board/)).toBeInTheDocument()
   })
+
+  it('labels indoor and outdoor courts, and nothing for a court that is not set', async () => {
+    vi.mocked(api.publicDaySchedule).mockResolvedValue([])
+    vi.mocked(api.publicClubDetail).mockResolvedValue({
+      ...club,
+      venues: [
+        { ...club.venues[0], courts: [{ ...club.venues[0].courts[0], court_type: 'indoor' }, { ...club.venues[0].courts[1], court_type: null }] },
+        { ...club.venues[1], courts: [{ ...club.venues[1].courts[0], court_type: 'outdoor' }] },
+      ],
+    })
+    renderBoard()
+
+    expect(await screen.findByText('3 courts · 0 bookings today')).toBeInTheDocument()
+    // The wide grid and the phone list both name the type.
+    expect(screen.getAllByText('Indoor')).toHaveLength(2)
+    expect(screen.getAllByText('Outdoor')).toHaveLength(2)
+  })
 })

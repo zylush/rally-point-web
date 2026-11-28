@@ -50,7 +50,7 @@ async (page) => {
   const courtsVenue = venueResponse();
   await page.goto(`${target}#/staff/courts`);
   await checkAssignedVenue(await courtsVenue);
-  await page.getByText('Tenant Fixture Rally Court', { exact: true }).first().waitFor();
+  await page.getByText('Court 1', { exact: true }).first().waitFor();
   checkReads('courts', ['courts', 'court_sessions']);
   if (await page.getByText('Court A', { exact: true }).count())
     throw new Error('Unassigned court visible on staff courts route');
@@ -65,7 +65,7 @@ async (page) => {
   const bookingsVenue = venueResponse();
   await page.goto(`${target}#/staff/bookings`);
   await checkAssignedVenue(await bookingsVenue);
-  await page.getByText('Tenant Fixture Rally Court', { exact: false }).first().waitFor();
+  await page.getByText('Court 1', { exact: false }).first().waitFor();
   checkReads('bookings', ['bookings']);
   if (await page.getByText('Court A', { exact: true }).count())
     throw new Error('Unassigned court visible on staff bookings route');

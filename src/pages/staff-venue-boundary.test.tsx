@@ -18,7 +18,7 @@ vi.mock('../lib/api', () => ({
   api: {
     listVenues: vi.fn(), listCourts: vi.fn(), playingSessions: vi.fn(),
     recentCheckins: vi.fn(), memberRoster: vi.fn(), listMembers: vi.fn(),
-    checkIn: vi.fn(), checkInByQr: vi.fn(),
+    checkIn: vi.fn(), checkInByQr: vi.fn(), membershipRequests: vi.fn(),
   },
 }))
 
@@ -34,6 +34,7 @@ describe('staff venue read boundary', () => {
     vi.mocked(api.playingSessions).mockResolvedValue([])
     vi.mocked(api.recentCheckins).mockResolvedValue([])
     vi.mocked(api.memberRoster).mockResolvedValue([])
+    vi.mocked(api.membershipRequests).mockResolvedValue([])
   })
 
   it('does not load courts or sessions before the assigned venue is known', async () => {

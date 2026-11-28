@@ -50,16 +50,18 @@ describe('demo persistence normalization', () => {
     })
     demoStore.set(db)
     expect(demoStore.get().walkins.at(-1)?.id).toBe('roundtrip')
-    expect(JSON.parse(localStorage.getItem('rally_point_demo_v4')!)).not.toHaveProperty('passwords')
+    expect(JSON.parse(localStorage.getItem('brinely_demo_v4')!)).not.toHaveProperty('passwords')
 
     localStorage.setItem('rally_point_demo_v1', 'legacy')
     localStorage.setItem('rally_point_demo_v2', 'legacy')
     localStorage.setItem('rally_point_demo_v3', 'legacy')
+    localStorage.setItem('rally_point_demo_v4', 'legacy')
     demoStore.reset()
     expect(demoStore.get().walkins).toEqual([])
     expect(localStorage.getItem('rally_point_demo_v1')).toBeNull()
     expect(localStorage.getItem('rally_point_demo_v2')).toBeNull()
     expect(localStorage.getItem('rally_point_demo_v3')).toBeNull()
+    expect(localStorage.getItem('rally_point_demo_v4')).toBeNull()
   })
 
   it('drops branch-era data and turns legacy roles into trusted club and platform roles', () => {

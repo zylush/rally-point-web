@@ -26,6 +26,28 @@ interface CourtSlot {
   ignoreBookingId?: string
 }
 
+/**
+ * An unpaid online checkout whose time to pay has run out no longer holds its hours.
+ * Once the player has sent a payment the clock stops: the club confirms or rejects it.
+ */
+export function holdHasLapsed(booking: Pick<Booking, 'status' | 'hold_expires_at' | 'payment_submitted_at'>, now = Date.now()) {
+  return booking.status === 'pending_payment'
+    && booking.hold_expires_at != null
+    && !booking.payment_submitted_at
+    && new Date(booking.hold_expires_at).getTime() <= now
+}
+
+/** Marks unpaid checkouts whose time ran out as cancelled, so every list agrees with the time grid. */
+export function retireLapsedHolds(db: DemoDB, now = Date.now()) {
+  let changed = false
+  for (const booking of db.bookings) {
+    if (!holdHasLapsed(booking, now)) continue
+    booking.status = 'cancelled'
+    changed = true
+  }
+  return changed
+}
+
 export function isSlotFree(db: DemoDB, slot: CourtSlot) {
   for (const session of db.sessions) {
     if (session.court_id !== slot.courtId) continue
@@ -36,6 +58,7 @@ export function isSlotFree(db: DemoDB, slot: CourtSlot) {
     if (booking.court_id !== slot.courtId) continue
     if (slot.ignoreBookingId && booking.id === slot.ignoreBookingId) continue
     if (booking.status !== 'confirmed' && booking.status !== 'pending_payment') continue
+    if (holdHasLapsed(booking)) continue
     if (overlaps(slot.start_at, slot.end_at, booking.start_at, booking.end_at)) return false
   }
   return true

@@ -19,6 +19,7 @@ describe('shared formatting and QR helpers', () => {
     expect(qrPayload('RP-1001', 'QR_MIA')).toBe('RP1|RP-1001|QR_MIA')
     expect(parseQrPayload(' RP1|RP-1001|QR_MIA ')).toEqual({ member_code: 'RP-1001', token: 'QR_MIA' })
     expect(parseQrPayload('rp-1002')).toEqual({ member_code: 'RP-1002', token: '' })
+    expect(parseQrPayload('br-4f2a9c1d')).toEqual({ member_code: 'BR-4F2A9C1D', token: '' })
     expect(parseQrPayload('not-a-qr')).toBeNull()
     expect(parseQrPayload('RP1|missing')).toBeNull()
   })

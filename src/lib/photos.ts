@@ -3,6 +3,18 @@ import { supabase } from './supabase'
 /** The public Storage bucket for court and location photos (see the court_photos migration). */
 export const PHOTO_BUCKET = 'court-photos'
 
+/**
+ * The public Storage bucket for members' profile photos (see the member_profile migration).
+ * Each person writes only in their own `<user id>/` folder; anyone holding a link can view it.
+ */
+export const MEMBER_PHOTO_BUCKET = 'member-photos'
+
+/** Public link to a member's profile photo, or the data link itself in the demo. */
+export function memberPhotoUrl(path: string): string {
+  if (!supabase || path.startsWith('data:')) return path
+  return supabase.storage.from(MEMBER_PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
 /** File types an admin can pick. Phones usually hand over JPEG even for HEIC photos. */
 export const PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp'
 

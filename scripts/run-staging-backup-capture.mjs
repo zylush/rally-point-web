@@ -1,6 +1,7 @@
 // Fresh logical backup of staging before a release (see `releases` in club-platform-staging.mjs).
 // Usage: node scripts/run-staging-backup-capture.mjs --release <id> --verify-local|--capture
-// Read-only on staging: SELECTs inside read-only transactions, and supabase db dump.
+// Read-only on staging: SELECTs inside read-only transactions, supabase db dump, and downloads
+// of the stored files through their public links (every known bucket is public).
 // It never restores, migrates, deploys or prints rows. One-shot: a used folder is never reused.
 import assert from 'node:assert/strict'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
@@ -8,8 +9,9 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { evaluateChecks } from './club-platform-checks.mjs'
-import { activitySql, childEnv, dockerExe, fingerprintMarker, identitySql, parseJsonOutput, parseReleaseArgs,
-  project, readOnlyJson, readPassword, root, runChild, sequenceSql, sha, snapshotNames, stagingPsql, stagingTarget,
+import { activitySql, childEnv, dockerExe, downloadStoredFile, fingerprintMarker, identitySql, knownBucketsOnly,
+  parseJsonOutput, parseReleaseArgs, project, readOnlyJson, readPassword, root, runChild, sequenceSql, sha,
+  snapshotNames, stagingPsql, stagingTarget, storageBucketsSql, storageObjectFile, storageObjectsSql,
   supabaseCli } from './club-platform-staging.mjs'
 
 let release = null
@@ -40,7 +42,17 @@ const phases = []
 const startedAt = new Date().toISOString()
 function save(name, value) {
   assert.match(name, /^[a-zA-Z0-9_.-]+$/)
-  writeFileSync(join(directory, name), typeof value === 'string' ? value : JSON.stringify(value, null, 2) + '\n', { flag: 'wx' })
+  const bytes = Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value, null, 2) + '\n'
+  writeFileSync(join(directory, name), bytes, { flag: 'wx' })
+}
+
+/** Copies one stored file through its public link, checked against its record, into the capture. */
+async function copyStorageFile(index, object) {
+  const { bytes, etag } = await downloadStoredFile(object, `Stored file ${index + 1}`)
+  const file = storageObjectFile(index)
+  save(file, bytes)
+  return { bucket: object.bucket_id, name: object.name, file, bytes: bytes.length, sha256: sha(bytes),
+    mimetype: object.mimetype ?? null, etag }
 }
 function record(value) {
   phases.push({ ...value, at: new Date().toISOString() })
@@ -115,14 +127,29 @@ async function main() {
   save('target.json', { project, pooler: target.host, database: identity.database, serverVersion: identity.version,
     versions: identity.versions, observedAt: new Date().toISOString() })
 
+  // Storage: only known buckets may exist (each one whose migration staging has, with its
+  // settings), and their files are copied first. The dump holds
+  // their records; the files live outside the database. Copying before the "before" snapshot
+  // means a download that touched a record can never pass as a change made during the capture.
+  const buckets = query(target, 'storage_buckets', storageBucketsSql)
+  assert.ok(knownBucketsOnly(buckets, release.baseVersions), 'Staging has an unknown, changed or missing Storage bucket: STOP')
+  save('storage_buckets.json', buckets)
+  const stored = query(target, 'storage_objects', storageObjectsSql)
+  const copies = []
+  for (const [index, object] of stored.entries()) copies.push(await copyStorageFile(index, object))
+  save('storage_objects.json', copies)
+  record({ phase: 'storage_copied', buckets: buckets.length, files: copies.length,
+    bytes: copies.reduce((total, copy) => total + copy.bytes, 0) })
+
   const before = snapshot(target, 'before')
   evaluateChecks(before.preflight, release.stateCheck.kind)
   assert.ok(before.privacy.length === 16 && before.privacy.every(row => Number(row.issue_count) === 0),
     'Staging data integrity preflight failed: STOP')
-  for (const table of ['buckets', 'objects']) {
-    const row = before.inventory.find(entry => entry.schema_name === 'storage' && entry.table_name === table)
-    assert.equal(Number(row?.row_count), 0, `Storage ${table} is not empty and would need a separate backup: STOP`)
-  }
+  // The files copied above are still exactly the stored ones.
+  assert.ok(isDeepStrictEqual(query(target, 'storage_objects_again', storageObjectsSql), stored),
+    'Stored files changed while they were copied: STOP')
+  const records = before.inventory.find(entry => entry.schema_name === 'storage' && entry.table_name === 'objects')
+  assert.equal(Number(records?.row_count), copies.length, 'Stored file records and copies differ: STOP')
   const baseline = activity(target, 'before')
   record({ phase: 'preflight', tables: before.inventory.length, fingerprint: fingerprintMarker(before.fingerprint),
     versions: identity.versions.length, otherActiveClients: 0 })
@@ -171,8 +198,10 @@ async function main() {
     project, startedAt, endedAt,
     serverVersion: identity.version, cliVersion: '2.110.0', files, publicFingerprint: fingerprintMarker(before.fingerprint),
     tables: before.inventory.length, versions: identity.versions, activeClientsObserved: 0, writeCounterChanges: 0,
-    storageObjects: 0, captureScriptSha256: sha(readFileSync(fileURLToPath(import.meta.url))),
+    storageObjects: copies.length, storageBuckets: buckets.map(bucket => bucket.id),
+    captureScriptSha256: sha(readFileSync(fileURLToPath(import.meta.url))),
     limitations: ['Managed service configuration and encryption root keys are not copied.',
+      'Stored files are copied through their public links; restoring them means uploading them again through Storage.',
       'Private local capture is not off-machine backup retention.',
       'Activity polling cannot prove the absence of every transient session; contents and write counters were unchanged.'],
     stagingWritesAuthorized: false, phases })

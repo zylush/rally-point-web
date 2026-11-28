@@ -75,6 +75,66 @@ export const courtPhotosChecks = Object.freeze([
   'photo_foreign_keys_indexed', 'photo_counts',
 ])
 
+export const clubProfileChecks = Object.freeze([
+  'ledger_has_club_profile', 'reservation_writes_still_paused', 'profile_tables_closed', 'club_media_admins_only',
+  'profile_functions_signed_in_only', 'public_profile_open_to_visitors', 'profile_helpers_private',
+  'new_functions_pin_search_path', 'profile_foreign_keys_indexed', 'profile_counts',
+])
+
+export const ownerOnboardingChecks = Object.freeze([
+  'ledger_has_owner_onboarding', 'reservation_writes_still_paused', 'owner_tables_closed', 'owner_request_open_to_visitors',
+  'owner_functions_signed_in_only', 'signup_trigger_unchanged', 'new_functions_pin_search_path', 'owner_foreign_keys_indexed',
+  'owner_counts',
+])
+
+export const memberGcashCheckoutChecks = Object.freeze([
+  'ledger_has_member_gcash_checkout', 'reservation_writes_still_paused', 'checkout_functions_signed_in_only',
+  'checkout_helpers_private', 'new_functions_pin_search_path', 'booking_payment_columns',
+  'payment_reference_unique_per_club', 'schedule_board_still_shared', 'checkout_counts',
+])
+
+export const memberCodesBookingLengthChecks = Object.freeze([
+  'ledger_has_codes_and_length', 'reservation_writes_still_paused', 'member_codes_use_br_prefix',
+  'code_functions_unchanged_settings', 'booking_hours_any_length', 'hold_takes_any_length',
+  'hold_function_signed_in_only', 'codes_and_length_counts',
+])
+
+export const rentACoachChecks = Object.freeze([
+  'ledger_has_rent_a_coach', 'reservation_writes_still_paused', 'coach_tables_closed', 'coach_functions_signed_in_only',
+  'coach_functions_pin_search_path', 'coach_foreign_keys_indexed', 'coach_counts',
+])
+
+export const memberAccountChecks = Object.freeze([
+  'ledger_has_member_account', 'reservation_writes_still_paused', 'profile_columns_read_only',
+  'member_photo_bucket_public_and_limited', 'member_photo_files_own_folder_only', 'request_table_closed',
+  'account_functions_signed_in_only', 'account_helpers_private', 'new_functions_pin_search_path',
+  'one_pending_request_per_club', 'request_foreign_keys_indexed', 'membership_charges_earn_no_commission',
+  'member_account_counts',
+])
+
+export const dashboardAnalyticsChecks = Object.freeze([
+  'ledger_has_dashboard_analytics', 'reservation_writes_still_paused', 'analytics_functions_signed_in_only',
+  'analytics_functions_pin_search_path', 'analytics_functions_read_only', 'analytics_function_count',
+])
+
+export const leaderboardTournamentsChecks = Object.freeze([
+  'ledger_has_leaderboard_tournaments', 'reservation_writes_still_paused', 'new_tables_closed',
+  'public_reads_open_to_visitors', 'other_functions_signed_in_only', 'helpers_private',
+  'new_functions_pin_search_path', 'new_foreign_keys_indexed', 'leaderboard_tournament_counts',
+])
+
+export const tournamentFixesChecks = Object.freeze([
+  'ledger_has_tournament_fixes', 'reservation_writes_still_paused', 'undo_function_signed_in_only',
+  'tournament_helpers_private', 'changed_functions_pin_search_path', 'tournament_triggers_enabled',
+  'tournaments_within_limits', 'tournament_fix_counts',
+])
+
+export const coachesCourtTypesChecks = Object.freeze([
+  'ledger_has_coaches_court_types', 'reservation_writes_still_paused', 'court_type_column_checked',
+  'court_type_setter_signed_in_only', 'public_reads_open_to_visitors', 'changed_functions_pin_search_path',
+  'court_type_counts',
+])
+
 export const isolationCheckCount = 55
 
 const same = (actual, expected, message) => assert.ok(isDeepStrictEqual(actual, expected), message)
@@ -101,7 +161,13 @@ export function verifySuiteInventory(names) {
  */
 export function evaluateChecks(rows, kind, { ignore = [] } = {}) {
   const kinds = { preflight: preflightChecks, postflight: postflightChecks, advisor: advisorChecks,
-    advisorFollowup: advisorFollowupChecks, courtMarketplace: courtMarketplaceChecks, courtPhotos: courtPhotosChecks }
+    advisorFollowup: advisorFollowupChecks, courtMarketplace: courtMarketplaceChecks, courtPhotos: courtPhotosChecks,
+    clubProfile: clubProfileChecks, ownerOnboarding: ownerOnboardingChecks, memberGcashCheckout: memberGcashCheckoutChecks,
+    memberCodesBookingLength: memberCodesBookingLengthChecks,
+    rentACoach: rentACoachChecks,
+    memberAccount: memberAccountChecks, dashboardAnalytics: dashboardAnalyticsChecks,
+    leaderboardTournaments: leaderboardTournamentsChecks, tournamentFixes: tournamentFixesChecks,
+    coachesCourtTypes: coachesCourtTypesChecks }
   const expected = Object.hasOwn(kinds, kind) ? kinds[kind] : null
   assert.ok(expected, 'Unknown check kind')
   assert.ok(ignore.every(name => expected.includes(name)), `${kind}: unknown check in ignore list`)

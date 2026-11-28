@@ -15,7 +15,7 @@ describe("demoStore credential handling", () => {
   });
 
   it("keeps seeded demo credentials usable without serializing passwords", () => {
-    expect(demoStore.login("admin@rallypoint.local", "admin123").role).toBe(
+    expect(demoStore.login("admin@brinely.info", "admin123").role).toBe(
       "admin",
     );
 

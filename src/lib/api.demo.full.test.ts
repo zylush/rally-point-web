@@ -44,9 +44,9 @@ describe('api demo adapter', () => {
       const booking = await api.createBooking({
         court_id: 'court_2', member_id: 'mem_001', dateYmd: ymdLocal(date), startHour: 12, hours: 1, user_id: 'user_member',
       })
-      const paidPromise = api.payBooking({ booking_id: booking.id, method: 'gcash', user_id: 'user_member' })
-      await vi.advanceTimersByTimeAsync(900)
-      expect((await paidPromise).status).toBe('confirmed')
+      // Paying the club's GCash QR and the club's check are covered in demoStore.checkout.test.ts.
+      expect(booking.status).toBe('pending_payment')
+      expect(booking.hold_expires_at).toBeTruthy()
 
       const rental = await api.createRental({ court_id: 'court_4', guest_name: 'API Guest', hours: 1, created_by: 'user_staff' })
       expect(rental.status).toBe('playing')

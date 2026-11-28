@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock3, Search, UserPlus } from 'lucide-react'
+import { MemberAvatar } from '../components/MemberIdentity'
 import { AppHeader, AppShell, SignOutButton } from '../components/Shell'
 import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { stagger } from '../lib/motion'
 import { isDemoMode } from '../lib/supabase'
-import type { CheckIn, Court, CourtSession, Member, Venue } from '../types'
-import { fmtDateTime, fmtTime, peso } from '../types'
+import type { CheckIn, CheckInMember, Court, CourtSession, Member, Venue } from '../types'
+import { courtTypeLabel, fmtDate, fmtDateTime, fmtTime, peso } from '../types'
 
 function useStaffVenues(userId?: string) {
   const [venues, setVenues] = useState<Venue[]>([])
@@ -179,11 +180,11 @@ export function StaffHome() {
           <>
             <div className="enter-rise grid grid-cols-2 gap-3">
               <div className="stat-card">
-                <p className="text-teal-100 text-xs font-bold uppercase">Playing now</p>
+                <p className="text-brand-100 text-xs font-semibold">Playing now</p>
                 <p className="text-3xl font-extrabold mt-1">{sessions.filter((s) => s.status === 'playing').length}</p>
               </div>
               <div className="card p-4">
-                <p className="text-xs font-bold uppercase text-slate-400">Check-ins</p>
+                <p className="text-xs font-semibold text-muted">Check-ins</p>
                 <p className="text-3xl font-extrabold mt-1 text-slate-900">{checkins.length}</p>
                 <p className="text-xs text-slate-500">recent</p>
               </div>
@@ -195,6 +196,12 @@ export function StaffHome() {
               </Link>
               <Link to="/staff/courts" className="btn-secondary">
                 Court ops
+              </Link>
+              <Link to="/staff/leaderboard" className="btn-secondary">
+                Leaderboard & scoring
+              </Link>
+              <Link to="/staff/tournaments" className="btn-secondary">
+                Tournaments
               </Link>
             </div>
 
@@ -323,6 +330,8 @@ export function StaffCheckIn() {
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [last, setLast] = useState<string | null>(null)
+  // Who the last scanned pass belongs to: photo, nickname and member status for the desk to check.
+  const [lastScanned, setLastScanned] = useState<CheckInMember | null>(null)
   const [rosterError, setRosterError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -350,6 +359,7 @@ export function StaffCheckIn() {
       const name = members.find((m) => m.id === memberId)?.full_name
       setMsg('Checked in successfully')
       setLast(name ?? 'Member')
+      setLastScanned(null)
       setNote('')
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Failed')
@@ -367,6 +377,7 @@ export function StaffCheckIn() {
       const r = await api.checkInByQr(qr.trim(), user?.id, venueId)
       setMsg(`Checked in ${r.member.full_name}`)
       setLast(r.member.full_name)
+      setLastScanned(r.member)
       setQr('')
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Failed')
@@ -384,17 +395,17 @@ export function StaffCheckIn() {
         {venueError ? <section className="card p-4 text-sm text-red-600">{venueError}</section> : null}
         {rosterError ? <section className="card p-4 text-sm text-red-600" role="alert">{rosterError}</section> : null}
         {!venueLoading && !venueError && !venueId ? <section className="card p-4 text-sm text-slate-500">No assigned venue.</section> : null}
-        <div className="flex gap-2">
+        <div className="segmented" role="group" aria-label="Check in by">
           <button
             type="button"
-            className={`flex-1 min-h-12 rounded-xl font-bold border ${tab === 'qr' ? 'bg-brand-700 text-white border-brand-700' : 'bg-white border-slate-200'}`}
+            aria-pressed={tab === 'qr'}
             onClick={() => setTab('qr')}
           >
             QR / code
           </button>
           <button
             type="button"
-            className={`flex-1 min-h-12 rounded-xl font-bold border ${tab === 'list' ? 'bg-brand-700 text-white border-brand-700' : 'bg-white border-slate-200'}`}
+            aria-pressed={tab === 'list'}
             onClick={() => setTab('list')}
           >
             Member list
@@ -450,9 +461,33 @@ export function StaffCheckIn() {
           </form>
         )}
 
-        {last ? (
+        {lastScanned ? (
+          <section className="card p-4 border-brand-200 bg-brand-50" aria-labelledby="last-checkin-title">
+            <p id="last-checkin-title" className="text-sm font-bold text-brand-800">Last check-in</p>
+            <div className="mt-2 flex items-center gap-3">
+              <MemberAvatar name={lastScanned.full_name} photoUrl={lastScanned.photo_url} size="lg" />
+              <div className="min-w-0">
+                <p className="break-words text-xl font-extrabold text-brand-950">
+                  {lastScanned.nickname?.trim() && lastScanned.nickname.trim().toLowerCase() !== lastScanned.full_name.trim().toLowerCase()
+                    ? `${lastScanned.full_name} (${lastScanned.nickname.trim()})`
+                    : lastScanned.full_name}
+                </p>
+                <p className="font-mono text-body font-bold text-slate-800">{lastScanned.member_code}</p>
+                {lastScanned.is_active_member ? (
+                  <p className="mt-1 inline-flex rounded-full bg-emerald-700 px-3 py-1 text-sm font-extrabold text-white">
+                    {lastScanned.expiry_date ? `Member until ${fmtDate(lastScanned.expiry_date)}` : 'Member'}
+                  </p>
+                ) : (
+                  <p className="mt-1 inline-flex rounded-full bg-slate-700 px-3 py-1 text-sm font-extrabold text-white">
+                    Player — regular rate
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : last ? (
           <section className="card p-4 border-brand-200 bg-brand-50">
-            <p className="text-xs font-bold uppercase text-brand-800">Last check-in</p>
+            <p className="text-xs font-semibold text-brand-800">Last check-in</p>
             <p className="font-extrabold text-lg text-brand-950">{last}</p>
           </section>
         ) : null}
@@ -613,7 +648,7 @@ export function StaffCourts() {
         {venueError ? <section className="card p-4 text-sm text-red-600">{venueError}</section> : null}
         {loadError ? <section className="card p-4 text-sm text-red-600" role="alert">{loadError}</section> : null}
         {!venueLoading && !venueError && !venueId ? <section className="card p-4 text-sm text-slate-500">No assigned venue.</section> : null}
-        <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
+        <div className="text-tabs text-tabs-fill" role="group" aria-label="Court ops">
           {(
             [
               ['playing', 'Playing'],
@@ -625,10 +660,8 @@ export function StaffCourts() {
             <button
               key={k}
               type="button"
+              aria-pressed={tab === k}
               onClick={() => setTab(k)}
-              className={`shrink-0 px-3 py-2 rounded-full text-xs font-bold border ${
-                tab === k ? 'bg-brand-700 text-white border-brand-700' : 'bg-white text-slate-600 border-slate-200'
-              }`}
             >
               {label}
             </button>
@@ -644,17 +677,17 @@ export function StaffCourts() {
               <p className="text-sm text-slate-500">No live sessions.</p>
             ) : (
               sessions.map((s) => (
-                <div key={s.id} className="list-row items-start">
-                  <div className="flex-1 min-w-0">
+                <div key={s.id} className="list-row flex-wrap items-start">
+                  <div className="flex-1 min-w-0 basis-full">
                     <p className="font-bold text-sm">{s.court?.name}</p>
                     <p className="text-xs text-slate-500">
                       {sessionPlayers(s).join(', ') || 'Guest'} · until {fmtTime(s.end_at)}
                     </p>
                     <p className="text-xs font-semibold text-brand-800 mt-1">{peso(s.amount)}{!isDemoMode ? ' recorded' : ''}</p>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex w-full flex-wrap gap-2">
                     {addSessionId === s.id ? (
-                      <form className="mt-2 space-y-2" onSubmit={saveAddedMember}>
+                      <form className="basis-full space-y-2" onSubmit={saveAddedMember}>
                         <div>
                           <label className="label" htmlFor={`add-member-${s.id}`}>Member</label>
                           <select
@@ -687,7 +720,7 @@ export function StaffCourts() {
                     ) : (
                       <button
                         type="button"
-                        className="text-xs font-bold text-brand-700 px-2 py-1"
+                        className="btn-compact"
                         onClick={() => {
                           setAddSessionId(s.id)
                           setAddMemberId(members[0]?.id ?? '')
@@ -696,10 +729,10 @@ export function StaffCourts() {
                         Add member
                       </button>
                     )}
-                    <button type="button" className="text-xs font-bold text-brand-700 px-2 py-1" onClick={() => void extend(s.id)}>
+                    <button type="button" className="btn-compact" onClick={() => void extend(s.id)}>
                       +1h
                     </button>
-                    <button type="button" className="text-xs font-bold text-slate-500 px-2 py-1" onClick={() => void end(s.id)}>
+                    <button type="button" className="btn-compact btn-compact-danger" onClick={() => void end(s.id)}>
                       End
                     </button>
                   </div>
@@ -716,7 +749,7 @@ export function StaffCourts() {
               <select className="input" value={courtId} onChange={(e) => setCourtId(e.target.value)}>
                 {courts.map((c) => (
                   <option key={c.id} value={c.id} disabled={c.status === 'maintenance'}>
-                    {c.name} · {c.status} · {peso(c.hourly_rate)}/h
+                    {c.name}{courtTypeLabel(c.court_type) ? ` · ${courtTypeLabel(c.court_type)}` : ''} · {c.status} · {peso(c.hourly_rate)}/h
                   </option>
                 ))}
               </select>
@@ -812,6 +845,7 @@ export function StaffCourts() {
             {courts.map((c) => (
               <div key={c.id} className="rounded-xl border border-slate-100 p-3">
                 <p className="font-bold text-sm">{c.name}</p>
+                {courtTypeLabel(c.court_type) ? <p className="text-xs font-semibold text-slate-600 mt-1">{courtTypeLabel(c.court_type)}</p> : null}
                 <p className="text-xs text-slate-400 capitalize mt-1">{c.status}</p>
                 <p className="text-xs font-semibold text-brand-800 mt-1">{peso(c.hourly_rate)}/h</p>
               </div>

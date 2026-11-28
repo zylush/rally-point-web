@@ -1,7 +1,8 @@
 import type {
-  Court, CourtInput, MyClub, Profile, PublicClub, PublicClubDetail, PublicClubListing, StaffVenueGrant, Venue,
-  VenueLocationInput,
+  CheckoutPaymentMethod, Court, CourtInput, MyClub, Profile, PublicClub, PublicClubDetail, PublicClubListing, PublicClubProfile,
+  StaffVenueGrant, Venue, VenueLocationInput,
 } from '../types'
+import { isCourtType } from '../types'
 import { daysFromNow, todayISO, uid } from './demo/common'
 import { getDemoPassword, normalizeDemoEmail, resetDemoPasswords, setDemoPassword } from './demo/credentials'
 import type { DemoDB } from './demo/model'
@@ -17,7 +18,14 @@ import { staffOperations } from './demo/staff'
 import { chooseVenueId, demoClub } from './tenant'
 import { inquiryOperations } from './demo/inquiries'
 import { platformOperations } from './demo/platform'
+import { hasOpenOwnerInvite, ownerOperations } from './demo/owners'
 import { demoCourtPhotos, demoVenueCover, photoOperations } from './demo/photos'
+import { clubProfileOperations, publicClubProfileFor } from './demo/clubProfile'
+import { coachingOperations } from './demo/coaching'
+import { analyticsOperations } from './demo/history'
+import { accountOperations } from './demo/account'
+import { leaderboardOperations } from './demo/leaderboard'
+import { tournamentOperations } from './demo/tournaments'
 
 export type { DemoDB } from './demo/model'
 
@@ -121,7 +129,8 @@ export const demoStore = {
     db.profiles.push(profile)
     setDemoPassword(e, input.password)
     // With the default club closed, keep the profile and skip the membership, as the database does.
-    if (club?.is_active) {
+    // So does an invited court owner signing up without a club link: they become their own club's admin instead.
+    if (club?.is_active && !(!slug && hasOpenOwnerInvite(db, e))) {
       addMembership(db, club.id, profile)
       db.notifications.unshift({
         id: uid('n'),
@@ -206,6 +215,9 @@ export const demoStore = {
           court_count: courts.length,
           min_rate: min(courts.map((court) => court.hourly_rate)),
           min_member_rate: min(courts.map((court) => court.member_rate ?? court.hourly_rate)),
+          // Mirrors list_public_club_court_types: the same in-service courts, by type.
+          indoor_courts: courts.filter((court) => court.court_type === 'indoor').length,
+          outdoor_courts: courts.filter((court) => court.court_type === 'outdoor').length,
           // Mirrors list_public_club_covers: first location cover, else the first court's main photo.
           cover_photo: (() => {
             const venues = db.venues.filter((v) => v.club_id === club.id && v.is_active).sort((a, b) => a.name.localeCompare(b.name))
@@ -259,10 +271,30 @@ export const demoStore = {
               hourly_rate: court.hourly_rate,
               member_rate: court.member_rate ?? null,
               in_service: court.status !== 'maintenance',
+              court_type: court.court_type ?? null,
               photos: demoCourtPhotos(db, court.id),
             })),
         })),
     }
+  },
+  /** Mirrors public.get_public_club_profile: what the club tells players, active items only. */
+  publicClubProfile(slug: string): PublicClubProfile | null {
+    const db = load()
+    const club = bookableClubBySlug(db, slug)
+    return club ? publicClubProfileFor(db, club.id) : null
+  },
+  /** The active club's ways to pay at checkout: what its public club page shows (active methods only). */
+  checkoutPaymentMethods(): CheckoutPaymentMethod[] {
+    const db = load()
+    const club = activeClub(db)
+    return club && bookableClubBySlug(db, club.slug) ? publicClubProfileFor(db, club.id).payment_methods : []
+  },
+  /** Visitor-safe court availability for any active club (no auth session required). */
+  publicClubAvailability(slug: string, dateYmd: string, venueId?: string) {
+    const db = load()
+    const club = bookableClubBySlug(db, slug)
+    if (!club) return []
+    return bookingOperations.availability(dateYmd, venueId, club.id)
   },
   tenantContext(userId?: string, role?: Profile['role']) {
     const db = load()
@@ -371,6 +403,10 @@ export const demoStore = {
       || Math.abs(Math.round(memberRate * 100) - memberRate * 100) > 1e-6)) {
       throw new Error('Member rate must be between 0 and the regular rate')
     }
+    // Mirrors public.admin_set_court_type: indoor, outdoor or not set (null); omitted keeps it.
+    if (input.court_type !== undefined && input.court_type !== null && !isCourtType(input.court_type)) {
+      throw new Error('Choose indoor or outdoor')
+    }
     const current = input.id ? db.courts.find((court) => court.id === input.id && court.club_id === clubId) : undefined
     if (input.id) {
       if (!current) throw new Error('court not found')
@@ -394,6 +430,7 @@ export const demoStore = {
       current.name = name
       current.hourly_rate = rate
       current.member_rate = memberRate
+      if (input.court_type !== undefined) current.court_type = input.court_type
       // Putting a court back in service never overrides 'occupied'.
       if (!input.in_service) current.status = 'maintenance'
       else if (current.status === 'maintenance') current.status = 'available'
@@ -408,6 +445,7 @@ export const demoStore = {
       status: input.in_service ? 'available' : 'maintenance',
       hourly_rate: rate,
       member_rate: memberRate,
+      court_type: input.court_type ?? null,
     }
     db.courts.push(court)
     save(db)
@@ -436,5 +474,12 @@ export const demoStore = {
   ...ledgerOperations,
   ...inquiryOperations,
   ...platformOperations,
+  ...ownerOperations,
   ...photoOperations,
+  ...clubProfileOperations,
+  ...coachingOperations,
+  ...analyticsOperations,
+  ...accountOperations,
+  ...leaderboardOperations,
+  ...tournamentOperations,
 }

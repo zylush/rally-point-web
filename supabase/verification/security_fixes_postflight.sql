@@ -252,7 +252,7 @@ with paused_tables(name) as (
            where k.name = 'coach_can_act' and m.name = 'coach_send_request_message' and l.name = 'coach_list_request_messages'), false),
          'the eight coach-side functions need an active coach at an open club; a lesson thread takes at most 200 messages'
   union all
-  -- Owner decision (2026-11-28): coaches talk to players in the request's conversation. The request
+  -- Owner decision (2026-11-28): coaches talk to players in the conversation of the request. The request
   -- list keeps its player_email column (the API shape) but returns null in it and reads no email.
   select 15, 'coach_requests_without_player_email', true,
          coalesce((

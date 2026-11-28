@@ -758,11 +758,13 @@ export const securityFixesRelease = Object.freeze({
   dirs: Object.freeze({
     capture: 'docs/release-private/staging-backup-20261128-security-r1',
     restore: 'docs/release-private/staging-backup-restore-20261128-security-r1',
-    dryRun: 'docs/release-private/security-fixes-staging-dryrun-20261128-r1',
+    // r1 stopped after the migrations: a comment inside its postflight query had an apostrophe,
+    // which the read-only wrapper reads as an open string. The capture and restore check stand.
+    dryRun: 'docs/release-private/security-fixes-staging-dryrun-20261128-r2',
     apply: 'docs/release-private/security-fixes-staging-apply-20261128-r1',
   }),
   databases: Object.freeze({ restore: 'rally_staging_backup_20261128_security_r1_restore',
-    dryRun: 'rally_staging_backup_20261128_security_r1_dryrun' }),
+    dryRun: 'rally_staging_backup_20261128_security_r2_dryrun' }),
 })
 
 export const releases = Object.freeze({ [advisorFixesRelease.id]: advisorFixesRelease,

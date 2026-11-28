@@ -761,6 +761,21 @@ describe('staging releases', () => {
     expect(postflight).toContain('= 53')
   })
 
+  it('wraps every check file of every release in the read-only runner without refusing it', async () => {
+    const { readOnlyJson, releaseCheckFiles, releaseManifest, releases } = await load()
+    // The runner wraps each check in one read-only transaction. A file it refuses (here: an apostrophe
+    // in a comment inside the query) only shows up after the migrations ran, as in security-fixes dry run r1.
+    for (const release of Object.values(releases)) {
+      const { contents } = releaseManifest(release)
+      const files = new Set([...releaseCheckFiles, release.stateCheck.file, ...release.postChecks.map((check: { file: string }) => check.file)])
+      for (const file of files) {
+        const bytes = contents.get(`supabase/verification/${file}`)
+        expect(bytes, `${release.id}: ${file}`).toBeDefined()
+        expect(() => readOnlyJson(bytes!.toString('utf8')), `${release.id}: ${file}`).not.toThrow()
+      }
+    }
+  })
+
   it('hashes the release definition and every file, and returns the bytes it hashed', async () => {
     const { releaseManifest } = await load()
     const { dir, release } = releaseFixture()

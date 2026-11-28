@@ -76,6 +76,39 @@ describe('staging build target', () => {
     await expect(settings('vercel')).rejects.toThrow('Staging requires')
   })
 
+  describe('Vercel production builds (brinely.info)', () => {
+    const production = 'tuttbvwnlndcstmmxybb'
+    beforeEach(() => {
+      vi.stubEnv('VERCEL_ENV', 'production')
+      env.VITE_SUPABASE_URL = `https://${production}.supabase.co`
+      env.VITE_SUPABASE_ANON_KEY = 'sb_publishable_test-key-not-a-real-credential'
+    })
+
+    it('accept only the production project, at the domain root', async () => {
+      expect((await settings('vercel')).base).toBe('/')
+      env.VITE_SUPABASE_ANON_KEY = token('anon', production)
+      expect((await settings('vercel')).build?.outDir).toBe('dist')
+    })
+
+    it.each([
+      ['VITE_SUPABASE_URL', url],
+      ['VITE_SUPABASE_URL', 'https://ausgoiwwhevrplfetccm.supabase.co'],
+      ['VITE_SUPABASE_ANON_KEY', token()],
+      ['VITE_SUPABASE_ANON_KEY', token('service_role', production)],
+      ['VITE_SUPABASE_ANON_KEY', 'sb_secret_never-ship'],
+    ])('reject a bad %s (%s)', async (name, value) => {
+      env[name] = value
+      await expect(settings('vercel')).rejects.toThrow('Production requires')
+    })
+
+    it.each(['preview', 'development'])('keep %s builds on staging', async (vercelEnv) => {
+      vi.stubEnv('VERCEL_ENV', vercelEnv)
+      await expect(settings('vercel')).rejects.toThrow('Staging requires')
+      env.VITE_SUPABASE_URL = url
+      expect((await settings('vercel')).base).toBe('/')
+    })
+  })
+
   it('keeps the Pages staging build off the domain root', async () => {
     env.VITE_BASE = '/'
     await expect(settings()).rejects.toThrow('Staging requires')

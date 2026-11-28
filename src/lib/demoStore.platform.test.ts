@@ -11,7 +11,7 @@ const provisionInput = {
   address: 'Cebu IT Park',
   contact_email: ' Cebu@Example.invalid ',
   contact_phone: '0917 555 6666',
-  commission_rate: 7.5,
+  booking_fee: 30,
   court_count: 3,
 }
 
@@ -68,7 +68,8 @@ describe('demo platform access', () => {
     const davao = clubs.find((club) => club.club_id === DEMO_DAVAO_CLUB_ID)!
     expect(davao).toMatchObject({
       status: 'active',
-      commission_rate: 6,
+      commission_rate: 0,
+      booking_fee: 25,
       city: 'Davao City',
       venue_count: 1,
       court_count: 2,
@@ -79,13 +80,16 @@ describe('demo platform access', () => {
     const davaoLines = demoStore.platformLedger(DEMO_DAVAO_CLUB_ID, 1000)
     expect(davao.entry_count).toBe(davaoLines.length)
     expect(davao.gross_amount).toBeCloseTo(davaoLines.reduce((total, line) => total + line.gross_amount, 0), 2)
-    expect(davao.commission_amount).toBeCloseTo(davao.gross_amount * 0.06, 0)
+    // A flat 25 pesos on each booking line, none on extensions.
+    expect(davao.commission_amount).toBeCloseTo(davaoLines.reduce((total, line) => total + line.commission_amount, 0), 2)
+    expect(davaoLines.every((line) => line.commission_amount === 0 || line.commission_amount === 25)).toBe(true)
     expect(davao.club_net_amount).toBeCloseTo(davao.gross_amount - davao.commission_amount, 2)
     expect(JSON.stringify(davao)).not.toMatch(/Rico|Ana Reyes|rico@email/)
     const gensan = clubs.find((club) => club.club_id === DEMO_CLUB_ID)!
-    expect(gensan).toMatchObject({ status: 'active', commission_rate: 5, member_count: 40, admin_count: 1 })
+    expect(gensan).toMatchObject({ status: 'active', commission_rate: 0, booking_fee: 20, member_count: 40, admin_count: 1 })
     expect(gensan.entry_count).toBeGreaterThan(0)
-    expect(gensan.commission_amount).toBeCloseTo(gensan.gross_amount * 0.05, 2)
+    expect(gensan.commission_amount).toBeGreaterThan(0)
+    expect(gensan.commission_amount % 20).toBeCloseTo(0, 2)
   })
 })
 
@@ -100,7 +104,8 @@ describe('demo club setup', () => {
       slug: 'cebu-it-park',
       name: 'Cebu IT Park',
       status: 'provisioning',
-      commission_rate: 7.5,
+      commission_rate: 0,
+      booking_fee: 30,
       contact_email: 'cebu@example.invalid',
       venue_count: 1,
       court_count: 3,
@@ -123,7 +128,8 @@ describe('demo club setup', () => {
     expect(() => demoStore.provisionClub({ ...provisionInput, name: '   ' })).toThrow('Enter the club name')
     expect(() => demoStore.provisionClub({ ...provisionInput, slug: 'Bad Slug!' })).toThrow('Use 3 to 50 lowercase letters, numbers or dashes for the link name')
     expect(() => demoStore.provisionClub({ ...provisionInput, slug: ' Rally-Point-Davao ' })).toThrow('That link name is already used by another club')
-    expect(() => demoStore.provisionClub({ ...provisionInput, commission_rate: 150 })).toThrow('Commission rate must be between 0 and 100')
+    expect(() => demoStore.provisionClub({ ...provisionInput, booking_fee: -1 })).toThrow('The booking fee must be between 0 and 10,000 pesos')
+    expect(() => demoStore.provisionClub({ ...provisionInput, booking_fee: 12.345 })).toThrow('Enter the booking fee in pesos and centavos')
     expect(() => demoStore.provisionClub({ ...provisionInput, court_count: 0 })).toThrow('Choose between 1 and 12 courts')
     expect(demoStore.platformRecentActions()).toEqual([])
   })
@@ -142,7 +148,7 @@ describe('demo club setup', () => {
     expect(demoStore.publicClub(' CEBU-IT-PARK ')).toEqual({ id: clubId, slug: 'cebu-it-park', name: 'Cebu IT Park' })
     expect(demoStore.myClubs(adminId).map((row) => `${row.slug}:${row.role}`)).toEqual(['cebu-it-park:admin', 'rally-point-gensan:member'])
 
-    demoStore.setCommissionRate(clubId, 8.25)
+    demoStore.setBookingFee(clubId, 45.5)
     demoStore.setClubStatus(clubId, 'suspended')
     expect(demoStore.get().clubs.find((row) => row.id === clubId)?.is_active).toBe(false)
     expect(demoStore.myClubs(adminId).map((row) => row.slug)).toEqual(['rally-point-gensan'])
@@ -154,12 +160,12 @@ describe('demo club setup', () => {
     expect(actions.map((row) => row.action)).toEqual([
       'club.admin_revoke',
       'club.status',
-      'club.commission_rate',
+      'club.booking_fee',
       'club.status',
       'club.admin_assign',
       'club.provision',
     ])
-    expect(actions.find((row) => row.action === 'club.commission_rate')?.details).toEqual({ from: 7.5, to: 8.25 })
+    expect(actions.find((row) => row.action === 'club.booking_fee')?.details).toEqual({ from: 30, to: 45.5 })
     expect(actions.every((row) => row.actor_email === 'superadmin@brinely.info')).toBe(true)
   })
 
@@ -168,7 +174,9 @@ describe('demo club setup', () => {
     expect(() => demoStore.setClubStatus(DEMO_CLUB_ID, 'suspended')).toThrow('The default sign-up club must stay active')
     expect(() => demoStore.setClubStatus(DEMO_CLUB_ID, 'closed' as never)).toThrow('Unknown club status')
     expect(() => demoStore.setClubStatus('missing-club', 'active')).toThrow('Club not found')
-    expect(() => demoStore.setCommissionRate(DEMO_CLUB_ID, -1)).toThrow('Commission rate must be between 0 and 100')
+    expect(() => demoStore.setBookingFee(DEMO_CLUB_ID, -1)).toThrow('The booking fee must be between 0 and 10,000 pesos')
+    expect(() => demoStore.setBookingFee(DEMO_CLUB_ID, 10000.01)).toThrow('The booking fee must be between 0 and 10,000 pesos')
+    expect(() => demoStore.setBookingFee('missing-club', 30)).toThrow('Club not found')
     expect(demoStore.platformRecentActions()).toEqual([])
   })
 })
@@ -176,7 +184,7 @@ describe('demo club setup', () => {
 describe('demo commission ledger', () => {
   beforeEach(resetAll)
 
-  it('records commission on court time only, at the rate in force when charged', () => {
+  it('records a flat fee per booking on court time only, at the fee in force when charged', () => {
     const before = demoStore.get().commissions.length
     const rental = demoStore.createRental({ court_id: 'court_2', hours: 1, created_by: 'user_staff' })
     demoStore.extendSession(rental.id, 1, 'user_staff')
@@ -194,24 +202,26 @@ describe('demo commission ledger', () => {
       club_id: DEMO_CLUB_ID,
       venue_id: DEMO_VENUE_ID,
       gross_amount: 500,
-      commission_rate: 5,
-      commission_amount: 25,
-      club_net_amount: 475,
+      commission_rate: 0,
+      booking_fee: 20,
+      commission_amount: 20,
+      club_net_amount: 480,
       verification_status: 'unverified',
     })
-    expect(lineFor('Extend Court B +1h')).toMatchObject({ club_id: DEMO_CLUB_ID, gross_amount: 500, commission_amount: 25 })
+    // An extension is court time, so it gets a line, but the booking already carried the fee.
+    expect(lineFor('Extend Court B +1h')).toMatchObject({ club_id: DEMO_CLUB_ID, gross_amount: 500, booking_fee: 0, commission_amount: 0, club_net_amount: 500 })
     expect(lineFor('Walk-in: Guest — Day pass')).toBeUndefined()
     expect(lineFor('Online membership payment')).toBeUndefined()
 
     asSuperadmin()
-    demoStore.setCommissionRate(DEMO_CLUB_ID, 7)
+    demoStore.setBookingFee(DEMO_CLUB_ID, 35.5)
     demoStore.logout()
     demoStore.createRental({ court_id: 'court_4', hours: 1 })
-    expect(lineFor('Court D — 1h rental')).toMatchObject({ gross_amount: 650, commission_rate: 7, commission_amount: 45.5, club_net_amount: 604.5 })
-    expect(lineFor('Court B — 1h rental')?.commission_rate).toBe(5)
+    expect(lineFor('Court D — 1h rental')).toMatchObject({ gross_amount: 650, booking_fee: 35.5, commission_amount: 35.5, club_net_amount: 614.5 })
+    expect(lineFor('Court B — 1h rental')?.commission_amount).toBe(20)
   })
 
-  it('records commission when an online booking is confirmed, never as settled money', () => {
+  it('records the booking fee when an online booking is confirmed, never as settled money', () => {
     const { ymd } = futureYmd()
     const booking = demoStore.createBooking({ court_id: 'court_2', member_id: 'mem_001', dateYmd: ymd, startHour: 12, hours: 2, user_id: 'user_member' })
     demoStore.confirmBookingPayment({ booking_id: booking.id, method: 'gcash', user_id: 'user_member' })
@@ -220,9 +230,9 @@ describe('demo commission ledger', () => {
     expect(db.commissions.find((line) => line.transaction_id === db.transactions[0].id)).toMatchObject({
       club_id: DEMO_CLUB_ID,
       gross_amount: 1000,
-      commission_rate: 5,
-      commission_amount: 50,
-      club_net_amount: 950,
+      booking_fee: 20,
+      commission_amount: 20,
+      club_net_amount: 980,
       verification_status: 'unverified',
     })
     expect(JSON.stringify(db.commissions)).not.toContain('settled')
@@ -234,7 +244,7 @@ describe('demo commission ledger', () => {
     // Today's two seeded charges come first; the generated past follows, all before today.
     expect(davao.slice(0, 2).map((line) => line.description)).toEqual(['Extend Davao Court 1 +1 hour', 'Davao Court 1 — 2 hours'])
     expect(davao.every((line) => line.club_name === 'Rally Point Davao')).toBe(true)
-    expect(davao.slice(0, 2).map((line) => line.commission_amount)).toEqual([27, 54])
+    expect(davao.slice(0, 2).map((line) => line.commission_amount)).toEqual([0, 25])
     expect(davao.every((line, index) => index === 0 || line.created_at <= davao[index - 1].created_at)).toBe(true)
     const all = demoStore.platformLedger(null, 1000)
     expect(all.length).toBeGreaterThan(demoStore.platformLedger(DEMO_DAVAO_CLUB_ID, 1000).length)

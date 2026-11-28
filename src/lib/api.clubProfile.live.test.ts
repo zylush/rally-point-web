@@ -54,12 +54,12 @@ describe('club profile (live)', () => {
   it('sends tidied text, since the database trims spaces only', async () => {
     await api.updateClubProfile({
       ...emptyClubProfile(),
-      website_url: 'https://rallypoint.ph\n',
+      website_url: 'https://brinely.info\n',
       house_rules: '\n\t',
       amenities: ['parking', 'night_lights', 'parking'],
     })
     expect(live.rpc).toHaveBeenCalledWith('admin_update_club_profile', expect.objectContaining({
-      p_website_url: 'https://rallypoint.ph',
+      p_website_url: 'https://brinely.info',
       p_house_rules: null,
       p_amenities: ['night_lights', 'parking'],
     }))

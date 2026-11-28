@@ -241,13 +241,13 @@ function ClubFigures({ data, chargesWord }: { data: ClubAnalytics; chargesWord: 
           series={days.map((day) => day.cancellations)}
         />
         <StatCard
-          label="Platform commission"
+          label="Platform fees"
           value={peso(cur.commission)}
           icon={Landmark}
           tone="muted"
           current={cur.commission}
           previous={prev.commission}
-          sub="Recorded on court-time charges"
+          sub="A flat fee recorded on each court booking"
         />
         {data.coaching ? (
           <StatCard

@@ -10,7 +10,7 @@ There are three environments:
 | Preview | every other branch and pull request, in project `brinely` | staging, `Rally-Point-Database` (`iclrvvsiwypxlwrwgqia`) | test clubs and synthetic test accounts | the Vercel preview link, with a "Test site" banner |
 | Production | `main` | `brinely-production` (`tuttbvwnlndcstmmxybb`) | real clubs and players only | https://brinely.info (also `brinely.vercel.app`) |
 
-Each environment has its own database, sign-in users and Storage. Work is checked on a preview first, then on staging (the shared test site), and merging into `main` puts it live.
+Each environment has its own database, sign-in users and Storage. Every change goes through `staging` before `main` (owner rule): pull requests target `staging`, are checked on the staging site, and only then go to `main`, which puts them live.
 
 ## 1. What runs where
 
@@ -86,7 +86,7 @@ For each project, under Authentication:
 | --- | --- | --- |
 | Confirm email | On (owner invites depend on it) | On |
 | Site URL | `https://brinely.info` | `https://brinely-staging.vercel.app` (the staging project's address) |
-| Redirect URLs | brinely.info, www.brinely.info and brinely.vercel.app | the staging project's address and any preview addresses in use |
+| Redirect URLs | brinely.info, www.brinely.info and brinely.vercel.app | `https://brinely-staging.vercel.app/**` (set 2026-11-28; add a preview address only while it is needed) |
 | SMTP | Resend, sender `no-reply@brinely.info` (still to do) | Supabase default |
 
 Without custom SMTP, Supabase sends only a few emails an hour and only to team addresses, and it doesn't allow editing the email templates. Real players can't confirm their accounts until SMTP is set.
@@ -129,10 +129,11 @@ Keep the Google Workspace MX, SPF and DKIM records, `resend._domainkey` and `_do
 
 ## 9. Everyday operation
 
-1. Open a pull request. CI runs lint, tests and the build, and Vercel builds a preview against staging, with the "Test site" banner.
-2. Check the preview. Staging test logins are kept outside the repo and must never be pasted into the repo, logs or screenshots.
-3. If the change needs migrations, release them to staging first, then to production (step 6).
-4. Merge into `main`. Vercel builds production and puts it live when the build finishes.
+1. Open a pull request against `staging`. CI runs lint, tests and the build, and Vercel builds a preview (behind a Vercel sign-in) against staging.
+2. If the change needs migrations, release them to the staging database first (step 6).
+3. Merge into `staging`. The `brinely-staging` project deploys it to https://brinely-staging.vercel.app, with the "Test site" banner.
+4. Check it there. Staging test logins are kept outside the repo and must never be pasted into the repo, logs or screenshots.
+5. When it is ready for players, release any migrations to production (step 6), then open a pull request from `staging` into `main` and merge it. Vercel builds production and puts it live when the build finishes. If `staging` holds something that isn't ready for production (for example, screens waiting on a production migration), that holds the pull request back.
 
 **Rollback:** Vercel → Deployments → pick the last good production deployment → *Instant Rollback*. This rolls back only the web app. A database change is undone with a new migration, never by editing an old one.
 
@@ -152,7 +153,7 @@ Keep the Google Workspace MX, SPF and DKIM records, `resend._domainkey` and `_do
 | A page on the live site is empty or shows "could not load" after a merge | Its migration isn't on production yet (step 6) |
 | "Test site" banner on brinely.info | The deployment wasn't built as Production (`VERCEL_ENV`), so check which deployment the domain points at |
 | New players never get the confirmation email | No custom SMTP yet, so Supabase only mails team addresses (step 5) |
-| The old site at `zylush.github.io/rally-point-web` still loads | GitHub Pages is still on. Turn it off in the repository's Settings → Pages |
+| The old site at `zylush.github.io/rally-point-web` shows a 404 | Expected: GitHub Pages was turned off on 2026-11-28 (Settings → Pages: unpublished, source None). Use the staging site instead |
 | Chrome warns "Deceptive site ahead" | Ask for a review in Google Search Console → Security issues, with brinely.info verified there |
 
 ## 12. Open items (2026-11-28)
@@ -160,5 +161,4 @@ Keep the Google Workspace MX, SPF and DKIM records, `resend._domainkey` and `_do
 - Resend account and custom SMTP for production Auth.
 - A production release script for migrations after the bootstrap. Staging has 44 migrations (the flat booking fee), production 43.
 - Production backups and leaving the Free plan. The Vercel Hobby plan is for non-commercial use.
-- Turning off GitHub Pages.
 - Legal review of the Terms of use.

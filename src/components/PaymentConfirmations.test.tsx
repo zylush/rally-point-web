@@ -18,7 +18,7 @@ const member: Member = {
   user_id: 'user_member',
   member_code: 'RP-1001',
   full_name: 'Mia Member',
-  email: 'member@rallypoint.local',
+  email: 'member@brinely.info',
   phone: null,
   membership_type: null,
   status: 'active',
@@ -163,15 +163,15 @@ describe('PaymentConfirmations', () => {
 
   it('keeps the request, says why and checks the list again at once when saving fails', async () => {
     const user = userEvent.setup()
-    apiMock.confirmBookingPayment.mockRejectedValueOnce(new Error('Could not reach Rally Point. Check your connection and try again.'))
+    apiMock.confirmBookingPayment.mockRejectedValueOnce(new Error('Could not reach bRineLy. Check your connection and try again.'))
     render(<PaymentConfirmations venueId="venue-main" />)
 
     await user.click(await screen.findByRole('button', { name: 'Payment received' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach Rally Point. Check your connection and try again.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach bRineLy. Check your connection and try again.')
     // The list is fetched again right away, not at the next 20-second check; the request is still waiting.
     await waitFor(() => expect(apiMock.paymentsToConfirm).toHaveBeenCalledTimes(2))
     expect(screen.getByRole('heading', { name: 'Mia Member' })).toBeInTheDocument()
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not reach Rally Point.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not reach bRineLy.')
     expect(screen.getByRole('button', { name: 'Payment received' })).toBeEnabled()
   })
 

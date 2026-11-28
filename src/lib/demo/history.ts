@@ -12,7 +12,7 @@ import type { Booking, Court, MembershipType, OwnerCallRequest, OwnerCallStatus,
 import { addDays, phDay, weekdayIndex } from '../analytics'
 import { DEMO_CLUB_ID, DEMO_DAVAO_CLUB_ID } from '../tenant'
 import { activeClubId } from './access'
-import { COMMISSION_TYPES, round2 } from './commissions'
+import { COMMISSION_TYPES, platformFee, round2 } from './commissions'
 import type { DemoCommission, DemoDB, DemoOwnerCallRequest } from './model'
 import { load } from './persistence'
 import { requirePlatform } from './platform'
@@ -34,8 +34,8 @@ interface ClubPlan {
   days: number
   /** Courts that existed when the history was recorded (the seeded ones). */
   courtIds: string[]
-  /** Commission rate in force for the history (the seeded rate). */
-  commissionRate: number
+  /** Flat platform fee per booking in force for the history (the seeded fee). */
+  bookingFee: number
   /** Bookings per court on an ordinary weekday at the end of the history. */
   bookingsPerCourt: number
   walkInsPerDay: number
@@ -48,7 +48,7 @@ const PLANS: Record<string, ClubPlan> = {
     tag: 'gs',
     days: HISTORY_DAYS,
     courtIds: ['court_1', 'court_2', 'court_3', 'court_4'],
-    commissionRate: 5,
+    bookingFee: 20,
     bookingsPerCourt: 2.6,
     walkInsPerDay: 2.2,
     walkInFee: 350,
@@ -58,7 +58,7 @@ const PLANS: Record<string, ClubPlan> = {
     tag: 'dv',
     days: 139,
     courtIds: ['court_davao_1', 'court_davao_2'],
-    commissionRate: 6,
+    bookingFee: 25,
     bookingsPerCourt: 2.2,
     walkInsPerDay: 1.2,
     walkInFee: 300,
@@ -146,14 +146,16 @@ function clubHistory(db: DemoDB, clubId: string, plan: ClubPlan, today: string, 
   const addCharge = (tx: Transaction) => {
     out.transactions.push(tx)
     if (!COMMISSION_TYPES.includes(tx.type)) return
-    const commission = round2((tx.amount * plan.commissionRate) / 100)
+    const charged = platformFee(tx.type, tx.amount, { booking_fee: plan.bookingFee, commission_rate: 0 })
+    const commission = charged.amount
     out.commissions.push({
       id: `hist_cm_${tx.id}`,
       club_id: clubId,
       venue_id: tx.venue_id ?? null,
       transaction_id: tx.id,
       gross_amount: tx.amount,
-      commission_rate: plan.commissionRate,
+      commission_rate: charged.rate,
+      booking_fee: charged.fee,
       commission_amount: commission,
       club_net_amount: round2(tx.amount - commission),
       verification_status: 'unverified',
@@ -381,6 +383,12 @@ export const analyticsOperations = {
     return [...db.commissions, ...demoHistory(db).commissions]
       .filter((line) => line.club_id === clubId && within(line.created_at, fromIso, toIso))
       .map((line) => ({ commission_amount: line.commission_amount, gross_amount: line.gross_amount, created_at: line.created_at }))
+  },
+  /** The active club's flat platform fee per booking, as its admin may read it. */
+  clubBookingFee(): number {
+    const db = load()
+    const clubId = activeClubId(db)
+    return db.clubAccounts.find((row) => row.club_id === clubId)?.booking_fee ?? 0
   },
   /**
    * Platform-wide commission lines in [from, to) and owner requests, for the superadmin

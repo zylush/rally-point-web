@@ -18,11 +18,11 @@ describe('club profile rules (mirror the club_business_profile checks)', () => {
     expect(profileProblem(profile({
       about: 'Six indoor courts.',
       phone: '+63 917 123 4567',
-      email: 'hello@rallypoint.ph',
+      email: 'hello@brinely.info',
       facebook_url: 'https://www.facebook.com/rallypointgensan',
       messenger_url: 'https://m.me/rallypointgensan',
-      instagram_url: 'https://instagram.com/rallypoint',
-      website_url: 'https://rallypoint.ph/courts?city=gensan',
+      instagram_url: 'https://instagram.com/brinely',
+      website_url: 'https://brinely.info/courts?city=gensan',
       amenities: ['parking', 'night_lights'],
     }))).toBeNull()
   })
@@ -36,15 +36,15 @@ describe('club profile rules (mirror the club_business_profile checks)', () => {
     expect(profileProblem(profile({ instagram_url: 'https://instagram.com@evil.example' })))
       .toBe('The Instagram link must start with https://instagram.com/')
     const website = 'The website link must start with https:// and name a web address, like https://yourclub.ph'
-    expect(profileProblem(profile({ website_url: 'http://rallypoint.ph' }))).toBe(website)
+    expect(profileProblem(profile({ website_url: 'http://brinely.info' }))).toBe(website)
   })
 
   it('takes a website only as a named web address, like the database', () => {
     const website = 'The website link must start with https:// and name a web address, like https://yourclub.ph'
-    for (const bad of ['https://192.168.0.1/', 'https://rallypoint.ph:8443/', 'https://-club.ph', 'https://club-.ph', 'https://club.p4', 'https://localhost']) {
+    for (const bad of ['https://192.168.0.1/', 'https://brinely.info:8443/', 'https://-club.ph', 'https://club-.ph', 'https://club.p4', 'https://localhost']) {
       expect(profileProblem(profile({ website_url: bad })), bad).toBe(website)
     }
-    for (const good of ['https://rallypoint.ph', 'https://www.rally-point.com.ph/about?x=1#map', 'HTTPS://RallyPoint.PH', 'https://xn--bcher-kva.example']) {
+    for (const good of ['https://brinely.info', 'https://www.brinely.info/about?x=1#map', 'HTTPS://Brinely.INFO', 'https://xn--bcher-kva.example']) {
       expect(profileProblem(profile({ website_url: good })), good).toBeNull()
     }
     expect(coachProblem({ full_name: 'Ana', headline: null, bio: null, hourly_rate: null, contact_phone: null, contact_url: 'https://10.0.0.1', is_active: true }))
@@ -60,8 +60,8 @@ describe('club profile rules (mirror the club_business_profile checks)', () => {
   })
 
   it('stores blank text as empty, email in lower case, and amenities once each in order', () => {
-    expect(normalizeProfile(profile({ about: '   ', email: ' Hello@RallyPoint.PH ', amenities: ['parking', 'night_lights', 'parking'] })))
-      .toMatchObject({ about: null, email: 'hello@rallypoint.ph', amenities: ['night_lights', 'parking'] })
+    expect(normalizeProfile(profile({ about: '   ', email: ' Hello@Brinely.INFO ', amenities: ['parking', 'night_lights', 'parking'] })))
+      .toMatchObject({ about: null, email: 'hello@brinely.info', amenities: ['night_lights', 'parking'] })
   })
 
   it('only opens https links', () => {

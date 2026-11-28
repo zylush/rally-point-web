@@ -502,10 +502,10 @@ describe('member booking and pass pages', () => {
     expect(screen.getByRole('button', { name: /Change time/ })).toBeEnabled()
 
     // When the booking cannot be checked either, the error still shows.
-    apiMock.submitBookingPayment.mockRejectedValueOnce(new Error('Could not reach Rally Point. Check your connection and try again.'))
+    apiMock.submitBookingPayment.mockRejectedValueOnce(new Error('Could not reach bRineLy. Check your connection and try again.'))
     apiMock.myBooking.mockRejectedValueOnce(new Error('offline'))
     await user.click(screen.getByRole('button', { name: /I.ve paid/ }))
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not reach Rally Point.'))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not reach bRineLy.'))
     expect(screen.getByText('Checkout')).toBeInTheDocument()
 
     // A reference the club refused as written is the player's to fix, so nothing else is asked.
@@ -517,7 +517,7 @@ describe('member booking and pass pages', () => {
   })
 
   it.each([
-    ['the reply to “I’ve paid” is lost', 'Could not reach Rally Point. Check your connection and try again.'],
+    ['the reply to “I’ve paid” is lost', 'Could not reach bRineLy. Check your connection and try again.'],
     ['the payment was sent before', 'You already sent a payment for this booking'],
   ])('waits for the club when %s but the club has the payment', async (_, message) => {
     const user = userEvent.setup()
@@ -1049,14 +1049,14 @@ describe('member booking and pass pages', () => {
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       // The reply to "I've paid" is lost and the check after it fails too, so the checkout stays open.
-      apiMock.submitBookingPayment.mockRejectedValueOnce(new Error('Could not reach Rally Point. Check your connection and try again.'))
+      apiMock.submitBookingPayment.mockRejectedValueOnce(new Error('Could not reach bRineLy. Check your connection and try again.'))
       apiMock.myBooking.mockRejectedValueOnce(new Error('offline'))
       render(<MemoryRouter><MemberBook /></MemoryRouter>)
       await user.click(await screen.findByRole('button', { name: /^12:00/ }))
       await user.click(screen.getByRole('button', { name: /Continue/ }))
       await user.type(await screen.findByLabelText('GCash reference number'), REFERENCE)
       await user.click(screen.getByRole('button', { name: /I.ve paid/ }))
-      expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach Rally Point.')
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach bRineLy.')
 
       // When the 15 minutes run out, the club has the payment after all.
       apiMock.myBooking.mockResolvedValue(sentBooking())

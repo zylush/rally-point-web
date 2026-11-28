@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { isDemoMode, supabase } from './supabase'
 
-const BROADCAST_NAME = 'rally-point-club-live'
+const BROADCAST_NAME = 'brinely-club-live'
 const DEMO_STORAGE_KEY = 'brinely_demo_v4'
 
 function cleanKeys(keys: Array<string | null | undefined>): string[] {

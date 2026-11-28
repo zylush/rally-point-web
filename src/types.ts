@@ -104,7 +104,10 @@ export interface ClubStaffRole {
 export interface ClubAccount {
   club_id: string
   status: ClubStatus
+  /** Retired percentage fee, kept at 0 since the flat booking fee. */
   commission_rate: number
+  /** Platform fee in pesos for each court booking (online booking or desk rental). */
+  booking_fee: number
   city: string | null
   address: string | null
   contact_email: string | null
@@ -119,7 +122,10 @@ export interface PlatformClub {
   slug: string
   name: string
   status: ClubStatus
+  /** Retired percentage fee, kept at 0 since the flat booking fee. */
   commission_rate: number
+  /** Platform fee in pesos for each court booking (online booking or desk rental). */
+  booking_fee: number
   city: string | null
   address: string | null
   contact_email: string | null
@@ -135,7 +141,7 @@ export interface PlatformClub {
   created_at: string
 }
 
-/** Commission recorded from a court-time charge. Charges are recorded, not collected, today. */
+/** The platform fee recorded from a court-time charge. Charges are recorded, not collected, today. */
 export interface PlatformCommission {
   id: string
   club_id: string
@@ -198,11 +204,12 @@ export interface ProvisionClubInput {
   address: string
   contact_email: string
   contact_phone: string
-  commission_rate: number
+  /** Platform fee in pesos for each court booking. */
+  booking_fee: number
   court_count: number
 }
 
-/** When a court owner would like Rally Point to call. */
+/** When a court owner would like bRineLy to call. */
 export type OwnerCallTime = 'morning' | 'afternoon' | 'evening'
 export type OwnerCallStatus = 'new' | 'called' | 'closed'
 
@@ -632,7 +639,7 @@ export interface PublicCoachListing {
   slots: PublicCoachSlot[]
 }
 
-/** A way to pay the club directly (GCash, Maya, a bank). Rally Point does not take or check these payments. */
+/** A way to pay the club directly (GCash, Maya, a bank). bRineLy does not take or check these payments. */
 export interface ClubPaymentMethod {
   id: string
   club_id: string

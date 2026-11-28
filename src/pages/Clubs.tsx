@@ -180,6 +180,7 @@ function hasCourtType(club: PublicClubListing, type: CourtType) {
  */
 export function ClubDirectory() {
   const [clubs, setClubs] = useState<PublicClubListing[] | null>(null)
+  const [featuredClub, setFeaturedClub] = useState<PublicClubDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -220,6 +221,17 @@ export function ClubDirectory() {
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load clubs')
       })
+    if (typeof api.publicClubDetail === 'function') {
+      api.publicClubDetail(DEFAULT_CLUB_SLUG)
+        .then((detail) => {
+          if (!cancelled && detail?.slug === DEFAULT_CLUB_SLUG) {
+            setFeaturedClub(detail)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setFeaturedClub(null)
+        })
+    }
     return () => { cancelled = true }
   }, [reloadKey])
 
@@ -305,6 +317,51 @@ export function ClubDirectory() {
           <button type="button" onClick={loadDirectory} className={`btn-secondary ${fitButton}`}>
             Try again
           </button>
+        </section>
+      ) : null}
+
+      {!query.trim() && !city && !courtType && featuredClub ? (
+        <section
+          aria-label={`${featuredClub.name} court environment`}
+          className="card p-4 space-y-3 sm:p-5"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-caption font-semibold text-brand-800">Featured court environment</p>
+              <h2 className="text-heading-3 font-semibold text-ink">{featuredClub.name}</h2>
+              {featuredClub.city ? (
+                <p className="text-caption text-ink-muted">{featuredClub.city}</p>
+              ) : null}
+            </div>
+            <Link
+              to={`/clubs/${featuredClub.slug}`}
+              className="btn-outline min-h-[38px] px-3 py-1.5 text-caption"
+            >
+              Full club profile
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {featuredClub.venues.map((venue) => (
+              <div key={venue.id} className="space-y-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-body font-semibold text-ink">{venue.name}</p>
+                  <p className="text-caption text-ink-muted">
+                    Choose a court to select date, time, and payment
+                  </p>
+                </div>
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  {venue.courts.map((court) => (
+                    <CourtCard
+                      key={court.id}
+                      clubSlug={featuredClub.slug}
+                      venueId={venue.id}
+                      court={court}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
       ) : null}
 

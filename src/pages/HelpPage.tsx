@@ -15,13 +15,13 @@ const contacts: Record<Role, { title: string; body: string; email: string; phone
   member: {
     title: 'Contact staff',
     body: 'Need help with a booking, membership, or payment? Staff can help you at the club or through these channels.',
-    email: 'support@rallypointgensan.com',
+    email: 'support@brinely.info',
     phone: '+63 917 555 0100',
   },
   staff: {
     title: 'Contact admin',
     body: 'For operations, account access, or approval questions, contact the admin team.',
-    email: 'admin@rallypointgensan.com',
+    email: 'admin@brinely.info',
     phone: '+63 917 555 0101',
   },
   admin: {

@@ -176,9 +176,33 @@ describe('Find a court', () => {
   it('lists Rally Point Gensan first and recovers when loading fails', async () => {
     const user = userEvent.setup()
     vi.mocked(api.listPublicClubs).mockRejectedValueOnce(new Error('Could not load clubs'))
+    vi.mocked(api.publicClubDetail).mockResolvedValue({
+      ...davao,
+      slug: 'rally-point-gensan',
+      name: 'Rally Point Gensan',
+      city: 'General Santos City',
+      venues: [
+        {
+          ...davao.venues[0],
+          id: 'venue-gensan',
+          name: 'Gensan Main',
+          courts: [
+            {
+              ...davao.venues[0].courts[0],
+              id: 'cg1',
+              name: 'Gensan Court 1',
+            },
+          ],
+        },
+      ],
+    })
     renderAt('/clubs')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not load clubs')
+    expect(await screen.findByRole('link', { name: /Book Gensan Court 1/i })).toHaveAttribute(
+      'href',
+      '/clubs/rally-point-gensan/book?venue=venue-gensan&court=cg1',
+    )
     vi.mocked(api.listPublicClubs).mockResolvedValueOnce(clubs)
 
     await user.click(screen.getByRole('button', { name: 'Try again' }))
@@ -187,9 +211,11 @@ describe('Find a court', () => {
     const clubLinks = screen.getAllByRole('link', { name: /Rally Point (Gensan|Davao)/ })
     expect(clubLinks[0]).toHaveTextContent('Rally Point Gensan')
     expect(clubLinks[1]).toHaveTextContent('Rally Point Davao')
-    // The directory no longer loads a featured club's courts.
-    expect(api.publicClubDetail).not.toHaveBeenCalled()
-    expect(screen.queryByRole('link', { name: /Book / })).not.toBeInTheDocument()
+    expect(api.publicClubDetail).toHaveBeenCalledWith('rally-point-gensan')
+    expect(screen.getByRole('link', { name: /Book Gensan Court 1/i })).toHaveAttribute(
+      'href',
+      '/clubs/rally-point-gensan/book?venue=venue-gensan&court=cg1',
+    )
   })
 
   it('reads the search and city from the link and keeps them there', async () => {

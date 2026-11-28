@@ -37,7 +37,7 @@ describe('demo player marketplace (mirrors the public directory and join_club_as
     demoStore.login('superadmin@brinely.info', 'superadmin123')
     demoStore.provisionClub({
       name: 'Cebu IT Park', slug: 'cebu-it-park', city: 'Cebu City', address: 'Cebu IT Park',
-      contact_email: 'cebu@example.invalid', contact_phone: '0917 555 6666', commission_rate: 5, court_count: 2,
+      contact_email: 'cebu@example.invalid', contact_phone: '0917 555 6666', booking_fee: 0, court_count: 2,
     })
     expect(demoStore.publicClubs().map((club) => club.slug)).not.toContain('cebu-it-park')
     expect(demoStore.publicClubDetail('cebu-it-park')).toBeNull()

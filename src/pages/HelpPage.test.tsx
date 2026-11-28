@@ -108,7 +108,7 @@ describe('Help inquiry workflow', () => {
     expect(faqSection.open).toBe(false)
     expect(contactSection.open).toBe(false)
     expect(screen.getByText('How do I book a court?')).not.toBeVisible()
-    const contactLink = screen.getByRole('link', { name: /support@rallypointgensan\.com/ })
+    const contactLink = screen.getByRole('link', { name: /support@brinely\.info/ })
     expect(contactLink).not.toBeVisible()
 
     await user.click(faqHeading)

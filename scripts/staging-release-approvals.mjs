@@ -56,4 +56,9 @@ export const releaseApprovals = Object.freeze({
   // (staging-backup-20261126-court-types-r1), the restore check and the dry run on a restored copy of
   // staging passed (all checks, isolation 55/55, local build matches), chose "Apply to staging".
   'coaches-court-types-20261126': '00b1ec38b08c54f1bcc115e7e9521c499804b952fdb1d99643d7fbaea10a4d26',
+  // Owner, 2026-11-28: flat platform fee per booking ("prepare the staging release"); after the capture
+  // (staging-backup-20261128-flat-fee-r1), the restore check and the dry run on a restored copy of
+  // staging passed (all checks, isolation 55/55 with two_club_isolation_flat_fee.sql, local build
+  // matches): "yes".
+  'flat-booking-fee-20261128': '3057d14d64cd973f331b1648176054e5374c61b4c30adefcf1bf93db61f0a025',
 })

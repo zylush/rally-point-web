@@ -1,6 +1,22 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { Building2, Clock3, Coins, History, LifeBuoy, Mail, Phone, Plus, ReceiptText, RefreshCw, TrendingUp, Users } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import {
+  Building2,
+  ChevronDown,
+  Clock3,
+  Coins,
+  History,
+  LifeBuoy,
+  Mail,
+  Phone,
+  Plus,
+  ReceiptText,
+  RefreshCw,
+  Search,
+  TrendingUp,
+  TriangleAlert,
+  Users,
+} from 'lucide-react'
 import { AppHeader, AppShell, LoadingBlock, SignOutButton } from '../components/Shell'
 import { LoadingShapes, SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { AttentionList, Section, SortableTable, StatCard, UpdatedStamp } from '../components/dashboard'
@@ -44,7 +60,7 @@ const sectionTitle: Record<SuperadminSection, string> = {
   overview: 'Platform overview',
   analytics: 'Platform analytics',
   clubs: 'Clubs',
-  ledger: 'Commission ledger',
+  ledger: 'Fee ledger',
   requests: 'Owner requests',
 }
 
@@ -70,6 +86,8 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState<Notice>(null)
   const [setupDraft, setSetupDraft] = useState<SetupDraft | null>(null)
+  // The link name of the last club set up here, so the clubs list can open it.
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null)
   // Null when the requests could not load; the rest of the portal still works.
   const [requests, setRequests] = useState<OwnerCallRequest[] | null>([])
   // The last 30 days against the 30 before, for the overview cards. Null hides the trends.
@@ -172,7 +190,7 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
             <OverviewLoading />
           ) : (
             <LoadingBlock
-              label={section === 'clubs' ? 'Loading clubs…' : section === 'requests' ? 'Loading owner requests…' : 'Loading the commission ledger…'}
+              label={section === 'clubs' ? 'Loading clubs…' : section === 'requests' ? 'Loading owner requests…' : 'Loading the fee ledger…'}
             />
           )
         ) : section === 'overview' ? (
@@ -187,6 +205,7 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
           <ClubDirectory
             clubs={clubs}
             openSession={supportSessions.find((session) => session.is_open) ?? null}
+            createdSlug={createdSlug}
             onSetUp={() => setSetupDraft(emptyDraft())}
             run={run}
           />
@@ -204,20 +223,23 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
           onSubmit={async (input, ownerEmail) => {
             const email = ownerEmail.trim().toLowerCase()
             const error = await run(
-              async (): Promise<OwnerSetupResult> => {
-                const clubId = await api.provisionClub(input)
-                if (!email) return null
+              async (): Promise<{ owner: OwnerSetupResult; feeError: string | null }> => {
+                const { club_id: clubId, fee_error: feeError } = await api.provisionClub(input)
+                if (!email) return { owner: null, feeError }
                 // The club exists now, so a failed invite is reported, not retried as a new club.
                 try {
-                  return await api.inviteClubOwner(clubId, email)
+                  return { owner: await api.inviteClubOwner(clubId, email), feeError }
                 } catch (inviteError) {
-                  return { failed: errorText(inviteError, 'The owner invite did not work.') }
+                  return { owner: { failed: errorText(inviteError, 'The owner invite did not work.') }, feeError }
                 }
               },
-              (result) => setupMessage(input.name, email, result),
+              (result) => setupMessage(input.name, email, result.owner, result.feeError),
               { inline: true },
             )
-            if (!error) setSetupDraft(null)
+            if (!error) {
+              setSetupDraft(null)
+              setCreatedSlug(input.slug)
+            }
             return error
           }}
         />
@@ -323,7 +345,7 @@ function Overview({
           title: inSetup.length === 1 ? `${inSetup[0].name} is still in setup` : `${inSetup.length} clubs are still in setup`,
           detail: 'They cannot take bookings until they are active',
           count: inSetup.length,
-          to: '/superadmin/clubs',
+          to: '/superadmin/clubs?show=provisioning',
         }
       : null,
     suspended.length > 0
@@ -332,7 +354,7 @@ function Overview({
           tone: 'danger' as const,
           title: suspended.length === 1 ? `${suspended[0].name} is suspended` : `${suspended.length} clubs are suspended`,
           count: suspended.length,
-          to: '/superadmin/clubs',
+          to: '/superadmin/clubs?show=suspended',
         }
       : null,
   ].filter((item): item is NonNullable<typeof item> => item !== null)
@@ -344,7 +366,7 @@ function Overview({
       </div>
       <section aria-label="Platform totals" className="enter-rise grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Commission recorded"
+          label="Commission revenue"
           value={peso(stats.totalCommissionsEarned)}
           icon={Coins}
           tone="ok"
@@ -454,7 +476,7 @@ function Overview({
             { key: 'gross', header: 'Court charges', align: 'right', render: (club) => peso(club.gross_amount), sortValue: (club) => club.gross_amount },
             {
               key: 'commission',
-              header: 'Commission',
+              header: 'Platform fees',
               align: 'right',
               render: (club) => <span className="font-semibold">{peso(club.commission_amount)}</span>,
               sortValue: (club) => club.commission_amount,
@@ -474,7 +496,10 @@ function describeAction(action: PlatformAction) {
       return `Set up ${club}`
     case 'club.status':
       return `${club} is now ${statusLabel[to as ClubStatus] ?? to}`
+    case 'club.booking_fee':
+      return `${club} booking fee set to ${to === '' ? '—' : peso(Number(to))}`
     case 'club.commission_rate':
+      // Recorded before the flat booking fee.
       return `${club} commission set to ${to}%`
     case 'club.admin_assign':
       return `Added an admin to ${club}`
@@ -513,46 +538,453 @@ function StatusBadge({ status }: { status: ClubStatus }) {
 
 type Run = <T>(action: () => Promise<T>, success: string | ((result: T) => string), options?: { inline?: boolean }) => Promise<string | null>
 
+type ClubFilter = 'all' | ClubStatus | 'needs-admin'
+type ClubSort = 'name' | 'newest' | 'commission' | 'members' | 'courts'
+
+/** How many clubs the list shows at first, and how many more each "Show more" adds. */
+const CLUB_PAGE_SIZE = 20
+
+const clubFilters: { value: Exclude<ClubFilter, 'needs-admin'>; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'provisioning', label: 'In setup' },
+  { value: 'suspended', label: 'Suspended' },
+]
+
+const clubSorts: { value: ClubSort; label: string }[] = [
+  { value: 'name', label: 'Name (A to Z)' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'commission', label: 'Commission revenue' },
+  { value: 'members', label: 'Most members' },
+  { value: 'courts', label: 'Most courts' },
+]
+
+/** A club nobody can run yet: no admin, and not switched off. */
+function needsAdmin(club: PlatformClub) {
+  return club.admin_count === 0 && club.status !== 'suspended'
+}
+
+function matchesFilter(club: PlatformClub, filter: ClubFilter) {
+  if (filter === 'all') return true
+  if (filter === 'needs-admin') return needsAdmin(club)
+  return club.status === filter
+}
+
+function compareClubs(sort: ClubSort) {
+  const byName = (a: PlatformClub, b: PlatformClub) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
+  const most = (value: (club: PlatformClub) => number) => (a: PlatformClub, b: PlatformClub) => value(b) - value(a) || byName(a, b)
+  switch (sort) {
+    case 'newest':
+      return (a: PlatformClub, b: PlatformClub) => Date.parse(b.created_at) - Date.parse(a.created_at) || byName(a, b)
+    case 'commission':
+      return most((club) => club.commission_amount)
+    case 'members':
+      return most((club) => club.member_count)
+    case 'courts':
+      return most((club) => club.court_count)
+    default:
+      return byName
+  }
+}
+
+function isClubFilter(value: string | null): value is ClubFilter {
+  return value === 'all' || value === 'active' || value === 'provisioning' || value === 'suspended' || value === 'needs-admin'
+}
+
+/**
+ * Every club as one short row, built to stay usable with hundreds of clubs: search, a status
+ * filter with counts, sorting, and 20 rows at a time. A row opens that club's actions below it,
+ * one club at a time, so the page never renders hundreds of forms.
+ */
 function ClubDirectory({
   clubs,
   openSession,
+  createdSlug,
   onSetUp,
   run,
 }: {
   clubs: PlatformClub[]
   openSession: SupportSession | null
+  /** The link name of a club just set up here, opened so its admin can be added at once. */
+  createdSlug: string | null
   onSetUp: () => void
   run: Run
 }) {
+  const [params] = useSearchParams()
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<ClubFilter>(() => {
+    const show = params.get('show')
+    return isClubFilter(show) ? show : 'all'
+  })
+  const [sort, setSort] = useState<ClubSort>('name')
+  const [limit, setLimit] = useState(CLUB_PAGE_SIZE)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // A club opened for the person rather than by them (an open support view, a club just set
+  // up). It stays in the list, at the top if needed, until they search, filter or sort.
+  const [pinnedId, setPinnedId] = useState<string | null>(null)
+
+  const sessionClubId = openSession?.club_id ?? null
+  const [shownSession, setShownSession] = useState<string | null>(null)
+  if (sessionClubId !== shownSession) {
+    setShownSession(sessionClubId)
+    if (sessionClubId) {
+      setExpandedId(sessionClubId)
+      setPinnedId(sessionClubId)
+    }
+  }
+  const createdId = createdSlug ? clubs.find((club) => club.slug === createdSlug)?.club_id ?? null : null
+  const [shownCreated, setShownCreated] = useState<string | null>(null)
+  if (createdId !== shownCreated) {
+    setShownCreated(createdId)
+    if (createdId) {
+      setExpandedId(createdId)
+      setPinnedId(createdId)
+    }
+  }
+
+  const needle = query.trim().toLowerCase()
+  const matching = needle
+    ? clubs.filter((club) => [club.name, club.slug, club.city ?? ''].some((text) => text.toLowerCase().includes(needle)))
+    : clubs
+  const countOf = (value: ClubFilter) => matching.filter((club) => matchesFilter(club, value)).length
+  const needsAdminCount = countOf('needs-admin')
+  const shown = matching.filter((club) => matchesFilter(club, filter)).sort(compareClubs(sort))
+  const page = shown.slice(0, limit)
+  const pinned = pinnedId && !page.some((club) => club.club_id === pinnedId) ? clubs.find((club) => club.club_id === pinnedId) : undefined
+  const rows = pinned ? [pinned, ...page] : page
+  const remaining = shown.length - page.length
+
+  // Opening a row closes the one above it; keep the row that was clicked where it was on screen.
+  const anchor = useRef<{ id: string; top: number } | null>(null)
+  useLayoutEffect(() => {
+    const held = anchor.current
+    anchor.current = null
+    if (!held) return
+    const row = document.getElementById(`club-row-${held.id}`)
+    const moved = row ? row.getBoundingClientRect().top - held.top : 0
+    if (Math.abs(moved) > 1) window.scrollBy?.(0, moved)
+  }, [expandedId])
+
+  // After "Show more", keyboard and screen-reader users land on the first newly shown club.
+  const focusNext = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focusNext.current) return
+    document.getElementById(`club-row-${focusNext.current}`)?.focus()
+    focusNext.current = null
+  }, [limit])
+
+  function changeView(apply: () => void) {
+    apply()
+    setLimit(CLUB_PAGE_SIZE)
+    setPinnedId(null)
+  }
+
+  function toggle(clubId: string, row: HTMLElement) {
+    anchor.current = { id: clubId, top: row.getBoundingClientRect().top }
+    setExpandedId((current) => (current === clubId ? null : clubId))
+  }
+
   return (
     <div className="enter-rise space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-body text-slate-600">
+        <p className="min-w-0 flex-1 text-body text-slate-600">
           New clubs start in setup and stay hidden from players until you activate them.
         </p>
-        <button type="button" className="btn-primary min-h-12" onClick={onSetUp}>
+        <button type="button" className="btn-primary min-h-12 sm:w-auto!" onClick={onSetUp}>
           <Plus size={18} aria-hidden /> Set up a club
         </button>
       </div>
-      {clubs.map((club) => (
-        <ClubCard
-          key={club.club_id}
-          club={club}
-          supportSession={openSession?.club_id === club.club_id ? openSession : null}
-          run={run}
-        />
-      ))}
+
+      <section className="card min-w-0" aria-label="All clubs">
+        <div className="space-y-3 border-b border-line p-4">
+          <div role="search" aria-label="Find a club" className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <div>
+              <label className="sr-only" htmlFor="club-directory-search">
+                Search clubs
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" size={18} aria-hidden />
+                <input
+                  id="club-directory-search"
+                  type="search"
+                  className="input input-with-icon min-h-12"
+                  value={query}
+                  onChange={(event) => changeView(() => setQuery(event.target.value))}
+                  placeholder="Name, link name or city"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="shrink-0 text-body font-semibold text-ink" htmlFor="club-directory-sort">
+                Sort by
+              </label>
+              <select
+                id="club-directory-sort"
+                className="input min-h-12 lg:w-56"
+                value={sort}
+                onChange={(event) => changeView(() => setSort(event.target.value as ClubSort))}
+              >
+                {clubSorts.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+            <div role="group" aria-label="Show clubs" className="flex flex-wrap gap-1.5 sm:gap-2">
+              {clubFilters.map((option) => (
+                <FilterChip
+                  key={option.value}
+                  label={option.label}
+                  count={countOf(option.value)}
+                  pressed={filter === option.value}
+                  onClick={() => changeView(() => setFilter(option.value))}
+                />
+              ))}
+              {needsAdminCount > 0 || filter === 'needs-admin' ? (
+                <FilterChip
+                  label="Needs an admin"
+                  count={needsAdminCount}
+                  pressed={filter === 'needs-admin'}
+                  warn
+                  onClick={() => changeView(() => setFilter('needs-admin'))}
+                />
+              ) : null}
+            </div>
+            <p className="text-status font-semibold text-muted" aria-live="polite">
+              {shown.length} of {clubs.length} clubs
+              {remaining > 0 ? <span className="font-normal"> · showing the first {page.length}</span> : null}
+            </p>
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="space-y-3 p-4">
+            <p className="text-body text-slate-700">
+              {clubs.length === 0 ? 'No clubs yet. Set one up to get started.' : 'No clubs match this search.'}
+            </p>
+            {clubs.length > 0 ? (
+              <button
+                type="button"
+                className="btn-compact"
+                onClick={() =>
+                  changeView(() => {
+                    setQuery('')
+                    setFilter('all')
+                  })
+                }
+              >
+                Show all clubs
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <div
+              aria-hidden
+              className={`hidden border-b border-line px-4 py-2 text-status font-semibold text-muted lg:grid ${clubRowGrid}`}
+            >
+              <span>Club</span>
+              <span>Status</span>
+              <span className="text-right">Courts</span>
+              <span className="text-right">Members</span>
+              <span className="text-right">Fee per booking</span>
+              <span className="text-right">Commission revenue</span>
+              <span />
+            </div>
+            <ul className="divide-y divide-line">
+              {rows.map((club) => (
+                <ClubRow
+                  key={club.club_id}
+                  club={club}
+                  expanded={expandedId === club.club_id}
+                  supportSession={openSession?.club_id === club.club_id ? openSession : null}
+                  onToggle={(row) => toggle(club.club_id, row)}
+                  run={run}
+                />
+              ))}
+            </ul>
+          </>
+        )}
+
+        {remaining > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line p-4">
+            <p className="text-status text-muted">{remaining === 1 ? '1 more club' : `${remaining} more clubs`}</p>
+            <button
+              type="button"
+              className="btn-compact"
+              onClick={() => {
+                focusNext.current = shown[page.length]?.club_id ?? null
+                setLimit((value) => value + CLUB_PAGE_SIZE)
+              }}
+            >
+              Show {Math.min(CLUB_PAGE_SIZE, remaining)} more
+            </button>
+          </div>
+        ) : null}
+      </section>
     </div>
+  )
+}
+
+function FilterChip({
+  label,
+  count,
+  pressed,
+  warn = false,
+  onClick,
+}: {
+  label: string
+  count: number
+  pressed: boolean
+  warn?: boolean
+  onClick: () => void
+}) {
+  const tone = pressed
+    ? 'border-ink bg-ink text-white'
+    : warn
+      ? 'border-amber-400 bg-amber-50 text-amber-950'
+      : 'border-field bg-white text-ink'
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      aria-label={`${label} ${count}`}
+      onClick={onClick}
+      className={`inline-flex min-h-12 items-center gap-1.5 rounded-full border-[1.5px] px-3 text-body font-semibold sm:gap-2 sm:px-4 ${tone}`}
+    >
+      {warn ? <TriangleAlert size={16} aria-hidden className={`max-sm:hidden ${pressed ? '' : 'text-amber-700'}`} /> : null}
+      {label}
+      <span
+        className={`min-w-6 rounded-full px-1 text-center text-status tabular-nums ${pressed ? 'bg-white/20' : warn ? 'bg-amber-200/70' : 'bg-slate-100'}`}
+      >
+        {count}
+      </span>
+    </button>
+  )
+}
+
+/** A comma heard between the parts of a club row, which the eye separates by layout. */
+function Pause() {
+  return <span className="sr-only">, </span>
+}
+
+/** A dot between the figures on a phone row; desktop columns need none. */
+const phoneDot =
+  "before:mr-2 before:inline-block before:size-1 before:rounded-full before:bg-slate-400 before:align-middle before:content-[''] lg:before:hidden"
+
+/** The desktop columns, shared by the header and every row so they line up. */
+const clubRowGrid =
+  'lg:grid-cols-[minmax(0,1fr)_6.5rem_3rem_4.25rem_5.25rem_7.5rem_1.25rem] lg:gap-x-2 xl:grid-cols-[minmax(0,1fr)_7.5rem_4rem_5rem_7rem_9rem_1.25rem] xl:gap-x-3'
+
+function ClubRow({
+  club,
+  expanded,
+  supportSession,
+  onToggle,
+  run,
+}: {
+  club: PlatformClub
+  expanded: boolean
+  supportSession: SupportSession | null
+  onToggle: (row: HTMLElement) => void
+  run: Run
+}) {
+  const detailId = `club-detail-${club.club_id}`
+  const flag = supportSession
+    ? { text: 'Support view open', className: 'text-amber-800' }
+    : needsAdmin(club)
+      ? { text: 'Needs an admin', className: 'text-amber-800' }
+      : club.status === 'provisioning'
+        ? { text: 'Ready to activate', className: 'text-brand-700' }
+        : null
+  return (
+    <li className="relative">
+      {expanded ? <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-1 bg-brand-700" /> : null}
+      <button
+        type="button"
+        id={`club-row-${club.club_id}`}
+        aria-expanded={expanded}
+        aria-controls={expanded ? detailId : undefined}
+        onClick={(event) => onToggle(event.currentTarget)}
+        className={`grid w-full grid-cols-[minmax(0,1fr)_auto_1.25rem] items-center gap-x-3 gap-y-1 border-0 px-4 py-3 text-left focus-visible:outline-offset-[-3px]! lg:py-2 ${clubRowGrid} ${
+          expanded ? 'bg-brand-50' : 'bg-transparent'
+        }`}
+      >
+        <span className="col-start-1 row-start-1 min-w-0 lg:col-start-auto lg:row-start-auto">
+          <span className="line-clamp-2 text-base font-semibold text-ink lg:text-body xl:block xl:truncate">{club.name}</span>
+          <Pause />
+          <span className="block truncate text-status text-muted">{club.city || 'No city yet'}</span>
+          <Pause />
+        </span>
+        {/* On a phone these sit on one wrapped line under the name; from desktop width each is a column. */}
+        <span className="col-span-3 col-start-1 row-start-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-status text-slate-700 lg:contents">
+          <span className="flex basis-full flex-wrap items-center gap-x-2 lg:basis-auto lg:flex-col lg:items-start lg:gap-0.5">
+            <StatusBadge status={club.status} />
+            <Pause />
+            {flag ? (
+              <span className={`inline-flex items-center gap-1 text-caption font-bold ${flag.className}`}>
+                {flag.text === 'Ready to activate' ? null : <TriangleAlert size={13} aria-hidden />}
+                {flag.text}
+                <Pause />
+              </span>
+            ) : null}
+          </span>
+          <span className="tabular-nums lg:text-right lg:text-body lg:text-ink">
+            {club.court_count}
+            <span className="lg:sr-only"> {club.court_count === 1 ? 'court' : 'courts'}</span>
+            <Pause />
+          </span>
+          <span className={`tabular-nums lg:text-right lg:text-body lg:text-ink ${phoneDot}`}>
+            {club.member_count}
+            <span className="lg:sr-only"> {club.member_count === 1 ? 'member' : 'members'}</span>
+            <Pause />
+          </span>
+          <span className={`tabular-nums lg:text-right lg:text-body lg:text-ink ${phoneDot}`}>
+            <span className="lg:sr-only">Fee </span>
+            {peso(club.booking_fee)}
+            <Pause />
+          </span>
+        </span>
+        <span className="col-start-2 row-start-1 text-right tabular-nums lg:col-start-auto lg:row-start-auto">
+          <span className={`block text-base lg:text-body ${club.commission_amount > 0 ? 'font-bold text-ink' : 'text-muted'}`}>
+            {peso(club.commission_amount)}
+          </span>
+          <span className="block text-caption text-muted lg:sr-only">commission</span>
+        </span>
+        <ChevronDown
+          size={20}
+          aria-hidden
+          className={`col-start-3 row-start-1 text-muted transition-transform lg:col-start-auto lg:row-start-auto ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {expanded ? (
+        <div id={detailId} className="border-t border-line bg-canvas px-4 pb-4 pt-3 sm:px-5">
+          <ClubCard club={club} supportSession={supportSession} run={run} />
+        </div>
+      ) : null}
+    </li>
   )
 }
 
 function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSession: SupportSession | null; run: Run }) {
   const [showSupport, setShowSupport] = useState(false)
-  const [rate, setRate] = useState(String(club.commission_rate))
+  const [fee, setFee] = useState(String(club.booking_fee))
+  // A reload can bring a fee another superadmin saved; show it instead of the old value.
+  const [shownFee, setShownFee] = useState(club.booking_fee)
+  if (shownFee !== club.booking_fee) {
+    setShownFee(club.booking_fee)
+    setFee(String(club.booking_fee))
+  }
   const [adminEmail, setAdminEmail] = useState('')
   const [admins, setAdmins] = useState<PlatformClubAdmin[] | null>(null)
   const [invites, setInvites] = useState<ClubOwnerInvite[]>([])
   const [busy, setBusy] = useState(false)
+  // A club in setup with no admin opens its admin section, since adding one is the next step.
+  const [adminsStartOpen] = useState(() => club.status === 'provisioning' && club.admin_count === 0)
   const isDefault = club.slug === DEFAULT_CLUB_SLUG
 
   const loadAdmins = useCallback(async () => {
@@ -563,6 +995,10 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
     setAdmins(adminRows)
     setInvites(inviteRows)
   }, [club.club_id])
+
+  useEffect(() => {
+    if (adminsStartOpen) void loadAdmins()
+  }, [adminsStartOpen, loadAdmins])
 
   async function act<T>(action: () => Promise<T>, success: string | ((result: T) => string)) {
     setBusy(true)
@@ -580,25 +1016,39 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
       : [{ label: club.status === 'provisioning' ? 'Activate' : 'Reactivate', next: 'active' }]
 
   return (
-    <article className="card space-y-4 p-4" aria-labelledby={`club-${club.club_id}`}>
+    // The row above already shows the name, so the detail starts with what the row leaves out.
+    <article className="space-y-3" aria-label={club.name}>
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id={`club-${club.club_id}`} className="text-subtitle font-bold text-slate-900">
-            {club.name}
-          </h2>
-          <StatusBadge status={club.status} />
-          {isDefault ? <span className="ml-2 text-caption text-slate-600">Default sign-up club</span> : null}
-          <p className="mt-1 text-body text-slate-600">
-            Join link: <span className="font-mono text-slate-800">{joinLink(club.slug)}</span>
+        <div className="min-w-0 flex-1 basis-72 space-y-1">
+          {isDefault ? <p className="text-body font-semibold text-slate-700">Default sign-up club</p> : null}
+          <p className="text-body text-slate-600">
+            Join link <span className="break-all font-mono text-slate-800">{joinLink(club.slug)}</span>
           </p>
+          {club.contact_email || club.contact_phone ? (
+            <p className="flex flex-wrap gap-x-4 gap-y-1 text-body text-slate-600">
+              {club.contact_email ? (
+                <span className="inline-flex min-w-0 items-center gap-1.5 break-all">
+                  <Mail size={15} aria-hidden className="shrink-0 text-muted" />
+                  {club.contact_email}
+                </span>
+              ) : null}
+              {club.contact_phone ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Phone size={15} aria-hidden className="shrink-0 text-muted" />
+                  {club.contact_phone}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          <dl className="flex flex-wrap gap-x-4 gap-y-1 text-body text-slate-600">
+            <Figure label="Venues" value={club.venue_count} />
+            <Figure label="Courts" value={club.court_count} />
+            <Figure label="Members" value={club.member_count} />
+            <Figure label="Admins" value={club.admin_count} />
+          </dl>
           {club.status === 'provisioning' ? (
             <p className="text-body font-semibold text-slate-700">
               {club.admin_count > 0 ? 'Has an admin. Ready to activate.' : 'Needs an admin before it can be activated.'}
-            </p>
-          ) : null}
-          {club.city || club.contact_email ? (
-            <p className="text-body text-slate-600">
-              {[club.city, club.contact_email, club.contact_phone].filter(Boolean).join(' · ')}
             </p>
           ) : null}
         </div>
@@ -607,7 +1057,8 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
             <button
               key={label}
               type="button"
-              className={next === 'suspended' ? 'btn-secondary min-h-12' : 'btn-primary min-h-12'}
+              className={next === 'suspended' ? 'btn-compact' : 'btn-primary'}
+              style={next === 'suspended' ? undefined : { width: 'auto' }}
               disabled={busy}
               onClick={() => void act(() => api.setClubStatus(club.club_id, next), `${club.name} is now ${statusLabel[next].toLowerCase()}.`)}
             >
@@ -617,43 +1068,64 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
         </div>
       </header>
 
-      <dl className="grid grid-cols-2 gap-2 text-body sm:grid-cols-4">
-        <Figure label="Venues" value={club.venue_count} />
-        <Figure label="Courts" value={club.court_count} />
-        <Figure label="Members" value={club.member_count} />
-        <Figure label="Admins" value={club.admin_count} />
-      </dl>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault()
+            void act(() => api.setBookingFee(club.club_id, Number(fee)), `${club.name} booking fee set to ${peso(Number(fee))}.`)
+          }}
+        >
+          <label className="flex items-center gap-2">
+            <span className="whitespace-nowrap text-body font-semibold text-slate-800">Booking fee (₱)</span>
+            <input
+              className="input min-h-12 w-28"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={10000}
+              step="0.01"
+              value={fee}
+              onChange={(event) => setFee(event.target.value)}
+              required
+            />
+          </label>
+          <button type="submit" className="btn-compact whitespace-nowrap" disabled={busy}>
+            Save fee
+          </button>
+        </form>
+        <section
+          aria-label={`${club.name} support view`}
+          className={supportSession ? 'w-full border-t border-slate-100 pt-3' : undefined}
+          tabIndex={-1}
+          data-return-focus
+        >
+          {supportSession ? (
+            <SupportPanel
+              session={supportSession}
+              onEnd={() => run(() => api.endSupportSession(supportSession.id), `Support view of ${club.name} closed.`)}
+            />
+          ) : (
+            <button type="button" className="btn-compact" onClick={() => setShowSupport(true)}>
+              <LifeBuoy size={18} aria-hidden /> Open support view
+            </button>
+          )}
+        </section>
+      </div>
 
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          void act(() => api.setCommissionRate(club.club_id, Number(rate)), `${club.name} commission set to ${Number(rate)}%.`)
+      <details
+        className="border-t border-slate-100 pt-1"
+        open={adminsStartOpen}
+        onToggle={(event) => {
+          if (event.currentTarget.open && admins === null) void loadAdmins()
         }}
       >
-        <label className="block">
-          <span className="label">Commission (%)</span>
-          <input
-            className="input min-h-12 w-32"
-            type="number"
-            min={0}
-            max={100}
-            step="0.01"
-            value={rate}
-            onChange={(event) => setRate(event.target.value)}
-            required
-          />
-        </label>
-        <button type="submit" className="btn-secondary min-h-12" disabled={busy}>
-          Save rate
-        </button>
-      </form>
-
-      <section aria-label={`${club.name} admins`} className="space-y-3">
+        <summary className="disclosure-summary text-body font-semibold text-slate-800">
+          Admins and invites
+        </summary>
+      <section aria-label={`${club.name} admins`} className="space-y-3 pb-1 pt-2">
         {admins === null ? (
-          <button type="button" className="btn-secondary min-h-12" onClick={() => void loadAdmins()}>
-            Show admins and invites
-          </button>
+          <p className="text-body text-slate-600">Loading admins…</p>
         ) : admins.length === 0 ? (
           <p className="text-body text-slate-600">No admins yet.</p>
         ) : (
@@ -665,7 +1137,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
                 </span>
                 <button
                   type="button"
-                  className="btn-secondary min-h-12"
+                  className="btn-compact"
                   disabled={busy}
                   onClick={() => void act(() => api.revokeClubAdmin(club.club_id, admin.user_id), `${admin.full_name} is no longer an admin of ${club.name}.`)}
                 >
@@ -684,7 +1156,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
                 </span>
                 <button
                   type="button"
-                  className="btn-secondary min-h-12"
+                  className="btn-compact"
                   disabled={busy}
                   onClick={() => void act(() => api.cancelClubOwnerInvite(invite.id), `The invite for ${invite.email} is cancelled.`)}
                 >
@@ -725,7 +1197,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
               required
             />
           </label>
-          <button type="submit" className="btn-primary min-h-12" disabled={busy}>
+          <button type="submit" className="btn-primary" style={{ width: 'auto' }} disabled={busy}>
             Add admin
           </button>
           <p id={`admin-hint-${club.club_id}`} className="w-full text-caption text-slate-500">
@@ -733,19 +1205,7 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
           </p>
         </form>
       </section>
-
-      <section aria-label={`${club.name} support view`} className="border-t border-slate-100 pt-4" tabIndex={-1} data-return-focus>
-        {supportSession ? (
-          <SupportPanel
-            session={supportSession}
-            onEnd={() => run(() => api.endSupportSession(supportSession.id), `Support view of ${club.name} closed.`)}
-          />
-        ) : (
-          <button type="button" className="btn-secondary min-h-12" onClick={() => setShowSupport(true)}>
-            <LifeBuoy size={18} aria-hidden /> Open support view
-          </button>
-        )}
-      </section>
+      </details>
 
       {showSupport ? (
         <SupportDialog
@@ -989,9 +1449,9 @@ function SupportPanel({ session, onEnd }: { session: SupportSession; onEnd: () =
 
 function Figure({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <dt className="text-caption font-semibold text-slate-600">{label}</dt>
-      <dd className="text-subtitle font-bold text-slate-900">{value}</dd>
+    <div className="flex items-baseline gap-1.5">
+      <dt className="order-2">{(value === 1 ? label.replace(/s$/, '') : label).toLowerCase()}</dt>
+      <dd className="font-bold text-slate-900">{value}</dd>
     </div>
   )
 }
@@ -1022,7 +1482,7 @@ function Ledger({
         </select>
       </label>
       {rows.length === 0 ? (
-        <p className="card p-4 text-body text-slate-600">No commission recorded yet.</p>
+        <p className="card p-4 text-body text-slate-600">No platform fees recorded yet.</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (
@@ -1031,12 +1491,12 @@ function Ledger({
                 <p className="text-base font-bold text-slate-900">{row.club_name}</p>
                 <p className="text-body text-slate-700">{row.description}</p>
                 <p className="text-caption text-slate-500">
-                  {fmtDateTime(row.created_at)} · {row.commission_rate}% ·{' '}
+                  {fmtDateTime(row.created_at)} ·{' '}
                   {row.verification_status === 'verified' ? 'Verified' : 'Recorded, not verified'}
                 </p>
               </div>
               <div className="text-right text-body">
-                <p className="font-bold text-slate-900">Commission {peso(row.commission_amount)}</p>
+                <p className="font-bold text-slate-900">Platform fee {peso(row.commission_amount)}</p>
                 <p className="text-slate-600">Charge {peso(row.gross_amount)}</p>
                 <p className="text-slate-600">Club keeps {peso(row.club_net_amount)}</p>
               </div>
@@ -1055,7 +1515,7 @@ const emptySetup: ProvisionClubInput = {
   address: '',
   contact_email: '',
   contact_phone: '',
-  commission_rate: 5,
+  booking_fee: 0,
   court_count: 2,
 }
 
@@ -1091,7 +1551,12 @@ function draftFromRequest(request: OwnerCallRequest): SetupDraft {
   }
 }
 
-function setupMessage(name: string, email: string, result: OwnerSetupResult) {
+function setupMessage(name: string, email: string, result: OwnerSetupResult, feeError: string | null = null) {
+  const main = ownerSetupMessage(name, email, result)
+  return feeError ? `${main} The booking fee was not saved (${feeError}). Set it on the club card.` : main
+}
+
+function ownerSetupMessage(name: string, email: string, result: OwnerSetupResult) {
   if (result === 'assigned') return `${name} is set up and ${email} is its admin. Activate it when the owner is ready.`
   if (result === 'invited') {
     return `${name} is set up. ${email} becomes its admin after signing up with that email and confirming it. Then activate the club.`
@@ -1112,6 +1577,8 @@ function SetUpClubDialog({
   onSubmit: (input: ProvisionClubInput, ownerEmail: string) => Promise<string | null>
 }) {
   const [form, setForm] = useState<ProvisionClubInput>(initial.input)
+  // Kept as typed, so clearing the box does not snap back to 0.
+  const [feeText, setFeeText] = useState(String(initial.input.booking_fee))
   const [ownerEmail, setOwnerEmail] = useState(initial.ownerEmail)
   const [linkTouched, setLinkTouched] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1147,7 +1614,12 @@ function SetUpClubDialog({
             }
             setSaving(true)
             setError(null)
-            setError(await onSubmit({ ...form, slug: form.slug || toLinkName(form.name) }, ownerEmail))
+            if (feeText.trim() === '') {
+              setError('Enter the booking fee in pesos. Use 0 for no fee.')
+              setSaving(false)
+              return
+            }
+            setError(await onSubmit({ ...form, booking_fee: Number(feeText), slug: form.slug || toLinkName(form.name) }, ownerEmail))
             setSaving(false)
           }}
         >
@@ -1200,15 +1672,16 @@ function SetUpClubDialog({
                 onChange={(event) => update('contact_phone', event.target.value)}
               />
             </Field>
-            <Field label="Commission (%)">
+            <Field label="Booking fee (₱)">
               <input
                 className="input min-h-12 w-full"
                 type="number"
+                inputMode="decimal"
                 min={0}
-                max={100}
+                max={10000}
                 step="0.01"
-                value={form.commission_rate}
-                onChange={(event) => update('commission_rate', Number(event.target.value))}
+                value={feeText}
+                onChange={(event) => setFeeText(event.target.value)}
                 required
               />
             </Field>

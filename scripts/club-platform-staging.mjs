@@ -672,6 +672,44 @@ export const coachesCourtTypesRelease = Object.freeze({
     dryRun: 'rally_staging_backup_20261126_court_types_r1_dryrun' }),
 })
 
+// Staging at 43 migrations (public coaches and court types applied) plus the flat platform fee:
+// one fixed peso amount per court booking (online booking or desk rental, never an extension,
+// never more than the charge) instead of a percentage. club_accounts and platform_commissions gain
+// booking_fee (default 0), every club's percentage becomes 0, the ledger trigger and
+// platform_list_clubs are redefined, and platform_set_booking_fee is new. The trigger only records
+// lines for charges other functions write, so the reservation-write pause is unchanged.
+export const flatBookingFeeRelease = Object.freeze({
+  id: 'flat-booking-fee-20261128',
+  title: 'Flat platform fee per booking',
+  baseVersions: Object.freeze([...coachesCourtTypesRelease.baseVersions, '20261127090000', '20261127100000'].sort()),
+  migrations: Object.freeze(['20261127110000_flat_booking_fee.sql']),
+  // The SQL that runs and the code that runs it. Approval pins all of these bytes.
+  files: Object.freeze(['supabase/migrations/20261127110000_flat_booking_fee.sql',
+    'supabase/verification/flat_booking_fee_postflight.sql',
+    'supabase/verification/two_club_isolation_flat_fee.sql',
+    ...coachesCourtTypesRelease.files.filter(path => (path.startsWith('supabase/verification/') || path.startsWith('scripts/'))
+      && path !== 'supabase/verification/two_club_isolation.sql')]),
+  stateCheck: Object.freeze({ file: 'coaches_court_types_postflight.sql', kind: 'coachesCourtTypes' }),
+  postChecks: Object.freeze([
+    Object.freeze({ file: 'flat_booking_fee_postflight.sql', kind: 'flatBookingFee', ignore: Object.freeze([]) }),
+    // Earlier postflights count 22 to 43 migrations; this release brings staging to 44.
+    Object.freeze({ file: 'coaches_court_types_postflight.sql', kind: 'coachesCourtTypes',
+      ignore: Object.freeze(['ledger_has_coaches_court_types']) }),
+    ...coachesCourtTypesRelease.postChecks.slice(1),
+  ]),
+  // Set-up takes no percentage any more, so this release (and later ones) use the copy whose
+  // second club has a flat 32-peso fee instead of 8%; the original stays frozen for earlier releases.
+  isolation: Object.freeze({ file: 'two_club_isolation_flat_fee.sql', plan: 55 }),
+  dirs: Object.freeze({
+    capture: 'docs/release-private/staging-backup-20261128-flat-fee-r1',
+    restore: 'docs/release-private/staging-backup-restore-20261128-flat-fee-r1',
+    dryRun: 'docs/release-private/flat-booking-fee-staging-dryrun-20261128-r1',
+    apply: 'docs/release-private/flat-booking-fee-staging-apply-20261128-r1',
+  }),
+  databases: Object.freeze({ restore: 'rally_staging_backup_20261128_flat_fee_r1_restore',
+    dryRun: 'rally_staging_backup_20261128_flat_fee_r1_dryrun' }),
+})
+
 export const releases = Object.freeze({ [advisorFixesRelease.id]: advisorFixesRelease,
   [advisorFollowupRelease.id]: advisorFollowupRelease, [courtMarketplaceRelease.id]: courtMarketplaceRelease,
   [courtPhotosRelease.id]: courtPhotosRelease, [clubProfileRelease.id]: clubProfileRelease,
@@ -681,7 +719,8 @@ export const releases = Object.freeze({ [advisorFixesRelease.id]: advisorFixesRe
   [memberAccountRelease.id]: memberAccountRelease, [dashboardAnalyticsRelease.id]: dashboardAnalyticsRelease,
   [leaderboardTournamentsRelease.id]: leaderboardTournamentsRelease,
   [tournamentFixesRelease.id]: tournamentFixesRelease,
-  [coachesCourtTypesRelease.id]: coachesCourtTypesRelease })
+  [coachesCourtTypesRelease.id]: coachesCourtTypesRelease,
+  [flatBookingFeeRelease.id]: flatBookingFeeRelease })
 
 export function getRelease(id) {
   assert.ok(Object.hasOwn(releases, id ?? ''), `Unknown release: ${id}. Known: ${Object.keys(releases).join(', ')}`)

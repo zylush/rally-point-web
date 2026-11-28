@@ -260,7 +260,8 @@ export function corePrivacyNoticeSections(club: NoticeClub): PrivacyNoticeSectio
               verification codes and booking confirmation emails. When enabled, Resend receives the
               recipient&apos;s email address and booking details (such as club, location, court,
               schedule, amount, and payment reference) using a configured <code>@brinely.info</code>{' '}
-              sender address such as <code>noreply@brinely.info</code> or{' '}
+              sender address such as <code>no-reply@brinely.info</code>,{' '}
+              <code>noreply@brinely.info</code>, or{' '}
               <code>bookings@brinely.info</code>. If email sending is not configured, the app does
               not send external messages.
             </li>

@@ -30,6 +30,9 @@ from generate_series(1, 5) n;
 insert into public.clubs (id, slug, name, is_active) values
   ('e7000000-0000-4000-8000-00000000000a', 'analytics-fixture-a', 'Analytics Fixture A', true),
   ('e7000000-0000-4000-8000-00000000000b', 'analytics-fixture-b', 'Analytics Fixture B', true);
+-- The figures below were worked out at a 5% rate; since the flat booking fee the default is 0.
+update public.club_accounts set commission_rate = 5
+where club_id in ('e7000000-0000-4000-8000-00000000000a', 'e7000000-0000-4000-8000-00000000000b');
 insert into public.venues (id, club_id, slug, name, open_hour, close_hour, is_active) values
   ('e7000000-0000-4000-8000-0000000000a1', 'e7000000-0000-4000-8000-00000000000a', 'main', 'Analytics Main', 6, 22, true),
   ('e7000000-0000-4000-8000-0000000000a2', 'e7000000-0000-4000-8000-00000000000a', 'closed', 'Analytics Closed', 0, 24, false),

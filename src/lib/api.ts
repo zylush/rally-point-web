@@ -95,7 +95,7 @@ import { MEMBER_PHOTO_BUCKET, PHOTO_BUCKET, memberPhotoUrl, photoUrl, shrinkPhot
 import { emptyClubProfile, normalizeProfile } from './clubProfile'
 import { DEFAULT_CLUB_SLUG } from './tenant'
 import type { BookingStatus, TxType } from '../types'
-import { analyticsWindow, buildClubAnalytics, buildPlatformAnalytics, rangeInstants } from './analytics'
+import { analyticsWindow, buildClubAnalytics, buildPlatformAnalytics, phDay, rangeInstants } from './analytics'
 import type { AnalyticsPeriod, ClubAnalytics, ClubTotals, DayRange, PlatformAnalytics, PlatformTotals } from './analytics'
 
 export type { AnalyticsPeriod, ClubAnalytics, PlatformAnalytics } from './analytics'
@@ -105,6 +105,32 @@ export interface ClubCommissionLine {
   commission_amount: number
   gross_amount: number
   created_at: string
+}
+
+/** A club the superadmin set up. The fee is saved after the club, so it can fail on its own. */
+export interface ProvisionedClub {
+  club_id: string
+  /** Why the booking fee was not saved, or null when it was (or none was asked for). */
+  fee_error: string | null
+}
+
+/** platform_set_booking_fee's checks, so a bad fee stops set-up before a club is created. */
+export function bookingFeeProblem(fee: number): string | null {
+  if (!Number.isFinite(fee) || fee < 0 || fee > 10000) return 'The booking fee must be between 0 and 10,000 pesos'
+  if (Math.abs(fee * 100 - Math.round(fee * 100)) > 1e-6) return 'Enter the booking fee in pesos and centavos'
+  return null
+}
+
+/** The active club's platform fees for its admin: pesos recorded so far, and the fee per booking. */
+export interface ClubFeeSummary {
+  /** Every platform fee recorded on the club's court charges, all time. */
+  total: number
+  /** Fees recorded since the 1st of this month (Philippine time). */
+  thisMonth: number
+  /** Court charges that carried a ledger line, all time. */
+  lines: number
+  /** The flat fee per booking in force now; null when it cannot be read. */
+  bookingFee: number | null
 }
 
 type OccupiedInterval = { court_id: string | null; start_at: string; end_at: string }
@@ -724,6 +750,42 @@ export const api = {
       gross_amount: Number(row.gross_amount),
       created_at: row.created_at,
     }))
+  },
+
+  /** The active club's flat platform fee per booking (club_accounts, readable by its admins). */
+  async myClubBookingFee(): Promise<number | null> {
+    if (isDemoMode) return demoStore.clubBookingFee()
+    const { data, error } = await supabase!
+      .from('club_accounts')
+      .select('booking_fee')
+      .eq('club_id', requireActiveClubId())
+    if (error) throw error
+    const row = (data ?? [])[0] as { booking_fee: number | string | null } | undefined
+    return row && row.booking_fee !== null ? Number(row.booking_fee) : null
+  },
+
+  /**
+   * The platform fees recorded on the active club's court charges, for its admin's
+   * dashboard. Adds up the club's own ledger lines (policy platform_commissions_admin_select).
+   * It reads every line the club has, which is fine at today's volume; an aggregate function
+   * like admin_club_analytics would replace it if a club's ledger grows large.
+   */
+  async myClubFeeSummary(now: Date = new Date()): Promise<ClubFeeSummary> {
+    const today = phDay(now)
+    const monthStart = Date.parse(rangeInstants({ from: `${today.slice(0, 8)}01`, to: today, days: 1 }).from)
+    const [lines, bookingFee] = await Promise.all([
+      api.myClubCommission('2000-01-01T00:00:00.000Z', new Date(now.getTime() + 86400000).toISOString()),
+      api.myClubBookingFee().catch(() => null),
+    ])
+    let total = 0
+    let thisMonth = 0
+    for (const line of lines) {
+      total += line.commission_amount
+      // Compare instants: the database writes "+00:00", not the "Z" toISOString gives.
+      if (Date.parse(line.created_at) >= monthStart) thisMonth += line.commission_amount
+    }
+    const cents = (value: number) => Math.round(value * 100) / 100
+    return { total: cents(total), thisMonth: cents(thisMonth), lines: lines.length, bookingFee }
   },
 
   /**
@@ -2143,8 +2205,10 @@ export const api = {
       return (data ?? []) as PlatformAction[]
     },
 
-    async provisionClub(input: ProvisionClubInput): Promise<string> {
-      if (isDemoMode) return demoStore.provisionClub(input)
+    async provisionClub(input: ProvisionClubInput): Promise<ProvisionedClub> {
+      const problem = bookingFeeProblem(input.booking_fee)
+      if (problem) throw new Error(problem)
+      if (isDemoMode) return { club_id: demoStore.provisionClub(input), fee_error: null }
       const { data, error } = await supabase!.rpc('platform_provision_club', {
         p_name: input.name,
         p_slug: input.slug,
@@ -2152,11 +2216,18 @@ export const api = {
         p_address: input.address,
         p_contact_email: input.contact_email,
         p_contact_phone: input.contact_phone,
-        p_commission_rate: input.commission_rate,
+        // The percentage is retired; the club's peso fee is set right after.
+        p_commission_rate: 0,
         p_court_count: input.court_count,
       })
       if (error) throw error
-      return data as string
+      const clubId = data as string
+      // The club exists now, so a failed fee is reported, not retried as a new club.
+      if (input.booking_fee > 0) {
+        const { error: feeError } = await supabase!.rpc('platform_set_booking_fee', { p_club_id: clubId, p_fee: input.booking_fee })
+        if (feeError) return { club_id: clubId, fee_error: feeError.message || 'The booking fee was not saved.' }
+      }
+      return { club_id: clubId, fee_error: null }
     },
 
     async setClubStatus(clubId: string, status: ClubStatus): Promise<void> {
@@ -2165,9 +2236,10 @@ export const api = {
       if (error) throw error
     },
 
-    async setCommissionRate(clubId: string, rate: number): Promise<void> {
-      if (isDemoMode) return demoStore.setCommissionRate(clubId, rate)
-      const { error } = await supabase!.rpc('platform_set_commission_rate', { p_club_id: clubId, p_rate: rate })
+    /** Sets a club's flat platform fee in pesos per court booking (audited). */
+    async setBookingFee(clubId: string, fee: number): Promise<void> {
+      if (isDemoMode) return demoStore.setBookingFee(clubId, fee)
+      const { error } = await supabase!.rpc('platform_set_booking_fee', { p_club_id: clubId, p_fee: fee })
       if (error) throw error
     },
 
@@ -2875,6 +2947,8 @@ function normalizePlatformClub(club: PlatformClub): PlatformClub {
   return {
     ...club,
     commission_rate: Number(club.commission_rate),
+    // Missing before migration 20261127110000; no fee was set then.
+    booking_fee: Number(club.booking_fee ?? 0),
     venue_count: Number(club.venue_count),
     court_count: Number(club.court_count),
     member_count: Number(club.member_count),

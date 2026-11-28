@@ -8,6 +8,7 @@ import {
   Clock3,
   Coins,
   Home,
+  Landmark,
   ReceiptText,
   RefreshCw,
   Shuffle,
@@ -28,7 +29,7 @@ import {
   UpdatedStamp,
 } from '../components/dashboard'
 import { useAuth } from '../context/AuthContext'
-import { api } from '../lib/api'
+import { api, type ClubFeeSummary } from '../lib/api'
 import { addDays, bookingStatusLabel, phDay, rangeInstants, sum, type ClubAnalytics } from '../lib/analytics'
 import { stagger } from '../lib/motion'
 import { isDemoMode } from '../lib/supabase'
@@ -54,6 +55,7 @@ interface HomeData {
   toConfirm: Booking[] | null
   today: Booking[] | null
   courts: Court[] | null
+  fees: ClubFeeSummary | null
 }
 
 function greeting(now: Date) {
@@ -106,15 +108,16 @@ export function AdminHome() {
     const now = new Date()
     const today = rangeInstants({ from: phDay(now), to: phDay(now), days: 1 })
     try {
-      const [stats, transactions, analytics, toConfirm, todayBookings, courts] = await Promise.all([
+      const [stats, transactions, analytics, toConfirm, todayBookings, courts, fees] = await Promise.all([
         api.stats(),
         api.transactions(),
         optional(() => api.clubAnalytics(30)),
         optional(() => api.paymentsToConfirm()),
         optional(() => api.bookingsBetween(today.from, today.to)),
         optional(() => api.listCourts()),
+        optional(() => api.myClubFeeSummary(now)),
       ])
-      setData({ stats, transactions, analytics, toConfirm, today: todayBookings, courts })
+      setData({ stats, transactions, analytics, toConfirm, today: todayBookings, courts, fees })
       setUpdatedAt(new Date())
       setStale(false)
     } catch {
@@ -321,6 +324,8 @@ function Dashboard({ data, clubName, updatedAt, stale }: { data: HomeData; clubN
         </div>
       </section>
 
+      {data.fees ? <PlatformFees fees={data.fees} /> : null}
+
       <div className="grid gap-5 lg:grid-cols-[2fr_3fr]">
         <Section title="Needs attention" icon={Clock3} id="needs-attention">
           <AttentionList items={attention} empty="Nothing needs you right now." />
@@ -401,6 +406,42 @@ function Dashboard({ data, clubName, updatedAt, stale }: { data: HomeData; clubN
 
       <QuickLinks />
     </>
+  )
+}
+
+/**
+ * The platform fees recorded on the club's court bookings so far: a flat peso amount per
+ * booking, recorded with each charge. Rally Point collects no money, so these are owed, not paid.
+ */
+function PlatformFees({ fees }: { fees: ClubFeeSummary }) {
+  return (
+    <section aria-labelledby="platform-fees" className="card enter-rise p-4 sm:p-5" style={stagger(2)}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-ink" aria-hidden>
+            <Landmark size={20} />
+          </span>
+          <div>
+            <h2 id="platform-fees" className="text-body font-semibold text-slate-600">
+              Platform fees so far
+            </h2>
+            <p className="mt-1 text-heading-2 font-bold tabular-nums text-ink">{peso(fees.total)}</p>
+            <p className="text-caption text-muted">Recorded on court bookings since you joined</p>
+          </div>
+        </div>
+        <div className="sm:min-w-72">
+          <FactList
+            facts={[
+              { label: 'This month', value: peso(fees.thisMonth) },
+              {
+                label: 'Fee per booking',
+                value: fees.bookingFee === null ? '—' : fees.bookingFee > 0 ? peso(fees.bookingFee) : 'None yet',
+              },
+            ]}
+          />
+        </div>
+      </div>
+    </section>
   )
 }
 

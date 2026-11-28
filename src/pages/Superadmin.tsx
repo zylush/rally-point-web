@@ -44,7 +44,7 @@ const sectionTitle: Record<SuperadminSection, string> = {
   overview: 'Platform overview',
   analytics: 'Platform analytics',
   clubs: 'Clubs',
-  ledger: 'Commission ledger',
+  ledger: 'Fee ledger',
   requests: 'Owner requests',
 }
 
@@ -172,7 +172,7 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
             <OverviewLoading />
           ) : (
             <LoadingBlock
-              label={section === 'clubs' ? 'Loading clubs…' : section === 'requests' ? 'Loading owner requests…' : 'Loading the commission ledger…'}
+              label={section === 'clubs' ? 'Loading clubs…' : section === 'requests' ? 'Loading owner requests…' : 'Loading the fee ledger…'}
             />
           )
         ) : section === 'overview' ? (
@@ -204,17 +204,17 @@ export function SuperadminPage({ section = 'overview' }: { section?: SuperadminS
           onSubmit={async (input, ownerEmail) => {
             const email = ownerEmail.trim().toLowerCase()
             const error = await run(
-              async (): Promise<OwnerSetupResult> => {
-                const clubId = await api.provisionClub(input)
-                if (!email) return null
+              async (): Promise<{ owner: OwnerSetupResult; feeError: string | null }> => {
+                const { club_id: clubId, fee_error: feeError } = await api.provisionClub(input)
+                if (!email) return { owner: null, feeError }
                 // The club exists now, so a failed invite is reported, not retried as a new club.
                 try {
-                  return await api.inviteClubOwner(clubId, email)
+                  return { owner: await api.inviteClubOwner(clubId, email), feeError }
                 } catch (inviteError) {
-                  return { failed: errorText(inviteError, 'The owner invite did not work.') }
+                  return { owner: { failed: errorText(inviteError, 'The owner invite did not work.') }, feeError }
                 }
               },
-              (result) => setupMessage(input.name, email, result),
+              (result) => setupMessage(input.name, email, result.owner, result.feeError),
               { inline: true },
             )
             if (!error) setSetupDraft(null)
@@ -344,7 +344,7 @@ function Overview({
       </div>
       <section aria-label="Platform totals" className="enter-rise grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Commission recorded"
+          label="Commission revenue"
           value={peso(stats.totalCommissionsEarned)}
           icon={Coins}
           tone="ok"
@@ -454,7 +454,7 @@ function Overview({
             { key: 'gross', header: 'Court charges', align: 'right', render: (club) => peso(club.gross_amount), sortValue: (club) => club.gross_amount },
             {
               key: 'commission',
-              header: 'Commission',
+              header: 'Platform fees',
               align: 'right',
               render: (club) => <span className="font-semibold">{peso(club.commission_amount)}</span>,
               sortValue: (club) => club.commission_amount,
@@ -474,7 +474,10 @@ function describeAction(action: PlatformAction) {
       return `Set up ${club}`
     case 'club.status':
       return `${club} is now ${statusLabel[to as ClubStatus] ?? to}`
+    case 'club.booking_fee':
+      return `${club} booking fee set to ${to === '' ? '—' : peso(Number(to))}`
     case 'club.commission_rate':
+      // Recorded before the flat booking fee.
       return `${club} commission set to ${to}%`
     case 'club.admin_assign':
       return `Added an admin to ${club}`
@@ -548,7 +551,13 @@ function ClubDirectory({
 
 function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSession: SupportSession | null; run: Run }) {
   const [showSupport, setShowSupport] = useState(false)
-  const [rate, setRate] = useState(String(club.commission_rate))
+  const [fee, setFee] = useState(String(club.booking_fee))
+  // A reload can bring a fee another superadmin saved; show it instead of the old value.
+  const [shownFee, setShownFee] = useState(club.booking_fee)
+  if (shownFee !== club.booking_fee) {
+    setShownFee(club.booking_fee)
+    setFee(String(club.booking_fee))
+  }
   const [adminEmail, setAdminEmail] = useState('')
   const [admins, setAdmins] = useState<PlatformClubAdmin[] | null>(null)
   const [invites, setInvites] = useState<ClubOwnerInvite[]>([])
@@ -635,24 +644,25 @@ function ClubCard({ club, supportSession, run }: { club: PlatformClub; supportSe
           className="flex items-center gap-2"
           onSubmit={(event: FormEvent) => {
             event.preventDefault()
-            void act(() => api.setCommissionRate(club.club_id, Number(rate)), `${club.name} commission set to ${Number(rate)}%.`)
+            void act(() => api.setBookingFee(club.club_id, Number(fee)), `${club.name} booking fee set to ${peso(Number(fee))}.`)
           }}
         >
           <label className="flex items-center gap-2">
-            <span className="whitespace-nowrap text-body font-semibold text-slate-800">Commission (%)</span>
+            <span className="whitespace-nowrap text-body font-semibold text-slate-800">Booking fee (₱)</span>
             <input
-              className="input min-h-12 w-24"
+              className="input min-h-12 w-28"
               type="number"
+              inputMode="decimal"
               min={0}
-              max={100}
+              max={10000}
               step="0.01"
-              value={rate}
-              onChange={(event) => setRate(event.target.value)}
+              value={fee}
+              onChange={(event) => setFee(event.target.value)}
               required
             />
           </label>
           <button type="submit" className="btn-compact whitespace-nowrap" disabled={busy}>
-            Save rate
+            Save fee
           </button>
         </form>
         <section
@@ -1043,7 +1053,7 @@ function Ledger({
         </select>
       </label>
       {rows.length === 0 ? (
-        <p className="card p-4 text-body text-slate-600">No commission recorded yet.</p>
+        <p className="card p-4 text-body text-slate-600">No platform fees recorded yet.</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (
@@ -1052,12 +1062,12 @@ function Ledger({
                 <p className="text-base font-bold text-slate-900">{row.club_name}</p>
                 <p className="text-body text-slate-700">{row.description}</p>
                 <p className="text-caption text-slate-500">
-                  {fmtDateTime(row.created_at)} · {row.commission_rate}% ·{' '}
+                  {fmtDateTime(row.created_at)} ·{' '}
                   {row.verification_status === 'verified' ? 'Verified' : 'Recorded, not verified'}
                 </p>
               </div>
               <div className="text-right text-body">
-                <p className="font-bold text-slate-900">Commission {peso(row.commission_amount)}</p>
+                <p className="font-bold text-slate-900">Platform fee {peso(row.commission_amount)}</p>
                 <p className="text-slate-600">Charge {peso(row.gross_amount)}</p>
                 <p className="text-slate-600">Club keeps {peso(row.club_net_amount)}</p>
               </div>
@@ -1076,7 +1086,7 @@ const emptySetup: ProvisionClubInput = {
   address: '',
   contact_email: '',
   contact_phone: '',
-  commission_rate: 5,
+  booking_fee: 0,
   court_count: 2,
 }
 
@@ -1112,7 +1122,12 @@ function draftFromRequest(request: OwnerCallRequest): SetupDraft {
   }
 }
 
-function setupMessage(name: string, email: string, result: OwnerSetupResult) {
+function setupMessage(name: string, email: string, result: OwnerSetupResult, feeError: string | null = null) {
+  const main = ownerSetupMessage(name, email, result)
+  return feeError ? `${main} The booking fee was not saved (${feeError}). Set it on the club card.` : main
+}
+
+function ownerSetupMessage(name: string, email: string, result: OwnerSetupResult) {
   if (result === 'assigned') return `${name} is set up and ${email} is its admin. Activate it when the owner is ready.`
   if (result === 'invited') {
     return `${name} is set up. ${email} becomes its admin after signing up with that email and confirming it. Then activate the club.`
@@ -1133,6 +1148,8 @@ function SetUpClubDialog({
   onSubmit: (input: ProvisionClubInput, ownerEmail: string) => Promise<string | null>
 }) {
   const [form, setForm] = useState<ProvisionClubInput>(initial.input)
+  // Kept as typed, so clearing the box does not snap back to 0.
+  const [feeText, setFeeText] = useState(String(initial.input.booking_fee))
   const [ownerEmail, setOwnerEmail] = useState(initial.ownerEmail)
   const [linkTouched, setLinkTouched] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1168,7 +1185,12 @@ function SetUpClubDialog({
             }
             setSaving(true)
             setError(null)
-            setError(await onSubmit({ ...form, slug: form.slug || toLinkName(form.name) }, ownerEmail))
+            if (feeText.trim() === '') {
+              setError('Enter the booking fee in pesos. Use 0 for no fee.')
+              setSaving(false)
+              return
+            }
+            setError(await onSubmit({ ...form, booking_fee: Number(feeText), slug: form.slug || toLinkName(form.name) }, ownerEmail))
             setSaving(false)
           }}
         >
@@ -1221,15 +1243,16 @@ function SetUpClubDialog({
                 onChange={(event) => update('contact_phone', event.target.value)}
               />
             </Field>
-            <Field label="Commission (%)">
+            <Field label="Booking fee (₱)">
               <input
                 className="input min-h-12 w-full"
                 type="number"
+                inputMode="decimal"
                 min={0}
-                max={100}
+                max={10000}
                 step="0.01"
-                value={form.commission_rate}
-                onChange={(event) => update('commission_rate', Number(event.target.value))}
+                value={feeText}
+                onChange={(event) => setFeeText(event.target.value)}
                 required
               />
             </Field>

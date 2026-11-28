@@ -134,7 +134,7 @@ function Figures({ data }: { data: PlatformAnalytics }) {
 
       <section aria-label="Period figures" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Commission recorded"
+          label="Commission revenue"
           value={peso(cur.commission)}
           icon={Landmark}
           tone="ok"
@@ -170,8 +170,8 @@ function Figures({ data }: { data: PlatformAnalytics }) {
         />
       </section>
 
-      <Section title="Commission per day" icon={Landmark} id="commission-per-day">
-        <BarChart label="Commission per day" points={points((day) => day.commission)} format={peso} tone="ok" />
+      <Section title="Platform fees per day" icon={Landmark} id="commission-per-day">
+        <BarChart label="Platform fees per day" points={points((day) => day.commission)} format={peso} tone="ok" />
       </Section>
 
       <Section title="Court charges per day" icon={ReceiptText} id="charges-per-day">
@@ -190,7 +190,7 @@ function Figures({ data }: { data: PlatformAnalytics }) {
                   label={club.name}
                   value={club.gross}
                   max={topGross || 1}
-                  detail={`${peso(club.gross)} · commission ${peso(club.commission)}`}
+                  detail={`${peso(club.gross)} · fees ${peso(club.commission)}`}
                 />
               ))}
             </div>
@@ -237,7 +237,7 @@ function Figures({ data }: { data: PlatformAnalytics }) {
       {data.top_clubs.length > 0 ? (
         <Section title="Every club this period" icon={Coins} id="club-table">
           <SortableTable
-            caption="Court charges and commission per club in this period"
+            caption="Court charges and platform fees per club in this period"
             rows={data.top_clubs}
             rowKey={(club) => club.club_id}
             initialSort={{ key: 'gross', dir: 'desc' }}
@@ -245,7 +245,7 @@ function Figures({ data }: { data: PlatformAnalytics }) {
               { key: 'name', header: 'Club', render: (club) => <span className="font-semibold text-ink">{club.name}</span>, sortValue: (club) => club.name },
               { key: 'lines', header: 'Charges', align: 'right', render: (club) => count(club.lines), sortValue: (club) => club.lines },
               { key: 'gross', header: 'Court charges', align: 'right', render: (club) => peso(club.gross), sortValue: (club) => club.gross },
-              { key: 'commission', header: 'Commission', align: 'right', render: (club) => peso(club.commission), sortValue: (club) => club.commission },
+              { key: 'commission', header: 'Platform fees', align: 'right', render: (club) => peso(club.commission), sortValue: (club) => club.commission },
             ]}
           />
         </Section>

@@ -20,6 +20,9 @@ insert into public.staff_venue_grants (club_id, user_id, venue_id) values
 insert into public.platform_roles (user_id) values ('c1000000-0000-4000-8000-000000000064');
 delete from public.members where user_id = 'c1000000-0000-4000-8000-000000000064';
 
+-- This suite checks the percentage path, which the trigger still honours; since the flat booking
+-- fee every club starts at 0%, so Gensan's 5% is set here.
+update public.club_accounts set commission_rate = 5 where club_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 update public.club_accounts set commission_rate = 10 where club_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 insert into public.transactions (id, club_id, venue_id, amount, type, description) values
@@ -74,7 +77,8 @@ select extensions.lives_ok(
   'a club without an account row can still record a charge');
 select extensions.is(
   (select commission_rate::text from public.platform_commissions where transaction_id = 'c6000000-0000-4000-8000-000000000009'),
-  '5.00', 'the default rate is used when terms are missing');
+  -- Since the flat booking fee (20261127110000) missing terms mean no percentage, not 5%.
+  '0.00', 'no percentage is charged when terms are missing');
 
 update public.transactions set verification_status = 'verified' where id = 'c6000000-0000-4000-8000-000000000001';
 select extensions.is(

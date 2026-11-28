@@ -72,13 +72,16 @@ describe('demo analytics', () => {
     expect(again.transactions).toEqual(history.transactions)
     expect(again.bookings).toEqual(history.bookings)
 
-    // Commission lines follow the court-time charges at each club's rate.
+    // Ledger lines follow the court-time charges; each booking carries its club's flat fee
+    // (20 pesos at Gensan, 25 at Davao) and an extension carries none.
     const courtTime = history.transactions.filter((tx) => ['booking', 'court_rental', 'extension'].includes(tx.type))
     expect(history.commissions).toHaveLength(courtTime.length)
-    const gensanLine = history.commissions.find((line) => line.club_id === DEMO_CLUB_ID)!
-    expect(gensanLine.commission_amount).toBeCloseTo(gensanLine.gross_amount * 0.05, 2)
-    const davaoLine = history.commissions.find((line) => line.club_id === DEMO_DAVAO_CLUB_ID)!
-    expect(davaoLine.commission_amount).toBeCloseTo(davaoLine.gross_amount * 0.06, 2)
+    const typeOf = new Map(history.transactions.map((tx) => [tx.id, tx.type]))
+    const feeOf = (clubId: string) => history.commissions.filter((line) => line.club_id === clubId && typeOf.get(line.transaction_id) !== 'extension')
+    expect(feeOf(DEMO_CLUB_ID).length).toBeGreaterThan(0)
+    expect(feeOf(DEMO_CLUB_ID).every((line) => line.commission_amount === 20 && line.club_net_amount === line.gross_amount - 20)).toBe(true)
+    expect(feeOf(DEMO_DAVAO_CLUB_ID).every((line) => line.commission_amount === 25)).toBe(true)
+    expect(history.commissions.filter((line) => typeOf.get(line.transaction_id) === 'extension').every((line) => line.commission_amount === 0)).toBe(true)
 
     // No two kept bookings share a court hour.
     const held = history.bookings.filter((booking) => booking.status !== 'cancelled')
@@ -101,7 +104,7 @@ describe('demo analytics', () => {
     const davaoRecent = recent.top_clubs.find((club) => club.club_id === DEMO_DAVAO_CLUB_ID)!
     expect(davao.gross_amount).toBeGreaterThanOrEqual(davaoRecent.gross)
     expect(davao.entry_count).toBeGreaterThanOrEqual(davaoRecent.lines)
-    expect(demoStore.platformLedger(DEMO_DAVAO_CLUB_ID).slice(0, 2).map((line) => line.commission_amount)).toEqual([27, 54])
+    expect(demoStore.platformLedger(DEMO_DAVAO_CLUB_ID).slice(0, 2).map((line) => line.commission_amount)).toEqual([0, 25])
     expect(demoStore.platformOwnerCallRequests()).toEqual([])
     expect(await api.listBookings()).toEqual([])
   })
@@ -119,6 +122,18 @@ describe('demo analytics', () => {
     const commission = await api.myClubCommission(from, to)
     expect(commission.length).toBeGreaterThan(0)
     expect(commission.every((line) => line.created_at >= from && line.created_at < to)).toBe(true)
+  })
+
+  it("adds up the active club's platform fees and shows its fee per booking", async () => {
+    setActiveClubId(DEMO_DAVAO_CLUB_ID)
+    const fees = await api.myClubFeeSummary(NOW)
+    const lines = demoStore.clubCommissionBetween('2000-01-01T00:00:00.000Z', new Date(NOW.getTime() + 86400000).toISOString())
+    expect(fees.bookingFee).toBe(25)
+    expect(fees.lines).toBe(lines.length)
+    expect(fees.total).toBeCloseTo(lines.reduce((total, line) => total + line.commission_amount, 0), 2)
+    expect(fees.total % 25).toBeCloseTo(0, 2)
+    expect(fees.thisMonth).toBeGreaterThanOrEqual(0)
+    expect(fees.thisMonth).toBeLessThanOrEqual(fees.total)
   })
 
   it('gives the superadmin top clubs and requests without any member detail', async () => {

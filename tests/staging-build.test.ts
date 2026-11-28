@@ -31,6 +31,7 @@ describe('staging build target', () => {
     const result = await settings()
     expect(result.base).toBe('/rally-point-web/')
     expect(result.build?.outDir).toBe('staging-artifact.local')
+    expect(result.define?.['import.meta.env.VITE_DATA_TARGET']).toBe('"Staging"')
   })
 
   it.each(['', ' ', 'https://ausgoiwwhevrplfetccm.supabase.co', `http://${project}.supabase.co`, `${url}/other`, `${url}?key=hidden`])('rejects a missing or wrong project URL (%s)', async (value) => {
@@ -56,11 +57,73 @@ describe('staging build target', () => {
     await expect(settings()).rejects.toThrow('Staging requires')
   })
 
+  it('serves the Vercel build (brinely.info) from the domain root into dist with the same checks', async () => {
+    env.VITE_SUPABASE_ANON_KEY = 'sb_publishable_test-key-not-a-real-credential'
+    const result = await settings('vercel')
+    expect(result.base).toBe('/')
+    expect(result.build?.outDir).toBe('dist')
+    env.VITE_BASE = '/'
+    expect((await settings('vercel')).base).toBe('/')
+  })
+
+  it.each([
+    ['VITE_SUPABASE_URL', 'https://ausgoiwwhevrplfetccm.supabase.co'],
+    ['VITE_SUPABASE_ANON_KEY', ''],
+    ['VITE_SUPABASE_ANON_KEY', 'sb_secret_never-ship'],
+    ['VITE_SUPABASE_ANON_KEY', token('service_role')],
+    ['VITE_BASE', '/rally-point-web/'],
+  ])('rejects a Vercel build with a bad %s', async (name, value) => {
+    env[name] = value
+    await expect(settings('vercel')).rejects.toThrow('Staging requires')
+  })
+
+  describe('Vercel production builds (brinely.info)', () => {
+    const production = 'tuttbvwnlndcstmmxybb'
+    beforeEach(() => {
+      vi.stubEnv('VERCEL_ENV', 'production')
+      env.VITE_SUPABASE_URL = `https://${production}.supabase.co`
+      env.VITE_SUPABASE_ANON_KEY = 'sb_publishable_test-key-not-a-real-credential'
+    })
+
+    it('accept only the production project, at the domain root', async () => {
+      expect((await settings('vercel')).base).toBe('/')
+      // Only this build hides the "Test site" banner.
+      expect((await settings('vercel')).define?.['import.meta.env.VITE_DATA_TARGET']).toBe('"Production"')
+      env.VITE_SUPABASE_ANON_KEY = token('anon', production)
+      expect((await settings('vercel')).build?.outDir).toBe('dist')
+    })
+
+    it.each([
+      ['VITE_SUPABASE_URL', url],
+      ['VITE_SUPABASE_URL', 'https://ausgoiwwhevrplfetccm.supabase.co'],
+      ['VITE_SUPABASE_ANON_KEY', token()],
+      ['VITE_SUPABASE_ANON_KEY', token('service_role', production)],
+      ['VITE_SUPABASE_ANON_KEY', 'sb_secret_never-ship'],
+    ])('reject a bad %s (%s)', async (name, value) => {
+      env[name] = value
+      await expect(settings('vercel')).rejects.toThrow('Production requires')
+    })
+
+    it.each(['preview', 'development'])('keep %s builds on staging', async (vercelEnv) => {
+      vi.stubEnv('VERCEL_ENV', vercelEnv)
+      await expect(settings('vercel')).rejects.toThrow('Staging requires')
+      env.VITE_SUPABASE_URL = url
+      expect((await settings('vercel')).base).toBe('/')
+      expect((await settings('vercel')).define?.['import.meta.env.VITE_DATA_TARGET']).toBe('"Staging"')
+    })
+  })
+
+  it('keeps the Pages staging build off the domain root', async () => {
+    env.VITE_BASE = '/'
+    await expect(settings()).rejects.toThrow('Staging requires')
+  })
+
   it.each(['development', 'production'])('preserves blank-env demo configuration in %s mode', async (mode) => {
     env.VITE_SUPABASE_URL = ''
     env.VITE_SUPABASE_ANON_KEY = ''
     const result = await settings(mode)
     expect(result.base).toBe('/rally-point-web/')
     expect(result.build?.outDir ?? 'dist').toBe('dist')
+    expect(result.define?.['import.meta.env.VITE_DATA_TARGET']).toBe('""')
   })
 })
